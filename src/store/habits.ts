@@ -12,11 +12,17 @@ async function ensureDataDir(): Promise<void> {
   await mkdir(dirname(getDataPath()), { recursive: true });
 }
 
+function normalizeHabit(h: Record<string, unknown>): HabitEntity {
+  const { organizationId: _omit, ...rest } = h;
+  return { ...rest, groupId: (h.groupId as string) || undefined } as HabitEntity;
+}
+
 async function loadHabits(): Promise<HabitEntity[]> {
   try {
     const data = await readFile(getDataPath(), "utf-8");
     const parsed = JSON.parse(data);
-    return Array.isArray(parsed) ? parsed : [];
+    const arr = Array.isArray(parsed) ? parsed : [];
+    return arr.map(normalizeHabit);
   } catch (err) {
     const code = (err as NodeJS.ErrnoException)?.code;
     if (code === "ENOENT") return [];
@@ -49,7 +55,7 @@ export async function getHabitById(id: string): Promise<HabitEntity | undefined>
 export async function listHabits(options?: {
   endId?: string;
   domainId?: string;
-  organizationId?: string;
+  groupId?: string;
   personId?: string;
 }): Promise<HabitEntity[]> {
   const habits = await loadHabits();
@@ -57,8 +63,7 @@ export async function listHabits(options?: {
   return habits.filter((h) => {
     if (options.endId && !h.endIds.includes(options.endId)) return false;
     if (options.domainId && h.domainId !== options.domainId) return false;
-    if (options.organizationId && h.organizationId !== options.organizationId)
-      return false;
+    if (options.groupId && h.groupId !== options.groupId) return false;
     if (options.personId && h.personId !== options.personId) return false;
     return true;
   });

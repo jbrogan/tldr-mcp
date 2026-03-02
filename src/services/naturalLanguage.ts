@@ -9,7 +9,7 @@ import { createPerson } from "../store/persons.js";
 
 const INTENT_SCHEMA = `Respond with ONLY valid JSON, no other text. Use this schema:
 {
-  "intent": "create_action" | "create_end" | "create_habit" | "create_group" | "create_person" | "unknown",
+  "intent": "create_action" | "create_end" | "create_habit" | "create_group" | "create_person" | "suggest_habits" | "unknown",
   "params": { ... }
 }
 
@@ -22,19 +22,24 @@ For create_end: { "name": string, "domainId": string (optional) }
 - Extract the aspiration/goal from the user's text
 - Match domain if mentioned (e.g. "family" -> Family domain id)
 
-For create_habit: { "name": string, "endIds": ["<id>"], "frequency": string (optional), "durationMinutes": number (optional), "domainId": string (optional) }
+For create_habit: { "name": string, "endIds": ["<id>"], "frequency": string (optional), "durationMinutes": number (optional), "domainId": string (optional), "groupId": string (optional) }
 - Extract habit name and which end(s) it serves
+- If the end has a domainId in context, include it. Or infer domain from the habit topic (e.g. sleep -> Health, work -> Career)
 
 For create_group: { "name": string, "organizationId": "<id>" }
 - Extract group name and match organization by name (use org id from context)
 - e.g. "Create an Engineering group in Newco" -> name: Engineering, organizationId: Newco's id
 
-For create_person: { "firstName": string, "lastName": string, "email": string, "phone": string (optional), "title": string (optional), "notes": string (optional), "relationshipType": "spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional), "organizationIds": ["<id>"] (optional), "groupIds": ["<id>"] (optional) }
+For create_person: { "firstName": string, "lastName": string, "email": string, "phone": string (optional), "title": string (optional), "notes": string (optional), "relationshipType": "spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional), "groupIds": ["<id>"] (optional) }
 - Extract name and split into firstName and lastName (use last word as lastName, rest as firstName if full name given)
 - Map relationship words to relationshipType: wife/husband/partner -> spouse, kid/son/daughter -> child, mom/dad/parent -> parent, brother/sister -> sibling, coworker -> colleague
-- Match organization or group by name if mentioned (use id from context)
-- When adding a person to a group, also include that group's organizationId in organizationIds so the person is linked to both
+- Match group by name if mentioned (use id from context). Person membership is through groups only.
 - Email is required - use "unknown@example.com" only if truly not provided
+
+For suggest_habits: { "query": string, "suggestions": ["habit 1", "habit 2", ...] }
+- Use when user asks for habit suggestions (e.g. "What habits would help me be a better father?", "Suggest habits for getting promoted")
+- Extract the aspiration/goal from their message as query
+- Generate 3-5 concrete, actionable habit suggestions
 - Use "unknown" if the intent is unclear`;
 
 export interface NLResult {
@@ -53,8 +58,8 @@ export async function interpretAndExecute(text: string): Promise<NLResult> {
 Habits (id, name):
 ${habits.map((h) => `  ${h.id}: ${h.name}`).join("\n")}
 
-Ends (id, name):
-${ends.map((e) => `  ${e.id}: ${e.name}`).join("\n")}
+Ends (id, name, domainId):
+${ends.map((e) => `  ${e.id}: ${e.name}${e.domainId ? ` (domain: ${e.domainId})` : ""}`).join("\n")}
 
 Domains (id, name):
 ${domains.map((d) => `  ${d.id}: ${d.name}`).join("\n")}
@@ -133,12 +138,13 @@ JSON response:`;
       }
 
       case "create_habit": {
-        const { name, endIds, frequency, durationMinutes, domainId } = params as {
+        const { name, endIds, frequency, durationMinutes, domainId, groupId } = params as {
           name?: string;
           endIds?: string[];
           frequency?: string;
           durationMinutes?: number;
           domainId?: string;
+          groupId?: string;
         };
         if (!name || !endIds?.length) {
           return { success: false, message: "Missing name or endIds for create_habit" };
@@ -149,6 +155,7 @@ JSON response:`;
           frequency,
           durationMinutes,
           domainId,
+          groupId,
         });
         return {
           success: true,
@@ -171,8 +178,20 @@ JSON response:`;
         };
       }
 
+      case "suggest_habits": {
+        const { query, suggestions } = params as { query?: string; suggestions?: string[] };
+        if (!suggestions?.length) {
+          return { success: false, message: "Could not generate habit suggestions." };
+        }
+        const lines = suggestions.map((s, i) => `${i + 1}. ${s}`);
+        return {
+          success: true,
+          message: `Habits that could help with "${query ?? "your goal"}":\n\n${lines.join("\n")}`,
+        };
+      }
+
       case "create_person": {
-        const { firstName, lastName, email, phone, title, notes, relationshipType, organizationIds, groupIds } = params as {
+        const { firstName, lastName, email, phone, title, notes, relationshipType, groupIds } = params as {
           firstName?: string;
           lastName?: string;
           email?: string;
@@ -180,7 +199,6 @@ JSON response:`;
           title?: string;
           notes?: string;
           relationshipType?: string;
-          organizationIds?: string[];
           groupIds?: string[];
         };
         if (!firstName || !lastName || !email) {
@@ -203,7 +221,6 @@ JSON response:`;
           title,
           notes,
           relationshipType: relationshipTypeValid && relationshipType ? (relationshipType as "spouse" | "child" | "parent" | "sibling" | "friend" | "colleague" | "mentor" | "client" | "other") : undefined,
-          organizationIds: organizationIds ?? [],
           groupIds: groupIds ?? [],
         });
         return {
@@ -215,13 +232,13 @@ JSON response:`;
       case "unknown":
         return {
           success: false,
-          message: `I couldn't understand that. Try phrases like "I went to the gym today for 60 minutes", "I want to be a better father", "Create an Engineering group in Newco", or "Add my wife Jennifer, jennifer@example.com".`,
+          message: `I couldn't understand that. Try phrases like "I went to the gym today for 60 minutes", "I want to be a better father", "What habits would help me be a better father?", "Create an Engineering group in Newco", or "Add my wife Jennifer, jennifer@example.com".`,
         };
 
       default:
         return {
           success: false,
-          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_group, create_person.`,
+          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_group, create_person, suggest_habits.`,
         };
     }
   } catch (err) {

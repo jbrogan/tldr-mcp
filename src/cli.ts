@@ -83,15 +83,28 @@ program
   });
 
 program
+  .command("list-ends-and-habits-by-domain")
+  .description("List ends and habits by domain. Omit -d to show all domains.")
+  .option("-d, --domainId <id>", "Filter to a specific domain")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "list_ends_and_habits_by_domain",
+        arguments: opts.domainId ? { domainId: opts.domainId } : {},
+      });
+      printToolResult(result);
+    });
+  });
+
+program
   .command("create-organization")
-  .description("Create an organization within a domain")
+  .description("Create an organization (container for groups and people)")
   .requiredOption("-n, --name <name>", "Organization name")
-  .requiredOption("-d, --domainId <id>", "Domain ID")
   .action(async (opts) => {
     await withClient(async (client) => {
       const result = await client.callTool({
         name: "create_organization",
-        arguments: { name: opts.name, domainId: opts.domainId },
+        arguments: { name: opts.name },
       });
       printToolResult(result);
     });
@@ -113,13 +126,13 @@ program
 
 program
   .command("list-organizations")
-  .description("List organizations, optionally by domain")
-  .option("-d, --domainId <id>", "Filter by domain ID")
+  .description("List all organizations. Use -e to show groups and people.")
+  .option("-e, --expand", "Show groups and people under each organization")
   .action(async (opts) => {
     await withClient(async (client) => {
       const result = await client.callTool({
         name: "list_organizations",
-        arguments: opts.domainId ? { domainId: opts.domainId } : {},
+        arguments: opts.expand ? { expand: true } : {},
       });
       printToolResult(result);
     });
@@ -219,7 +232,7 @@ program
   .requiredOption("-n, --name <name>", "Habit name")
   .requiredOption("-e, --ends <ids>", "Comma-separated end IDs")
   .option("-d, --domainId <id>", "Domain ID")
-  .option("-o, --organizationId <id>", "Organization ID")
+  .option("-g, --groupId <id>", "Group ID")
   .option("-p, --personId <id>", "Person ID")
   .option("-f, --frequency <freq>", "e.g. daily, weekly, 3x/week")
   .option("-m, --durationMinutes <min>", "Estimated time in minutes")
@@ -230,7 +243,7 @@ program
         endIds: opts.ends.split(",").map((s: string) => s.trim()),
       };
       if (opts.domainId) args.domainId = opts.domainId;
-      if (opts.organizationId) args.organizationId = opts.organizationId;
+      if (opts.groupId) args.groupId = opts.groupId;
       if (opts.personId) args.personId = opts.personId;
       if (opts.frequency) args.frequency = opts.frequency;
       const mins = opts.durationMinutes != null ? parseInt(String(opts.durationMinutes), 10) : NaN;
@@ -248,14 +261,14 @@ program
   .description("List habits, optionally filtered")
   .option("-e, --endId <id>", "Filter by end ID")
   .option("-d, --domainId <id>", "Filter by domain ID")
-  .option("-o, --organizationId <id>", "Filter by organization ID")
+  .option("-g, --groupId <id>", "Filter by group ID")
   .option("-p, --personId <id>", "Filter by person ID")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = {};
       if (opts.endId) args.endId = opts.endId;
       if (opts.domainId) args.domainId = opts.domainId;
-      if (opts.organizationId) args.organizationId = opts.organizationId;
+      if (opts.groupId) args.groupId = opts.groupId;
       if (opts.personId) args.personId = opts.personId;
       const result = await client.callTool({
         name: "list_habits",
@@ -363,7 +376,6 @@ program
   .option("-t, --title <title>", "Job title or role")
   .option("-n, --notes <notes>", "Additional notes")
   .option("-r, --relationshipType <type>", `Relationship type: ${RELATIONSHIP_TYPES.join(", ")}`)
-  .option("-o, --organizations <ids>", "Comma-separated organization IDs")
   .option("-g, --groups <ids>", "Comma-separated group IDs")
   .action(async (opts) => {
     await withClient(async (client) => {
@@ -375,9 +387,6 @@ program
         ...(opts.title && { title: opts.title }),
         ...(opts.notes && { notes: opts.notes }),
       };
-      if (opts.organizations) {
-        args.organizationIds = opts.organizations.split(",").map((s: string) => s.trim());
-      }
       if (opts.groups) {
         args.groupIds = opts.groups.split(",").map((s: string) => s.trim());
       }
@@ -403,7 +412,6 @@ program
   .option("-t, --title <title>", "Job title or role")
   .option("-n, --notes <notes>", "Additional notes")
   .option("-r, --relationshipType <type>", `Relationship type: ${RELATIONSHIP_TYPES.join(", ")}`)
-  .option("-o, --organizations <ids>", "Comma-separated organization IDs (replaces existing)")
   .option("-g, --groups <ids>", "Comma-separated group IDs (replaces existing)")
   .action(async (opts) => {
     await withClient(async (client) => {
@@ -414,9 +422,6 @@ program
       if (opts.phone !== undefined) args.phone = opts.phone;
       if (opts.title !== undefined) args.title = opts.title;
       if (opts.notes !== undefined) args.notes = opts.notes;
-      if (opts.organizations) {
-        args.organizationIds = opts.organizations.split(",").map((s: string) => s.trim());
-      }
       if (opts.groups) {
         args.groupIds = opts.groups.split(",").map((s: string) => s.trim());
       }
@@ -450,15 +455,13 @@ program
 
 program
   .command("list-people")
-  .description("List people, optionally by domain, organization, group, or relationship type")
-  .option("-d, --domainId <id>", "Filter by domain ID")
+  .description("List people, optionally by organization, group, or relationship type")
   .option("-o, --organizationId <id>", "Filter by organization ID")
   .option("-g, --groupId <id>", "Filter by group ID")
   .option("-r, --relationshipType <type>", `Filter by relationship: ${RELATIONSHIP_TYPES.join(", ")}`)
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = {};
-      if (opts.domainId) args.domainId = opts.domainId;
       if (opts.organizationId) args.organizationId = opts.organizationId;
       if (opts.groupId) args.groupId = opts.groupId;
       if (opts.relationshipType && RELATIONSHIP_TYPES.includes(opts.relationshipType as (typeof RELATIONSHIP_TYPES)[number])) {

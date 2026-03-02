@@ -24,7 +24,6 @@ export const PersonSchema = z.object({
   phone: z.string().optional(),
   title: z.string().optional(),
   notes: z.string().optional(),
-  organizationIds: z.array(z.string()).optional().default([]),
   groupIds: z.array(z.string()).optional().default([]),
   relationshipType: RelationshipTypeSchema.optional(),
 });

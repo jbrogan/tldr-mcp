@@ -12,11 +12,10 @@ import {
   deletePerson,
   getPersonById,
   listPersons,
-  removeOrganizationFromAllPersons,
   removeGroupFromAllPersons,
   updatePerson,
 } from "../store/persons.js";
-import { listDomains } from "../store/domains.js";
+import { listDomains, getDomainById } from "../store/domains.js";
 import {
   createOrganization,
   deleteOrganization,
@@ -76,23 +75,104 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "list_ends_and_habits_by_domain",
+    {
+      title: "List Ends and Habits by Domain",
+      description:
+        "Lists ends and habits grouped by domain. If domainId is specified, shows only that domain. Otherwise shows all domains.",
+      inputSchema: {
+        domainId: z.string().optional().describe("Filter to a specific domain. Omit to show all domains."),
+      },
+    },
+    async ({ domainId }) => {
+      const domains = await listDomains();
+      const allEnds = await listEnds();
+      const allHabits = await listHabits();
+
+      const domainIdsToShow = domainId
+        ? (await getDomainById(domainId) ? [domainId] : [])
+        : domains.map((d) => d.id);
+
+      if (domainId && domainIdsToShow.length === 0) {
+        return {
+          content: [{ type: "text", text: `Domain with ID ${domainId} not found.` }],
+          isError: true,
+        };
+      }
+
+      const sections: string[] = [];
+
+      for (const dId of domainIdsToShow) {
+        const domain = domains.find((d) => d.id === dId);
+        const domainName = domain?.name ?? dId;
+        const ends = allEnds.filter((e) => e.domainId === dId);
+        const habits = allHabits.filter((h) => h.domainId === dId);
+
+        if (ends.length === 0 && habits.length === 0) continue;
+
+        const parts: string[] = [`## ${domainName}`];
+        if (ends.length > 0) {
+          parts.push("Ends:");
+          ends.forEach((e) => parts.push(`  - ${e.name} (${e.id})`));
+        }
+        if (habits.length > 0) {
+          parts.push("Habits:");
+          habits.forEach((h) => {
+            const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
+            parts.push(`  - ${h.name} (${h.id}) → serves: ${endNames}`);
+          });
+        }
+        sections.push(parts.join("\n"));
+      }
+
+      // Uncategorized: ends/habits without domainId
+      const uncategorizedEnds = allEnds.filter((e) => !e.domainId);
+      const uncategorizedHabits = allHabits.filter((h) => !h.domainId);
+      if (uncategorizedEnds.length > 0 || uncategorizedHabits.length > 0) {
+        const parts: string[] = ["## Uncategorized"];
+        if (uncategorizedEnds.length > 0) {
+          parts.push("Ends:");
+          uncategorizedEnds.forEach((e) => parts.push(`  - ${e.name} (${e.id})`));
+        }
+        if (uncategorizedHabits.length > 0) {
+          parts.push("Habits:");
+          uncategorizedHabits.forEach((h) => {
+            const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
+            parts.push(`  - ${h.name} (${h.id}) → serves: ${endNames}`);
+          });
+        }
+        sections.push(parts.join("\n"));
+      }
+
+      if (sections.length === 0) {
+        return {
+          content: [{ type: "text", text: domainId ? "No ends or habits found for this domain." : "No ends or habits found." }],
+        };
+      }
+
+      return {
+        content: [{ type: "text", text: sections.join("\n\n") }],
+      };
+    }
+  );
+
+  server.registerTool(
     "create_organization",
     {
       title: "Create Organization",
       description:
-        "Creates a new organization within a domain. Organizations are groups (e.g., company, church, family) that people can be members of.",
+        "Creates a new organization - a container for groups and people (e.g., company, church, family).",
       inputSchema: {
         name: z.string().min(1).describe("Organization name"),
-        domainId: z.string().min(1).describe("ID of the domain this organization belongs to"),
       },
     },
-    async ({ name, domainId }) => {
-      const org = await createOrganization({ name, domainId });
+    async ({ name }) => {
+      const org = await createOrganization({ name });
       return {
         content: [
           {
             type: "text",
-            text: `Created organization: ${org.name}\nID: ${org.id}\nDomain ID: ${org.domainId}\nCreated at: ${org.createdAt}`,
+            text: `Created organization: ${org.name}\nID: ${org.id}\nCreated at: ${org.createdAt}`,
           },
         ],
       };
@@ -104,24 +184,50 @@ export function registerTools(server: McpServer): void {
     {
       title: "List Organizations",
       description:
-        "Lists organizations. Optionally filter by domain ID.",
+        "Lists all organizations. Use expand to show groups and people under each org.",
       inputSchema: {
-        domainId: z.string().optional().describe("Filter by domain ID"),
+        expand: z.boolean().optional().describe("If true, show groups and people under each organization"),
       },
     },
-    async ({ domainId }) => {
-      const orgs = await listOrganizations(domainId);
+    async ({ expand }) => {
+      const orgs = await listOrganizations();
       if (orgs.length === 0) {
         return {
           content: [{ type: "text", text: "No organizations found." }],
         };
       }
-      const lines = orgs.map((o) => `  ${o.name} (${o.id}) - Domain: ${o.domainId}`);
+      if (!expand) {
+        const lines = orgs.map((o) => `  ${o.name} (${o.id})`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Found ${orgs.length} organization(s):\n\n${lines.join("\n")}`,
+            },
+          ],
+        };
+      }
+      const sections: string[] = [];
+      for (const org of orgs) {
+        const groups = await listGroups(org.id);
+        const parts: string[] = [`  ${org.name} (${org.id})`, "    Groups:"];
+        if (groups.length === 0) {
+          parts.push("      (no groups)");
+        } else {
+          for (const g of groups) {
+            const people = await listPersons({ groupId: g.id });
+            const peopleNames = people.map((p) => `${p.firstName} ${p.lastName}`).join(", ");
+            parts.push(`      - ${g.name} (${g.id})`);
+            parts.push(`        ${peopleNames || "(no members)"}`);
+          }
+        }
+        sections.push(parts.join("\n"));
+      }
       return {
         content: [
           {
             type: "text",
-            text: `Found ${orgs.length} organization(s):\n\n${lines.join("\n")}`,
+            text: `Found ${orgs.length} organization(s):\n\n${sections.join("\n\n")}`,
           },
         ],
       };
@@ -151,7 +257,6 @@ export function registerTools(server: McpServer): void {
         await removeGroupFromAllPersons(g.id);
       }
       await deleteGroupsByOrganizationId(id);
-      await removeOrganizationFromAllPersons(id);
       await deleteOrganization(id);
       return {
         content: [
@@ -336,18 +441,18 @@ export function registerTools(server: McpServer): void {
         name: z.string().min(1).describe("Name of the habit"),
         endIds: z.array(z.string()).min(1).describe("IDs of ends this habit serves"),
         domainId: z.string().optional(),
-        organizationId: z.string().optional(),
+        groupId: z.string().optional(),
         personId: z.string().optional(),
         frequency: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
         durationMinutes: z.number().int().positive().optional().describe("Estimated time in minutes"),
       },
     },
-    async ({ name, endIds, domainId, organizationId, personId, frequency, durationMinutes }) => {
+    async ({ name, endIds, domainId, groupId, personId, frequency, durationMinutes }) => {
       const habit = await createHabit({
         name,
         endIds,
         domainId,
-        organizationId,
+        groupId,
         personId,
         frequency,
         durationMinutes,
@@ -357,7 +462,7 @@ export function registerTools(server: McpServer): void {
         `ID: ${habit.id}`,
         `Ends: ${habit.endIds.join(", ")}`,
         habit.domainId && `Domain: ${habit.domainId}`,
-        habit.organizationId && `Organization: ${habit.organizationId}`,
+        habit.groupId && `Group: ${habit.groupId}`,
         habit.personId && `Person: ${habit.personId}`,
         habit.frequency && `Frequency: ${habit.frequency}`,
         habit.durationMinutes != null && `Duration: ${habit.durationMinutes} min`,
@@ -378,15 +483,15 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         endId: z.string().optional().describe("Filter by end ID"),
         domainId: z.string().optional().describe("Filter by domain ID"),
-        organizationId: z.string().optional().describe("Filter by organization ID"),
+        groupId: z.string().optional().describe("Filter by group ID"),
         personId: z.string().optional().describe("Filter by person ID"),
       },
     },
-    async ({ endId, domainId, organizationId, personId }) => {
+    async ({ endId, domainId, groupId, personId }) => {
       const habits = await listHabits({
         endId,
         domainId,
-        organizationId,
+        groupId,
         personId,
       });
       if (habits.length === 0) {
@@ -397,7 +502,7 @@ export function registerTools(server: McpServer): void {
         if (h.frequency) meta.push(h.frequency);
         if (h.durationMinutes != null) meta.push(`${h.durationMinutes} min`);
         if (h.domainId) meta.push(`domain: ${h.domainId}`);
-        if (h.organizationId) meta.push(`org: ${h.organizationId}`);
+        if (h.groupId) meta.push(`group: ${h.groupId}`);
         if (h.personId) meta.push(`person: ${h.personId}`);
         return `  ${h.name} (${h.id})\n    Ends: ${h.endIds.join(", ")}${meta.length ? ` | ${meta.join(", ")}` : ""}`;
       });
@@ -545,10 +650,6 @@ export function registerTools(server: McpServer): void {
         phone: z.string().optional().describe("Phone number"),
         title: z.string().optional().describe("Job title or role"),
         notes: z.string().optional().describe("Additional notes about the person"),
-        organizationIds: z
-          .array(z.string())
-          .optional()
-          .describe("IDs of organizations this person belongs to"),
         groupIds: z
           .array(z.string())
           .optional()
@@ -559,7 +660,7 @@ export function registerTools(server: McpServer): void {
           .describe("Type of relationship (e.g. spouse, child, friend, colleague)"),
       },
     },
-    async ({ firstName, lastName, email, phone, title, notes, organizationIds, groupIds, relationshipType }) => {
+    async ({ firstName, lastName, email, phone, title, notes, groupIds, relationshipType }) => {
       const person = await createPerson({
         firstName,
         lastName,
@@ -567,7 +668,6 @@ export function registerTools(server: McpServer): void {
         phone,
         title,
         notes,
-        organizationIds: organizationIds ?? [],
         groupIds: groupIds ?? [],
         relationshipType,
       });
@@ -580,8 +680,6 @@ export function registerTools(server: McpServer): void {
         person.title && `Title: ${person.title}`,
         person.notes && `Notes: ${person.notes}`,
         person.relationshipType && `Relationship: ${person.relationshipType}`,
-        person.organizationIds?.length &&
-          `Organizations: ${person.organizationIds.join(", ")}`,
         person.groupIds?.length && `Groups: ${person.groupIds.join(", ")}`,
         `Created at: ${person.createdAt}`,
       ]
@@ -604,9 +702,8 @@ export function registerTools(server: McpServer): void {
     {
       title: "List People",
       description:
-        "Lists people. Optionally filter by domain ID, organization ID, group ID, or relationship type.",
+        "Lists people. Optionally filter by organization ID, group ID, or relationship type.",
       inputSchema: {
-        domainId: z.string().optional().describe("Filter by domain ID"),
         organizationId: z.string().optional().describe("Filter by organization ID"),
         groupId: z.string().optional().describe("Filter by group ID"),
         relationshipType: z
@@ -615,8 +712,8 @@ export function registerTools(server: McpServer): void {
           .describe("Filter by relationship type"),
       },
     },
-    async ({ domainId, organizationId, groupId, relationshipType }) => {
-      const people = await listPersons({ domainId, organizationId, groupId, relationshipType });
+    async ({ organizationId, groupId, relationshipType }) => {
+      const people = await listPersons({ organizationId, groupId, relationshipType });
 
       if (people.length === 0) {
         return {
@@ -626,11 +723,6 @@ export function registerTools(server: McpServer): void {
 
       const lines = await Promise.all(
         people.map(async (p) => {
-          const orgNames: string[] = [];
-          for (const orgId of p.organizationIds ?? []) {
-            const org = await getOrganizationById(orgId);
-            orgNames.push(org?.name ?? orgId);
-          }
           const groupNames: string[] = [];
           for (const gId of p.groupIds ?? []) {
             const grp = await getGroupById(gId);
@@ -642,7 +734,6 @@ export function registerTools(server: McpServer): void {
             p.phone && `  Phone: ${p.phone}`,
             p.title && `  Title: ${p.title}`,
             p.relationshipType && `  Relationship: ${p.relationshipType}`,
-            orgNames.length > 0 && `  Organizations: ${orgNames.join(", ")}`,
             groupNames.length > 0 && `  Groups: ${groupNames.join(", ")}`,
             `  Created: ${p.createdAt}`,
           ].filter(Boolean);
@@ -675,7 +766,6 @@ export function registerTools(server: McpServer): void {
         phone: z.string().optional().describe("Phone number"),
         title: z.string().optional().describe("Job title or role"),
         notes: z.string().optional().describe("Additional notes"),
-        organizationIds: z.array(z.string()).optional().describe("Organization IDs (replaces existing)"),
         groupIds: z.array(z.string()).optional().describe("Group IDs (replaces existing)"),
         relationshipType: z
           .enum(["spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
@@ -683,7 +773,7 @@ export function registerTools(server: McpServer): void {
           .describe("Relationship type"),
       },
     },
-    async ({ id, firstName, lastName, email, phone, title, notes, organizationIds, groupIds, relationshipType }) => {
+    async ({ id, firstName, lastName, email, phone, title, notes, groupIds, relationshipType }) => {
       const existing = await getPersonById(id);
       if (!existing) {
         return {
@@ -698,7 +788,6 @@ export function registerTools(server: McpServer): void {
       if (phone !== undefined) updates.phone = phone;
       if (title !== undefined) updates.title = title;
       if (notes !== undefined) updates.notes = notes;
-      if (organizationIds !== undefined) updates.organizationIds = organizationIds;
       if (groupIds !== undefined) updates.groupIds = groupIds;
       if (relationshipType !== undefined) updates.relationshipType = relationshipType;
       const person = await updatePerson(id, updates as Parameters<typeof updatePerson>[1]);
@@ -715,7 +804,6 @@ export function registerTools(server: McpServer): void {
         person.title && `Title: ${person.title}`,
         person.notes && `Notes: ${person.notes}`,
         person.relationshipType && `Relationship: ${person.relationshipType}`,
-        person.organizationIds?.length && `Organizations: ${person.organizationIds.join(", ")}`,
         person.groupIds?.length && `Groups: ${person.groupIds.join(", ")}`,
       ].filter(Boolean).join("\n");
       return {
@@ -762,7 +850,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Natural Language Command",
       description:
-        "Interpret natural language and execute the appropriate action. Examples: 'I went to the gym today for 60 minutes', 'I want to be a better father', 'Create an Engineering group in Newco', 'Add my wife Jennifer, jennifer@example.com'.",
+        "Interpret natural language and execute the appropriate action. Examples: 'I went to the gym today for 60 minutes', 'I want to be a better father', 'What habits would help me be a better father?', 'Create an Engineering group in Newco', 'Add my wife Jennifer, jennifer@example.com'.",
       inputSchema: {
         text: z.string().min(1).describe("Natural language input from the user"),
       },

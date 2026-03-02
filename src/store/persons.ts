@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Person } from "../schemas/person.js";
 import type { PersonEntity } from "../schemas/person.js";
-import { listOrganizations } from "./organizations.js";
+import { listGroups } from "./groups.js";
 
 function getDataPath(): string {
   // Use cwd so data lives where the server was started (project root when run via CLI)
@@ -16,9 +16,9 @@ async function ensureDataDir(): Promise<void> {
 }
 
 function normalizePerson(p: Record<string, unknown>): PersonEntity {
+  const { organizationIds: _omit, ...rest } = p;
   return {
-    ...p,
-    organizationIds: Array.isArray(p.organizationIds) ? p.organizationIds : [],
+    ...rest,
     groupIds: Array.isArray(p.groupIds) ? p.groupIds : [],
   } as PersonEntity;
 }
@@ -47,7 +47,7 @@ export async function createPerson(data: Person): Promise<PersonEntity> {
   const persons = await loadPersons();
   const entity: PersonEntity = {
     ...data,
-    organizationIds: data.organizationIds ?? [],
+    groupIds: data.groupIds ?? [],
     id: randomUUID(),
     createdAt: new Date().toISOString(),
   };
@@ -59,22 +59,6 @@ export async function createPerson(data: Person): Promise<PersonEntity> {
 export async function getPersonById(id: string): Promise<PersonEntity | undefined> {
   const persons = await loadPersons();
   return persons.find((p) => p.id === id);
-}
-
-/** Removes an organization from all persons' membership. Call before deleting an org. */
-export async function removeOrganizationFromAllPersons(
-  organizationId: string
-): Promise<void> {
-  const persons = await loadPersons();
-  let changed = false;
-  for (const p of persons) {
-    const ids = p.organizationIds ?? [];
-    if (ids.includes(organizationId)) {
-      (p as PersonEntity).organizationIds = ids.filter((id) => id !== organizationId);
-      changed = true;
-    }
-  }
-  if (changed) await savePersons(persons);
 }
 
 /** Removes a group from all persons' membership. Call before deleting a group. */
@@ -91,8 +75,7 @@ export async function removeGroupFromAllPersons(groupId: string): Promise<void> 
   if (changed) await savePersons(persons);
 }
 
-export type PersonUpdate = Partial<Omit<Person, "organizationIds" | "groupIds">> & {
-  organizationIds?: string[];
+export type PersonUpdate = Partial<Omit<Person, "groupIds">> & {
   groupIds?: string[];
 };
 
@@ -109,7 +92,6 @@ export async function updatePerson(
     ...updates,
     id: existing.id,
     createdAt: existing.createdAt,
-    organizationIds: updates.organizationIds ?? existing.organizationIds ?? [],
     groupIds: updates.groupIds ?? existing.groupIds ?? [],
   };
   persons[index] = updated;
@@ -127,7 +109,6 @@ export async function deletePerson(id: string): Promise<PersonEntity | null> {
 }
 
 export async function listPersons(options?: {
-  domainId?: string;
   organizationId?: string;
   groupId?: string;
   relationshipType?: string;
@@ -136,14 +117,10 @@ export async function listPersons(options?: {
   let filtered = [...persons];
 
   if (options?.organizationId) {
+    const groupsInOrg = await listGroups(options.organizationId);
+    const groupIdsInOrg = new Set(groupsInOrg.map((g) => g.id));
     filtered = filtered.filter((p) =>
-      (p.organizationIds ?? []).includes(options.organizationId!)
-    );
-  } else if (options?.domainId) {
-    const orgs = await listOrganizations(options.domainId);
-    const orgIds = new Set(orgs.map((o) => o.id));
-    filtered = filtered.filter((p) =>
-      (p.organizationIds ?? []).some((id) => orgIds.has(id))
+      (p.groupIds ?? []).some((id) => groupIdsInOrg.has(id))
     );
   }
 

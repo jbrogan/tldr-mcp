@@ -13,11 +13,17 @@ async function ensureDataDir(): Promise<void> {
   await mkdir(dirname(getDataPath()), { recursive: true });
 }
 
+function normalizeOrganization(o: Record<string, unknown>): OrganizationEntity {
+  const { domainId: _omit, ...rest } = o;
+  return rest as unknown as OrganizationEntity;
+}
+
 async function loadOrganizations(): Promise<OrganizationEntity[]> {
   try {
     const data = await readFile(getDataPath(), "utf-8");
     const parsed = JSON.parse(data);
-    return Array.isArray(parsed) ? parsed : [];
+    const arr = Array.isArray(parsed) ? parsed : [];
+    return arr.map(normalizeOrganization);
   } catch (err) {
     const code = (err as NodeJS.ErrnoException)?.code;
     if (code === "ENOENT") {
@@ -53,14 +59,8 @@ export async function getOrganizationById(
   return orgs.find((o) => o.id === id);
 }
 
-export async function listOrganizations(
-  domainId?: string
-): Promise<OrganizationEntity[]> {
-  const orgs = await loadOrganizations();
-  if (domainId) {
-    return orgs.filter((o) => o.domainId === domainId);
-  }
-  return [...orgs];
+export async function listOrganizations(): Promise<OrganizationEntity[]> {
+  return loadOrganizations();
 }
 
 export async function deleteOrganization(
