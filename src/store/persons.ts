@@ -77,6 +77,8 @@ export async function removeGroupFromAllPersons(groupId: string): Promise<void> 
 
 export type PersonUpdate = Partial<Omit<Person, "groupIds">> & {
   groupIds?: string[];
+  /** When provided, merges these group IDs with existing (add-only). Ignored if groupIds is also set. */
+  groupIdsToAdd?: string[];
 };
 
 export async function updatePerson(
@@ -87,12 +89,25 @@ export async function updatePerson(
   const index = persons.findIndex((p) => p.id === id);
   if (index === -1) return null;
   const existing = persons[index];
+  const existingGroupIds = existing.groupIds ?? [];
+  let newGroupIds: string[];
+  if (updates.groupIds !== undefined) {
+    newGroupIds = updates.groupIds;
+  } else if (updates.groupIdsToAdd?.length) {
+    const toAdd = new Set(updates.groupIdsToAdd);
+    newGroupIds = [...existingGroupIds];
+    for (const id of toAdd) {
+      if (!newGroupIds.includes(id)) newGroupIds.push(id);
+    }
+  } else {
+    newGroupIds = existingGroupIds;
+  }
   const updated: PersonEntity = {
     ...existing,
     ...updates,
     id: existing.id,
     createdAt: existing.createdAt,
-    groupIds: updates.groupIds ?? existing.groupIds ?? [],
+    groupIds: newGroupIds,
   };
   persons[index] = updated;
   await savePersons(persons);

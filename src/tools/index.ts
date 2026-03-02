@@ -442,7 +442,7 @@ export function registerTools(server: McpServer): void {
         endIds: z.array(z.string()).min(1).describe("IDs of ends this habit serves"),
         domainId: z.string().optional(),
         groupId: z.string().optional(),
-        personId: z.string().optional(),
+        personId: z.string().optional().describe("ID of the person expected to perform the habit (the doer), not the focus/recipient"),
         frequency: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
         durationMinutes: z.number().int().positive().optional().describe("Estimated time in minutes"),
       },
@@ -463,7 +463,7 @@ export function registerTools(server: McpServer): void {
         `Ends: ${habit.endIds.join(", ")}`,
         habit.domainId && `Domain: ${habit.domainId}`,
         habit.groupId && `Group: ${habit.groupId}`,
-        habit.personId && `Person: ${habit.personId}`,
+        habit.personId && `Performed by: ${habit.personId}`,
         habit.frequency && `Frequency: ${habit.frequency}`,
         habit.durationMinutes != null && `Duration: ${habit.durationMinutes} min`,
         `Created at: ${habit.createdAt}`,
@@ -484,7 +484,7 @@ export function registerTools(server: McpServer): void {
         endId: z.string().optional().describe("Filter by end ID"),
         domainId: z.string().optional().describe("Filter by domain ID"),
         groupId: z.string().optional().describe("Filter by group ID"),
-        personId: z.string().optional().describe("Filter by person ID"),
+        personId: z.string().optional().describe("Filter by person who performs the habit"),
       },
     },
     async ({ endId, domainId, groupId, personId }) => {
@@ -642,7 +642,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Create Person",
       description:
-        "Creates a new person entity with the provided details. Returns the created person including a generated ID. Optionally add organization memberships and relationship type.",
+        "Creates a new person entity. Check list_people or get_person first to avoid duplicates; if the person exists, use update_person to add them to new groups instead.",
       inputSchema: {
         firstName: z.string().min(1).describe("First name of the person"),
         lastName: z.string().min(1).describe("Last name of the person"),
@@ -693,6 +693,44 @@ export function registerTools(server: McpServer): void {
             text: summary,
           },
         ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "get_person",
+    {
+      title: "Get Person",
+      description:
+        "Gets a single person by ID with full details (groups, relationship, etc.). Use to verify a person exists or fetch their details before update_person.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the person to fetch"),
+      },
+    },
+    async ({ id }) => {
+      const person = await getPersonById(id);
+      if (!person) {
+        return {
+          content: [{ type: "text", text: `Person with ID ${id} not found.` }],
+          isError: true,
+        };
+      }
+      const groupNames: string[] = [];
+      for (const gId of person.groupIds ?? []) {
+        const grp = await getGroupById(gId);
+        groupNames.push(grp?.name ?? gId);
+      }
+      const parts = [
+        `${person.firstName} ${person.lastName} (${person.id})`,
+        `  Email: ${person.email}`,
+        person.phone && `  Phone: ${person.phone}`,
+        person.title && `  Title: ${person.title}`,
+        person.relationshipType && `  Relationship: ${person.relationshipType}`,
+        groupNames.length > 0 && `  Groups: ${groupNames.join(", ")}`,
+        `  Created: ${person.createdAt}`,
+      ].filter(Boolean);
+      return {
+        content: [{ type: "text", text: parts.join("\n") }],
       };
     }
   );
@@ -757,7 +795,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Update Person",
       description:
-        "Updates an existing person by ID. Only provided fields are updated. Use to add/remove organizations, groups, or change other details.",
+        "Updates an existing person by ID. Use get_person or list_people to find the person. To add a person to new groups, use groupIdsToAdd (merges with existing). Use groupIds only to replace the entire list.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the person to update"),
         firstName: z.string().min(1).optional().describe("First name"),
@@ -766,14 +804,15 @@ export function registerTools(server: McpServer): void {
         phone: z.string().optional().describe("Phone number"),
         title: z.string().optional().describe("Job title or role"),
         notes: z.string().optional().describe("Additional notes"),
-        groupIds: z.array(z.string()).optional().describe("Group IDs (replaces existing)"),
+        groupIds: z.array(z.string()).optional().describe("Group IDs (replaces entire list)"),
+        groupIdsToAdd: z.array(z.string()).optional().describe("Group IDs to add (merges with existing; use when adding person to new groups)"),
         relationshipType: z
           .enum(["spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
           .optional()
           .describe("Relationship type"),
       },
     },
-    async ({ id, firstName, lastName, email, phone, title, notes, groupIds, relationshipType }) => {
+    async ({ id, firstName, lastName, email, phone, title, notes, groupIds, groupIdsToAdd, relationshipType }) => {
       const existing = await getPersonById(id);
       if (!existing) {
         return {
@@ -789,6 +828,7 @@ export function registerTools(server: McpServer): void {
       if (title !== undefined) updates.title = title;
       if (notes !== undefined) updates.notes = notes;
       if (groupIds !== undefined) updates.groupIds = groupIds;
+      if (groupIdsToAdd !== undefined) updates.groupIdsToAdd = groupIdsToAdd;
       if (relationshipType !== undefined) updates.relationshipType = relationshipType;
       const person = await updatePerson(id, updates as Parameters<typeof updatePerson>[1]);
       if (!person) {

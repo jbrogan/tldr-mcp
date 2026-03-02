@@ -3,13 +3,13 @@ import { listHabits, createHabit, getHabitById } from "../store/habits.js";
 import { listEnds, createEnd } from "../store/ends.js";
 import { listDomains } from "../store/domains.js";
 import { listOrganizations } from "../store/organizations.js";
-import { listGroups, createGroup } from "../store/groups.js";
+import { listGroups, createGroup, getGroupById } from "../store/groups.js";
 import { createAction } from "../store/actions.js";
-import { createPerson } from "../store/persons.js";
+import { createPerson, listPersons, updatePerson, getPersonById } from "../store/persons.js";
 
 const INTENT_SCHEMA = `Respond with ONLY valid JSON, no other text. Use this schema:
 {
-  "intent": "create_action" | "create_end" | "create_habit" | "create_group" | "create_person" | "suggest_habits" | "unknown",
+  "intent": "create_action" | "create_end" | "create_habit" | "create_group" | "create_person" | "update_person" | "suggest_habits" | "unknown",
   "params": { ... }
 }
 
@@ -22,19 +22,28 @@ For create_end: { "name": string, "domainId": string (optional) }
 - Extract the aspiration/goal from the user's text
 - Match domain if mentioned (e.g. "family" -> Family domain id)
 
-For create_habit: { "name": string, "endIds": ["<id>"], "frequency": string (optional), "durationMinutes": number (optional), "domainId": string (optional), "groupId": string (optional) }
+For create_habit: { "name": string, "endIds": ["<id>"], "frequency": string (optional), "durationMinutes": number (optional), "domainId": string (optional), "groupId": string (optional), "personId": string (optional) }
 - Extract habit name and which end(s) it serves
 - If the end has a domainId in context, include it. Or infer domain from the habit topic (e.g. sleep -> Health, work -> Career)
+- Match group by name from Groups list if mentioned (e.g. "for Engineering" -> groupId)
+- personId = the person expected to PERFORM the habit (the doer), NOT the focus/recipient. Match by name from Persons list (e.g. "John's habit", "assigned to Sarah" -> personId)
+- If both group and person are mentioned, include both groupId and personId
 
 For create_group: { "name": string, "organizationId": "<id>" }
 - Extract group name and match organization by name (use org id from context)
 - e.g. "Create an Engineering group in Newco" -> name: Engineering, organizationId: Newco's id
 
 For create_person: { "firstName": string, "lastName": string, "email": string, "phone": string (optional), "title": string (optional), "notes": string (optional), "relationshipType": "spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional), "groupIds": ["<id>"] (optional) }
+- IMPORTANT: Check the Persons list first. If the person already exists (match by name or email), use update_person instead.
 - Extract name and split into firstName and lastName (use last word as lastName, rest as firstName if full name given)
 - Map relationship words to relationshipType: wife/husband/partner -> spouse, kid/son/daughter -> child, mom/dad/parent -> parent, brother/sister -> sibling, coworker -> colleague
 - Match group by name if mentioned (use id from context). Person membership is through groups only.
 - Email is required - use "unknown@example.com" only if truly not provided
+
+For update_person: { "id": "<id>", "groupIdsToAdd": ["<id>", ...] (optional) }
+- Use when the person ALREADY EXISTS in Persons list and you need to add them to a group.
+- Match person by name from Persons list and use their id.
+- Use groupIdsToAdd with the NEW group id(s) to add. This merges with existing groups; do not pass existing groups.
 
 For suggest_habits: { "query": string, "suggestions": ["habit 1", "habit 2", ...] }
 - Use when user asks for habit suggestions (e.g. "What habits would help me be a better father?", "Suggest habits for getting promoted")
@@ -69,6 +78,9 @@ ${organizations.map((o) => `  ${o.id}: ${o.name}`).join("\n")}
 
 Groups (id, name, organizationId):
 ${groups.map((g) => `  ${g.id}: ${g.name} (org: ${g.organizationId})`).join("\n")}
+
+Persons (id, firstName, lastName, email, groupIds):
+${(await listPersons()).map((p) => `  ${p.id}: ${p.firstName} ${p.lastName}, ${p.email}, groups: [${(p.groupIds ?? []).join(", ")}]`).join("\n") || "  (none)"}
 
 Today's date: ${new Date().toISOString().slice(0, 10)}
 `;
@@ -138,13 +150,14 @@ JSON response:`;
       }
 
       case "create_habit": {
-        const { name, endIds, frequency, durationMinutes, domainId, groupId } = params as {
+        const { name, endIds, frequency, durationMinutes, domainId, groupId, personId } = params as {
           name?: string;
           endIds?: string[];
           frequency?: string;
           durationMinutes?: number;
           domainId?: string;
           groupId?: string;
+          personId?: string;
         };
         if (!name || !endIds?.length) {
           return { success: false, message: "Missing name or endIds for create_habit" };
@@ -156,10 +169,20 @@ JSON response:`;
           durationMinutes,
           domainId,
           groupId,
+          personId,
         });
+        const extras: string[] = [];
+        if (habit.groupId) {
+          const grp = await getGroupById(habit.groupId);
+          extras.push(`group: ${grp?.name ?? habit.groupId}`);
+        }
+        if (habit.personId) {
+          const p = await getPersonById(habit.personId);
+          extras.push(`performed by: ${p ? `${p.firstName} ${p.lastName}` : habit.personId}`);
+        }
         return {
           success: true,
-          message: `Created habit: ${habit.name} (${habit.id})`,
+          message: `Created habit: ${habit.name} (${habit.id})${extras.length ? ` - ${extras.join(", ")}` : ""}`,
         };
       }
 
@@ -229,6 +252,31 @@ JSON response:`;
         };
       }
 
+      case "update_person": {
+        const { id, groupIdsToAdd } = params as { id?: string; groupIdsToAdd?: string[] };
+        if (!id) {
+          return {
+            success: false,
+            message: "Missing id for update_person. Use the person's id from the Persons list.",
+          };
+        }
+        const updates: { groupIdsToAdd?: string[] } = {};
+        if (groupIdsToAdd != null && Array.isArray(groupIdsToAdd) && groupIdsToAdd.length > 0) {
+          updates.groupIdsToAdd = groupIdsToAdd;
+        }
+        const person = await updatePerson(id, updates);
+        if (!person) {
+          return {
+            success: false,
+            message: `Person with ID ${id} not found.`,
+          };
+        }
+        return {
+          success: true,
+          message: `Updated person: ${person.firstName} ${person.lastName}${groupIdsToAdd?.length ? ` - added to groups: ${groupIdsToAdd.join(", ")}` : ""}`,
+        };
+      }
+
       case "unknown":
         return {
           success: false,
@@ -238,7 +286,7 @@ JSON response:`;
       default:
         return {
           success: false,
-          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_group, create_person, suggest_habits.`,
+          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_group, create_person, update_person, suggest_habits.`,
         };
     }
   } catch (err) {

@@ -233,7 +233,7 @@ program
   .requiredOption("-e, --ends <ids>", "Comma-separated end IDs")
   .option("-d, --domainId <id>", "Domain ID")
   .option("-g, --groupId <id>", "Group ID")
-  .option("-p, --personId <id>", "Person ID")
+  .option("-p, --personId <id>", "Person expected to perform the habit (the doer)")
   .option("-f, --frequency <freq>", "e.g. daily, weekly, 3x/week")
   .option("-m, --durationMinutes <min>", "Estimated time in minutes")
   .action(async (opts) => {
@@ -262,7 +262,7 @@ program
   .option("-e, --endId <id>", "Filter by end ID")
   .option("-d, --domainId <id>", "Filter by domain ID")
   .option("-g, --groupId <id>", "Filter by group ID")
-  .option("-p, --personId <id>", "Filter by person ID")
+  .option("-p, --personId <id>", "Filter by person who performs the habit")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = {};
@@ -412,7 +412,8 @@ program
   .option("-t, --title <title>", "Job title or role")
   .option("-n, --notes <notes>", "Additional notes")
   .option("-r, --relationshipType <type>", `Relationship type: ${RELATIONSHIP_TYPES.join(", ")}`)
-  .option("-g, --groups <ids>", "Comma-separated group IDs (replaces existing)")
+  .option("-g, --groups <ids>", "Comma-separated group IDs (replaces entire list)")
+  .option("-a, --addGroups <ids>", "Comma-separated group IDs to add (merges with existing)")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = { id: opts.id };
@@ -424,6 +425,9 @@ program
       if (opts.notes !== undefined) args.notes = opts.notes;
       if (opts.groups) {
         args.groupIds = opts.groups.split(",").map((s: string) => s.trim());
+      }
+      if (opts.addGroups) {
+        args.groupIdsToAdd = opts.addGroups.split(",").map((s: string) => s.trim());
       }
       if (opts.relationshipType && RELATIONSHIP_TYPES.includes(opts.relationshipType as (typeof RELATIONSHIP_TYPES)[number])) {
         args.relationshipType = opts.relationshipType;
@@ -450,6 +454,23 @@ program
         arguments: { id: opts.id },
       });
       printToolResult(result);
+    });
+  });
+
+program
+  .command("get-person")
+  .description("Get a person by ID with full details")
+  .requiredOption("-i, --id <id>", "Person ID")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "get_person",
+        arguments: { id: opts.id },
+      });
+      printToolResult(result);
+      if ("isError" in result && result.isError) {
+        process.exit(1);
+      }
     });
   });
 
