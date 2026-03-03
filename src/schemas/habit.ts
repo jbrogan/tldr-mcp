@@ -6,7 +6,7 @@ import { z } from "zod";
 export const HabitSchema = z.object({
   name: z.string().min(1, "Habit name is required"),
   endIds: z.array(z.string()).min(1, "At least one end is required"),
-  domainId: z.string().optional(),
+  areaId: z.string().optional(),
   groupId: z.string().optional(),
   personId: z.string().optional().describe("Person expected to perform the habit (the doer), not the focus/recipient"),
   frequency: z.string().optional().describe("e.g. daily, weekly, 3x/week"),

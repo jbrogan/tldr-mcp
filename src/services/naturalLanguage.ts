@@ -1,7 +1,7 @@
 import { createLLMProvider } from "../llm/index.js";
 import { listHabits, createHabit, getHabitById } from "../store/habits.js";
 import { listEnds, createEnd, getEndById } from "../store/ends.js";
-import { listDomains, getDomainById } from "../store/domains.js";
+import { listAreas, getAreaById } from "../store/areas.js";
 import { listOrganizations } from "../store/organizations.js";
 import { listGroups, createGroup, getGroupById } from "../store/groups.js";
 import { createAction, listActions } from "../store/actions.js";
@@ -9,7 +9,7 @@ import { createPerson, listPersons, updatePerson, getPersonById } from "../store
 
 const INTENT_SCHEMA = `Respond with ONLY valid JSON, no other text. Use this schema:
 {
-  "intent": "create_action" | "create_end" | "create_habit" | "create_group" | "create_person" | "update_person" | "suggest_habits" | "list_domains" | "list_ends" | "list_habits" | "list_organizations" | "list_groups" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "unknown",
+  "intent": "create_action" | "create_end" | "create_habit" | "create_group" | "create_person" | "update_person" | "suggest_habits" | "list_areas" | "list_ends" | "list_habits" | "list_organizations" | "list_groups" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "unknown",
   "params": { ... }
 }
 
@@ -18,13 +18,13 @@ For create_action: { "habitId": "<id>", "completedAt": "YYYY-MM-DD", "actualDura
 - "today" = ${new Date().toISOString().slice(0, 10)}, "yesterday" = previous day
 - Extract duration in minutes if mentioned (e.g. "60 minutes" -> 60)
 
-For create_end: { "name": string, "domainId": string (optional) }
+For create_end: { "name": string, "areaId": string (optional) }
 - Extract the aspiration/goal from the user's text
-- Match domain if mentioned (e.g. "family" -> Family domain id)
+- Match area if mentioned (e.g. "family" -> Family area id)
 
-For create_habit: { "name": string, "endIds": ["<id>"], "frequency": string (optional), "durationMinutes": number (optional), "domainId": string (optional), "groupId": string (optional), "personId": string (optional) }
+For create_habit: { "name": string, "endIds": ["<id>"], "frequency": string (optional), "durationMinutes": number (optional), "areaId": string (optional), "groupId": string (optional), "personId": string (optional) }
 - Extract habit name and which end(s) it serves
-- If the end has a domainId in context, include it. Or infer domain from the habit topic (e.g. sleep -> Health, work -> Career)
+- If the end has an areaId in context, include it. Or infer area from the habit topic (e.g. sleep -> Health, work -> Career)
 - Match group by name from Groups list if mentioned (e.g. "for Engineering" -> groupId)
 - personId = the person expected to PERFORM the habit (the doer), NOT the focus/recipient. Match by name from Persons list (e.g. "John's habit", "assigned to Sarah" -> personId)
 - If both group and person are mentioned, include both groupId and personId
@@ -50,16 +50,16 @@ For suggest_habits: { "query": string, "suggestions": ["habit 1", "habit 2", ...
 - Extract the aspiration/goal from their message as query
 - Generate 3-5 concrete, actionable habit suggestions
 
-For list_domains: {}
-- Use when user wants to see domains (e.g. "show domains", "list domains", "what domains do I have")
+For list_areas: {}
+- Use when user wants to see areas (e.g. "show areas", "list areas", "what areas do I have")
 
-For list_ends: { "domainId": "<id>" (optional) }
+For list_ends: { "areaId": "<id>" (optional) }
 - Use when user wants to see ends/aspirations (e.g. "show my ends", "list aspirations", "what ends do I have")
-- Match domain by name if mentioned (e.g. "ends in Career" -> domainId)
+- Match area by name if mentioned (e.g. "ends in Career" -> areaId)
 
-For list_habits: { "endId": "<id>" (optional), "domainId": "<id>" (optional), "groupId": "<id>" (optional), "personId": "<id>" (optional) }
+For list_habits: { "endId": "<id>" (optional), "areaId": "<id>" (optional), "groupId": "<id>" (optional), "personId": "<id>" (optional) }
 - Use when user wants to see habits (e.g. "show my habits", "list habits", "habits for guitar end")
-- Match end, domain, group, or person by name from context if mentioned
+- Match end, area, group, or person by name from context if mentioned
 
 For list_organizations: { "expand": boolean (optional) }
 - Use when user wants to see organizations (e.g. "show organizations", "list orgs", "organizations with groups")
@@ -77,9 +77,9 @@ For list_actions: { "habitId": "<id>" (optional), "fromDate": "YYYY-MM-DD" (opti
 - Use when user wants to see tracked actions/completions (e.g. "show my actions", "what did I do", "gym completions this month")
 - Match habit by name. "this month" = first and last day of current month. "this week" = Mon-Sun of current week.
 
-For list_ends_and_habits: { "domainId": "<id>" (optional) }
-- Use when user wants ends and habits grouped by domain (e.g. "show my ends and habits", "ends and habits by domain")
-- Match domain by name if mentioned
+For list_ends_and_habits: { "areaId": "<id>" (optional) }
+- Use when user wants ends and habits grouped by area (e.g. "show my ends and habits", "ends and habits by area")
+- Match area by name if mentioned
 
 For get_person: { "personId": "<id>" }
 - Use when user wants details for a specific person (e.g. "show me John", "get John Doe's details", "who is Sarah?")
@@ -95,7 +95,7 @@ export interface NLResult {
 export async function interpretAndExecute(text: string): Promise<NLResult> {
   const habits = await listHabits();
   const ends = await listEnds();
-  const domains = await listDomains();
+  const areas = await listAreas();
   const organizations = await listOrganizations();
   const groups = await listGroups();
 
@@ -103,11 +103,11 @@ export async function interpretAndExecute(text: string): Promise<NLResult> {
 Habits (id, name):
 ${habits.map((h) => `  ${h.id}: ${h.name}`).join("\n")}
 
-Ends (id, name, domainId):
-${ends.map((e) => `  ${e.id}: ${e.name}${e.domainId ? ` (domain: ${e.domainId})` : ""}`).join("\n")}
+Ends (id, name, areaId):
+${ends.map((e) => `  ${e.id}: ${e.name}${e.areaId ? ` (area: ${e.areaId})` : ""}`).join("\n")}
 
-Domains (id, name):
-${domains.map((d) => `  ${d.id}: ${d.name}`).join("\n")}
+Areas (id, name):
+${areas.map((a) => `  ${a.id}: ${a.name}`).join("\n")}
 
 Organizations (id, name):
 ${organizations.map((o) => `  ${o.id}: ${o.name}`).join("\n")}
@@ -174,11 +174,11 @@ JSON response:`;
       }
 
       case "create_end": {
-        const { name, domainId } = params as { name?: string; domainId?: string };
+        const { name, areaId } = params as { name?: string; areaId?: string };
         if (!name) {
           return { success: false, message: "Missing name for create_end" };
         }
-        const end = await createEnd({ name, domainId });
+        const end = await createEnd({ name, areaId });
         return {
           success: true,
           message: `Created end: ${end.name} (${end.id})`,
@@ -186,12 +186,12 @@ JSON response:`;
       }
 
       case "create_habit": {
-        const { name, endIds, frequency, durationMinutes, domainId, groupId, personId } = params as {
+        const { name, endIds, frequency, durationMinutes, areaId, groupId, personId } = params as {
           name?: string;
           endIds?: string[];
           frequency?: string;
           durationMinutes?: number;
-          domainId?: string;
+          areaId?: string;
           groupId?: string;
           personId?: string;
         };
@@ -203,7 +203,7 @@ JSON response:`;
           endIds,
           frequency,
           durationMinutes,
-          domainId,
+          areaId,
           groupId,
           personId,
         });
@@ -313,25 +313,25 @@ JSON response:`;
         };
       }
 
-      case "list_domains": {
-        const domains = await listDomains();
-        if (domains.length === 0) {
-          return { success: true, message: "No domains found." };
+      case "list_areas": {
+        const areas = await listAreas();
+        if (areas.length === 0) {
+          return { success: true, message: "No areas found." };
         }
-        const lines = domains.map((d) => `  ${d.name} (${d.id})`);
+        const lines = areas.map((a) => `  ${a.name} (${a.id})`);
         return {
           success: true,
-          message: `Domains:\n\n${lines.join("\n")}`,
+          message: `Areas:\n\n${lines.join("\n")}`,
         };
       }
 
       case "list_ends": {
-        const { domainId } = params as { domainId?: string };
-        const ends = await listEnds(domainId);
+        const { areaId } = params as { areaId?: string };
+        const ends = await listEnds(areaId);
         if (ends.length === 0) {
           return {
             success: true,
-            message: domainId ? "No ends found for this domain." : "No ends found.",
+            message: areaId ? "No ends found for this area." : "No ends found.",
           };
         }
         const lines = ends.map((e) => `  ${e.name} (${e.id})`);
@@ -342,13 +342,13 @@ JSON response:`;
       }
 
       case "list_habits": {
-        const { endId, domainId, groupId, personId } = params as {
+        const { endId, areaId, groupId, personId } = params as {
           endId?: string;
-          domainId?: string;
+          areaId?: string;
           groupId?: string;
           personId?: string;
         };
-        const habits = await listHabits({ endId, domainId, groupId, personId });
+        const habits = await listHabits({ endId, areaId, groupId, personId });
         if (habits.length === 0) {
           return { success: true, message: "No habits found." };
         }
@@ -469,24 +469,24 @@ JSON response:`;
       }
 
       case "list_ends_and_habits": {
-        const { domainId } = params as { domainId?: string };
-        const domains = await listDomains();
+        const { areaId } = params as { areaId?: string };
+        const areas = await listAreas();
         const allEnds = await listEnds();
         const allHabits = await listHabits();
-        const domainIdsToShow = domainId
-          ? (await getDomainById(domainId) ? [domainId] : [])
-          : domains.map((d) => d.id);
-        if (domainId && domainIdsToShow.length === 0) {
-          return { success: false, message: `Domain with ID ${domainId} not found.` };
+        const areaIdsToShow = areaId
+          ? (await getAreaById(areaId) ? [areaId] : [])
+          : areas.map((a) => a.id);
+        if (areaId && areaIdsToShow.length === 0) {
+          return { success: false, message: `Area with ID ${areaId} not found.` };
         }
         const sections: string[] = [];
-        for (const dId of domainIdsToShow) {
-          const domain = domains.find((d) => d.id === dId);
-          const domainName = domain?.name ?? dId;
-          const ends = allEnds.filter((e) => e.domainId === dId);
-          const habits = allHabits.filter((h) => h.domainId === dId);
+        for (const aId of areaIdsToShow) {
+          const area = areas.find((a) => a.id === aId);
+          const areaName = area?.name ?? aId;
+          const ends = allEnds.filter((e) => e.areaId === aId);
+          const habits = allHabits.filter((h) => h.areaId === aId);
           if (ends.length === 0 && habits.length === 0) continue;
-          const parts: string[] = [`## ${domainName}`];
+          const parts: string[] = [`## ${areaName}`];
           if (ends.length > 0) {
             parts.push("Ends:");
             ends.forEach((e) => parts.push(`  - ${e.name} (${e.id})`));
@@ -500,8 +500,8 @@ JSON response:`;
           }
           sections.push(parts.join("\n"));
         }
-        const uncategorizedEnds = allEnds.filter((e) => !e.domainId);
-        const uncategorizedHabits = allHabits.filter((h) => !h.domainId);
+        const uncategorizedEnds = allEnds.filter((e) => !e.areaId);
+        const uncategorizedHabits = allHabits.filter((h) => !h.areaId);
         if (uncategorizedEnds.length > 0 || uncategorizedHabits.length > 0) {
           const parts: string[] = ["## Uncategorized"];
           if (uncategorizedEnds.length > 0) {
@@ -520,7 +520,7 @@ JSON response:`;
         if (sections.length === 0) {
           return {
             success: true,
-            message: domainId ? "No ends or habits found for this domain." : "No ends or habits found.",
+            message: areaId ? "No ends or habits found for this area." : "No ends or habits found.",
           };
         }
         return {
@@ -573,7 +573,7 @@ JSON response:`;
       default:
         return {
           success: false,
-          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_group, create_person, update_person, suggest_habits, list_domains, list_ends, list_habits, list_organizations, list_groups, list_people, list_actions, list_ends_and_habits, get_person.`,
+          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_group, create_person, update_person, suggest_habits, list_areas, list_ends, list_habits, list_organizations, list_groups, list_people, list_actions, list_ends_and_habits, get_person.`,
         };
     }
   } catch (err) {

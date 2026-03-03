@@ -54,7 +54,7 @@ export async function getHabitById(id: string): Promise<HabitEntity | undefined>
 
 export async function listHabits(options?: {
   endId?: string;
-  domainId?: string;
+  areaId?: string;
   groupId?: string;
   personId?: string;
 }): Promise<HabitEntity[]> {
@@ -62,7 +62,7 @@ export async function listHabits(options?: {
   if (!options) return [...habits];
   return habits.filter((h) => {
     if (options.endId && !h.endIds.includes(options.endId)) return false;
-    if (options.domainId && h.domainId !== options.domainId) return false;
+    if (options.areaId && h.areaId !== options.areaId) return false;
     if (options.groupId && h.groupId !== options.groupId) return false;
     if (options.personId && h.personId !== options.personId) return false;
     return true;

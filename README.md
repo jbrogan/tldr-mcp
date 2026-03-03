@@ -8,7 +8,7 @@ MCP (Model Context Protocol) server boilerplate for your app. This provides the 
 src/
 ├── index.ts          # Server entry point, transport setup
 ├── cli.ts            # CLI client
-├── schemas/          # Entity schemas (Person, Domain, Organization)
+├── schemas/          # Entity schemas (Person, Area, Organization)
 ├── store/            # Persistence (JSON files in data/)
 ├── tools/            # MCP tools
 ├── resources/        # MCP resources (read-only data)
@@ -30,11 +30,11 @@ npm start
 
 ## Data Model (Wheel of Life)
 
-- **Domains** – Life areas (Career, Family, Health, Spiritual, etc.), seeded on first use
-- **Organizations** – Groups within a domain (e.g., "Smith Family", "First Baptist Church")
+- **Areas** – Life areas (Career, Family, Health, Spiritual, etc.), seeded on first use
+- **Organizations** – Top-level containers for groups and people (e.g., "Smith Family", "Acme Corp")
 - **People** – Members of organizations
 - **Ends** – Ongoing aspirations you work toward (e.g., "Be a better father", "Practice guitar")
-- **Habits** – Recurring behaviors that serve ends; can link to domain, organization, or person
+- **Habits** – Recurring behaviors that serve ends; can link to area, group, or person
 - **Actions** – Tracked completions of habits (e.g., "Practiced guitar on Feb 24")
 
 ## CLI
@@ -45,28 +45,30 @@ A CLI is included to call the MCP server from the command line. It spawns the se
 # List available tools
 npm run cli -- list-tools
 
-# Domains & organizations
-npm run cli -- list-domains
-npm run cli -- create-organization -n "Smith Family" -d <domainId>
+# Areas & organizations
+npm run cli -- list-areas
+npm run cli -- create-organization -n "Smith Family"
 npm run cli -- list-organizations
-npm run cli -- list-organizations -d <domainId>
+npm run cli -- list-organizations -e
+npm run cli -- list-ends-and-habits-by-area
+npm run cli -- list-ends-and-habits-by-area -a <areaId>
 
 # People
-npm run cli -- create-person -f Jane -l Doe -e jane@example.com -o <orgId1>,<orgId2>
+npm run cli -- create-person -f Jane -l Doe -e jane@example.com -g <groupId>
 npm run cli -- list-people
-npm run cli -- list-people -d <domainId>
 npm run cli -- list-people -o <organizationId>
+npm run cli -- list-people -g <groupId>
 
 # Ends, habits, actions
-npm run cli -- create-end -n "Be a better father" -d <domainId>
+npm run cli -- create-end -n "Be a better father" -a <areaId>
 npm run cli -- list-ends
-npm run cli -- create-habit -n "Family dinner" -e <endId1>,<endId2> -f daily
+npm run cli -- create-habit -n "Family dinner" -e <endId1>,<endId2> -f daily -a <areaId>
 npm run cli -- list-habits -e <endId>
 npm run cli -- create-action -h <habitId> -d 2026-02-25
 npm run cli -- list-actions -h <habitId> -f 2026-02-01 -t 2026-02-28
 
 # Call any tool with JSON arguments
-npm run cli -- call create_person '{"firstName":"Bob","lastName":"Smith","email":"bob@test.com","organizationIds":["<orgId>"]}'
+npm run cli -- call create_person '{"firstName":"Bob","lastName":"Smith","email":"bob@test.com","groupIds":["<groupId>"]}'
 ```
 
 After `npm link`, you can run `tldr-mcp-cli` directly.

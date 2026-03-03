@@ -5,7 +5,7 @@ import { z } from "zod";
  */
 export const EndSchema = z.object({
   name: z.string().min(1, "End name is required"),
-  domainId: z.string().optional().describe("Domain this end belongs to"),
+  areaId: z.string().optional().describe("Area this end belongs to"),
 });
 
 export type End = z.infer<typeof EndSchema>;

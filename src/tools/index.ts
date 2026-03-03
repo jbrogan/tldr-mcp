@@ -15,7 +15,7 @@ import {
   removeGroupFromAllPersons,
   updatePerson,
 } from "../store/persons.js";
-import { listDomains, getDomainById } from "../store/domains.js";
+import { listAreas, getAreaById } from "../store/areas.js";
 import {
   createOrganization,
   deleteOrganization,
@@ -51,23 +51,21 @@ import { interpretAndExecute } from "../services/naturalLanguage.js";
 
 export function registerTools(server: McpServer): void {
   server.registerTool(
-    "list_domains",
+    "list_areas",
     {
-      title: "List Domains",
+      title: "List Areas",
       description:
-        "Lists all Wheel of Life domains (Career, Family, Health, etc.). Domains are seeded on first use.",
+        "Lists all Wheel of Life areas (Career, Family, Health, etc.). Areas are seeded on first use.",
       inputSchema: {},
     },
     async () => {
-      const domains = await listDomains();
-      const lines = domains.map(
-        (d) => `  ${d.name} (${d.id})`
-      );
+      const areas = await listAreas();
+      const lines = areas.map((a) => `  ${a.name} (${a.id})`);
       return {
         content: [
           {
             type: "text",
-            text: `Domains:\n\n${lines.join("\n")}`,
+            text: `Areas:\n\n${lines.join("\n")}`,
           },
         ],
       };
@@ -75,42 +73,42 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
-    "list_ends_and_habits_by_domain",
+    "list_ends_and_habits_by_area",
     {
-      title: "List Ends and Habits by Domain",
+      title: "List Ends and Habits by Area",
       description:
-        "Lists ends and habits grouped by domain. If domainId is specified, shows only that domain. Otherwise shows all domains.",
+        "Lists ends and habits grouped by area. If areaId is specified, shows only that area. Otherwise shows all areas.",
       inputSchema: {
-        domainId: z.string().optional().describe("Filter to a specific domain. Omit to show all domains."),
+        areaId: z.string().optional().describe("Filter to a specific area. Omit to show all areas."),
       },
     },
-    async ({ domainId }) => {
-      const domains = await listDomains();
+    async ({ areaId }) => {
+      const areas = await listAreas();
       const allEnds = await listEnds();
       const allHabits = await listHabits();
 
-      const domainIdsToShow = domainId
-        ? (await getDomainById(domainId) ? [domainId] : [])
-        : domains.map((d) => d.id);
+      const areaIdsToShow = areaId
+        ? (await getAreaById(areaId) ? [areaId] : [])
+        : areas.map((a) => a.id);
 
-      if (domainId && domainIdsToShow.length === 0) {
+      if (areaId && areaIdsToShow.length === 0) {
         return {
-          content: [{ type: "text", text: `Domain with ID ${domainId} not found.` }],
+          content: [{ type: "text", text: `Area with ID ${areaId} not found.` }],
           isError: true,
         };
       }
 
       const sections: string[] = [];
 
-      for (const dId of domainIdsToShow) {
-        const domain = domains.find((d) => d.id === dId);
-        const domainName = domain?.name ?? dId;
-        const ends = allEnds.filter((e) => e.domainId === dId);
-        const habits = allHabits.filter((h) => h.domainId === dId);
+      for (const aId of areaIdsToShow) {
+        const area = areas.find((a) => a.id === aId);
+        const areaName = area?.name ?? aId;
+        const ends = allEnds.filter((e) => e.areaId === aId);
+        const habits = allHabits.filter((h) => h.areaId === aId);
 
         if (ends.length === 0 && habits.length === 0) continue;
 
-        const parts: string[] = [`## ${domainName}`];
+        const parts: string[] = [`## ${areaName}`];
         if (ends.length > 0) {
           parts.push("Ends:");
           ends.forEach((e) => parts.push(`  - ${e.name} (${e.id})`));
@@ -125,9 +123,8 @@ export function registerTools(server: McpServer): void {
         sections.push(parts.join("\n"));
       }
 
-      // Uncategorized: ends/habits without domainId
-      const uncategorizedEnds = allEnds.filter((e) => !e.domainId);
-      const uncategorizedHabits = allHabits.filter((h) => !h.domainId);
+      const uncategorizedEnds = allEnds.filter((e) => !e.areaId);
+      const uncategorizedHabits = allHabits.filter((h) => !h.areaId);
       if (uncategorizedEnds.length > 0 || uncategorizedHabits.length > 0) {
         const parts: string[] = ["## Uncategorized"];
         if (uncategorizedEnds.length > 0) {
@@ -146,7 +143,7 @@ export function registerTools(server: McpServer): void {
 
       if (sections.length === 0) {
         return {
-          content: [{ type: "text", text: domainId ? "No ends or habits found for this domain." : "No ends or habits found." }],
+          content: [{ type: "text", text: areaId ? "No ends or habits found for this area." : "No ends or habits found." }],
         };
       }
 
@@ -359,16 +356,16 @@ export function registerTools(server: McpServer): void {
         "Creates an end - an ongoing aspiration you work toward (e.g., Be a better father, Practice guitar).",
       inputSchema: {
         name: z.string().min(1).describe("Name of the end"),
-        domainId: z.string().optional().describe("Domain this end belongs to"),
+        areaId: z.string().optional().describe("Area this end belongs to"),
       },
     },
-    async ({ name, domainId }) => {
-      const end = await createEnd({ name, domainId });
+    async ({ name, areaId }) => {
+      const end = await createEnd({ name, areaId });
       return {
         content: [
           {
             type: "text",
-            text: `Created end: ${end.name}\nID: ${end.id}\n${end.domainId ? `Domain: ${end.domainId}\n` : ""}Created at: ${end.createdAt}`,
+            text: `Created end: ${end.name}\nID: ${end.id}\n${end.areaId ? `Area: ${end.areaId}\n` : ""}Created at: ${end.createdAt}`,
           },
         ],
       };
@@ -379,18 +376,18 @@ export function registerTools(server: McpServer): void {
     "list_ends",
     {
       title: "List Ends",
-      description: "Lists ends. Optionally filter by domain ID.",
+      description: "Lists ends. Optionally filter by area ID.",
       inputSchema: {
-        domainId: z.string().optional().describe("Filter by domain ID"),
+        areaId: z.string().optional().describe("Filter by area ID"),
       },
     },
-    async ({ domainId }) => {
-      const ends = await listEnds(domainId);
+    async ({ areaId }) => {
+      const ends = await listEnds(areaId);
       if (ends.length === 0) {
         return { content: [{ type: "text", text: "No ends found." }] };
       }
       const lines = ends.map(
-        (e) => `  ${e.name} (${e.id})${e.domainId ? ` - Domain: ${e.domainId}` : ""}`
+        (e) => `  ${e.name} (${e.id})${e.areaId ? ` - Area: ${e.areaId}` : ""}`
       );
       return {
         content: [
@@ -440,18 +437,18 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         name: z.string().min(1).describe("Name of the habit"),
         endIds: z.array(z.string()).min(1).describe("IDs of ends this habit serves"),
-        domainId: z.string().optional(),
+        areaId: z.string().optional(),
         groupId: z.string().optional(),
         personId: z.string().optional().describe("ID of the person expected to perform the habit (the doer), not the focus/recipient"),
         frequency: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
         durationMinutes: z.number().int().positive().optional().describe("Estimated time in minutes"),
       },
     },
-    async ({ name, endIds, domainId, groupId, personId, frequency, durationMinutes }) => {
+    async ({ name, endIds, areaId, groupId, personId, frequency, durationMinutes }) => {
       const habit = await createHabit({
         name,
         endIds,
-        domainId,
+        areaId,
         groupId,
         personId,
         frequency,
@@ -461,7 +458,7 @@ export function registerTools(server: McpServer): void {
         `Created habit: ${habit.name}`,
         `ID: ${habit.id}`,
         `Ends: ${habit.endIds.join(", ")}`,
-        habit.domainId && `Domain: ${habit.domainId}`,
+        habit.areaId && `Area: ${habit.areaId}`,
         habit.groupId && `Group: ${habit.groupId}`,
         habit.personId && `Performed by: ${habit.personId}`,
         habit.frequency && `Frequency: ${habit.frequency}`,
@@ -479,18 +476,18 @@ export function registerTools(server: McpServer): void {
     {
       title: "List Habits",
       description:
-        "Lists habits. Optionally filter by end, domain, organization, or person.",
+        "Lists habits. Optionally filter by end, area, organization, or person.",
       inputSchema: {
         endId: z.string().optional().describe("Filter by end ID"),
-        domainId: z.string().optional().describe("Filter by domain ID"),
+        areaId: z.string().optional().describe("Filter by area ID"),
         groupId: z.string().optional().describe("Filter by group ID"),
         personId: z.string().optional().describe("Filter by person who performs the habit"),
       },
     },
-    async ({ endId, domainId, groupId, personId }) => {
+    async ({ endId, areaId, groupId, personId }) => {
       const habits = await listHabits({
         endId,
-        domainId,
+        areaId,
         groupId,
         personId,
       });
@@ -501,7 +498,7 @@ export function registerTools(server: McpServer): void {
         const meta: string[] = [];
         if (h.frequency) meta.push(h.frequency);
         if (h.durationMinutes != null) meta.push(`${h.durationMinutes} min`);
-        if (h.domainId) meta.push(`domain: ${h.domainId}`);
+        if (h.areaId) meta.push(`area: ${h.areaId}`);
         if (h.groupId) meta.push(`group: ${h.groupId}`);
         if (h.personId) meta.push(`person: ${h.personId}`);
         return `  ${h.name} (${h.id})\n    Ends: ${h.endIds.join(", ")}${meta.length ? ` | ${meta.join(", ")}` : ""}`;

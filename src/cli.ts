@@ -70,12 +70,12 @@ program
   });
 
 program
-  .command("list-domains")
-  .description("List Wheel of Life domains")
+  .command("list-areas")
+  .description("List Wheel of Life areas")
   .action(async () => {
     await withClient(async (client) => {
       const result = await client.callTool({
-        name: "list_domains",
+        name: "list_areas",
         arguments: {},
       });
       printToolResult(result);
@@ -83,14 +83,14 @@ program
   });
 
 program
-  .command("list-ends-and-habits-by-domain")
-  .description("List ends and habits by domain. Omit -d to show all domains.")
-  .option("-d, --domainId <id>", "Filter to a specific domain")
+  .command("list-ends-and-habits-by-area")
+  .description("List ends and habits by area. Omit -a to show all areas.")
+  .option("-a, --areaId <id>", "Filter to a specific area")
   .action(async (opts) => {
     await withClient(async (client) => {
       const result = await client.callTool({
-        name: "list_ends_and_habits_by_domain",
-        arguments: opts.domainId ? { domainId: opts.domainId } : {},
+        name: "list_ends_and_habits_by_area",
+        arguments: opts.areaId ? { areaId: opts.areaId } : {},
       });
       printToolResult(result);
     });
@@ -185,11 +185,11 @@ program
   .command("create-end")
   .description("Create an end (ongoing aspiration)")
   .requiredOption("-n, --name <name>", "End name")
-  .option("-d, --domainId <id>", "Domain ID")
+  .option("-a, --areaId <id>", "Area ID")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = { name: opts.name };
-      if (opts.domainId) args.domainId = opts.domainId;
+      if (opts.areaId) args.areaId = opts.areaId;
       const result = await client.callTool({
         name: "create_end",
         arguments: args,
@@ -200,13 +200,13 @@ program
 
 program
   .command("list-ends")
-  .description("List ends, optionally by domain")
-  .option("-d, --domainId <id>", "Filter by domain ID")
+  .description("List ends, optionally by area")
+  .option("-a, --areaId <id>", "Filter by area ID")
   .action(async (opts) => {
     await withClient(async (client) => {
       const result = await client.callTool({
         name: "list_ends",
-        arguments: opts.domainId ? { domainId: opts.domainId } : {},
+        arguments: opts.areaId ? { areaId: opts.areaId } : {},
       });
       printToolResult(result);
     });
@@ -231,7 +231,7 @@ program
   .description("Create a habit that serves ends")
   .requiredOption("-n, --name <name>", "Habit name")
   .requiredOption("-e, --ends <ids>", "Comma-separated end IDs")
-  .option("-d, --domainId <id>", "Domain ID")
+  .option("-a, --areaId <id>", "Area ID")
   .option("-g, --groupId <id>", "Group ID")
   .option("-p, --personId <id>", "Person expected to perform the habit (the doer)")
   .option("-f, --frequency <freq>", "e.g. daily, weekly, 3x/week")
@@ -242,7 +242,7 @@ program
         name: opts.name,
         endIds: opts.ends.split(",").map((s: string) => s.trim()),
       };
-      if (opts.domainId) args.domainId = opts.domainId;
+      if (opts.areaId) args.areaId = opts.areaId;
       if (opts.groupId) args.groupId = opts.groupId;
       if (opts.personId) args.personId = opts.personId;
       if (opts.frequency) args.frequency = opts.frequency;
@@ -260,14 +260,14 @@ program
   .command("list-habits")
   .description("List habits, optionally filtered")
   .option("-e, --endId <id>", "Filter by end ID")
-  .option("-d, --domainId <id>", "Filter by domain ID")
+  .option("-a, --areaId <id>", "Filter by area ID")
   .option("-g, --groupId <id>", "Filter by group ID")
   .option("-p, --personId <id>", "Filter by person who performs the habit")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = {};
       if (opts.endId) args.endId = opts.endId;
-      if (opts.domainId) args.domainId = opts.domainId;
+      if (opts.areaId) args.areaId = opts.areaId;
       if (opts.groupId) args.groupId = opts.groupId;
       if (opts.personId) args.personId = opts.personId;
       const result = await client.callTool({

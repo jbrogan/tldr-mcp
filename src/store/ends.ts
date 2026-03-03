@@ -46,9 +46,9 @@ export async function getEndById(id: string): Promise<EndEntity | undefined> {
   return ends.find((e) => e.id === id);
 }
 
-export async function listEnds(domainId?: string): Promise<EndEntity[]> {
+export async function listEnds(areaId?: string): Promise<EndEntity[]> {
   const ends = await loadEnds();
-  if (domainId) return ends.filter((e) => e.domainId === domainId);
+  if (areaId) return ends.filter((e) => e.areaId === areaId);
   return [...ends];
 }
 

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * Organization entity - a container for groups and people.
- * Top-level; not linked to a domain.
+ * Top-level; not linked to an area.
  */
 export const OrganizationSchema = z.object({
   name: z.string().min(1, "Organization name is required"),

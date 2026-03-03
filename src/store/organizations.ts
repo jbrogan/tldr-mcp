@@ -13,17 +13,12 @@ async function ensureDataDir(): Promise<void> {
   await mkdir(dirname(getDataPath()), { recursive: true });
 }
 
-function normalizeOrganization(o: Record<string, unknown>): OrganizationEntity {
-  const { domainId: _omit, ...rest } = o;
-  return rest as unknown as OrganizationEntity;
-}
-
 async function loadOrganizations(): Promise<OrganizationEntity[]> {
   try {
     const data = await readFile(getDataPath(), "utf-8");
     const parsed = JSON.parse(data);
     const arr = Array.isArray(parsed) ? parsed : [];
-    return arr.map(normalizeOrganization);
+    return arr as OrganizationEntity[];
   } catch (err) {
     const code = (err as NodeJS.ErrnoException)?.code;
     if (code === "ENOENT") {
