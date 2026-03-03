@@ -1,15 +1,15 @@
 import { createLLMProvider } from "../llm/index.js";
 import { listHabits, createHabit, getHabitById } from "../store/habits.js";
-import { listEnds, createEnd } from "../store/ends.js";
-import { listDomains } from "../store/domains.js";
+import { listEnds, createEnd, getEndById } from "../store/ends.js";
+import { listDomains, getDomainById } from "../store/domains.js";
 import { listOrganizations } from "../store/organizations.js";
 import { listGroups, createGroup, getGroupById } from "../store/groups.js";
-import { createAction } from "../store/actions.js";
+import { createAction, listActions } from "../store/actions.js";
 import { createPerson, listPersons, updatePerson, getPersonById } from "../store/persons.js";
 
 const INTENT_SCHEMA = `Respond with ONLY valid JSON, no other text. Use this schema:
 {
-  "intent": "create_action" | "create_end" | "create_habit" | "create_group" | "create_person" | "update_person" | "suggest_habits" | "unknown",
+  "intent": "create_action" | "create_end" | "create_habit" | "create_group" | "create_person" | "update_person" | "suggest_habits" | "list_domains" | "list_ends" | "list_habits" | "list_organizations" | "list_groups" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "unknown",
   "params": { ... }
 }
 
@@ -49,6 +49,42 @@ For suggest_habits: { "query": string, "suggestions": ["habit 1", "habit 2", ...
 - Use when user asks for habit suggestions (e.g. "What habits would help me be a better father?", "Suggest habits for getting promoted")
 - Extract the aspiration/goal from their message as query
 - Generate 3-5 concrete, actionable habit suggestions
+
+For list_domains: {}
+- Use when user wants to see domains (e.g. "show domains", "list domains", "what domains do I have")
+
+For list_ends: { "domainId": "<id>" (optional) }
+- Use when user wants to see ends/aspirations (e.g. "show my ends", "list aspirations", "what ends do I have")
+- Match domain by name if mentioned (e.g. "ends in Career" -> domainId)
+
+For list_habits: { "endId": "<id>" (optional), "domainId": "<id>" (optional), "groupId": "<id>" (optional), "personId": "<id>" (optional) }
+- Use when user wants to see habits (e.g. "show my habits", "list habits", "habits for guitar end")
+- Match end, domain, group, or person by name from context if mentioned
+
+For list_organizations: { "expand": boolean (optional) }
+- Use when user wants to see organizations (e.g. "show organizations", "list orgs", "organizations with groups")
+- Set expand: true if user wants to see groups and people under each org
+
+For list_groups: { "organizationId": "<id>" (optional) }
+- Use when user wants to see groups (e.g. "show groups", "list groups", "groups in Acme")
+- Match organization by name if mentioned
+
+For list_people: { "organizationId": "<id>" (optional), "groupId": "<id>" (optional), "relationshipType": "spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional) }
+- Use when user wants to see people (e.g. "show people", "list people", "people in Engineering", "my colleagues")
+- Match org or group by name. Map relationship words to relationshipType.
+
+For list_actions: { "habitId": "<id>" (optional), "fromDate": "YYYY-MM-DD" (optional), "toDate": "YYYY-MM-DD" (optional) }
+- Use when user wants to see tracked actions/completions (e.g. "show my actions", "what did I do", "gym completions this month")
+- Match habit by name. "this month" = first and last day of current month. "this week" = Mon-Sun of current week.
+
+For list_ends_and_habits: { "domainId": "<id>" (optional) }
+- Use when user wants ends and habits grouped by domain (e.g. "show my ends and habits", "ends and habits by domain")
+- Match domain by name if mentioned
+
+For get_person: { "personId": "<id>" }
+- Use when user wants details for a specific person (e.g. "show me John", "get John Doe's details", "who is Sarah?")
+- Match person by name from Persons list and use their id
+
 - Use "unknown" if the intent is unclear`;
 
 export interface NLResult {
@@ -277,16 +313,267 @@ JSON response:`;
         };
       }
 
+      case "list_domains": {
+        const domains = await listDomains();
+        if (domains.length === 0) {
+          return { success: true, message: "No domains found." };
+        }
+        const lines = domains.map((d) => `  ${d.name} (${d.id})`);
+        return {
+          success: true,
+          message: `Domains:\n\n${lines.join("\n")}`,
+        };
+      }
+
+      case "list_ends": {
+        const { domainId } = params as { domainId?: string };
+        const ends = await listEnds(domainId);
+        if (ends.length === 0) {
+          return {
+            success: true,
+            message: domainId ? "No ends found for this domain." : "No ends found.",
+          };
+        }
+        const lines = ends.map((e) => `  ${e.name} (${e.id})`);
+        return {
+          success: true,
+          message: `Ends:\n\n${lines.join("\n")}`,
+        };
+      }
+
+      case "list_habits": {
+        const { endId, domainId, groupId, personId } = params as {
+          endId?: string;
+          domainId?: string;
+          groupId?: string;
+          personId?: string;
+        };
+        const habits = await listHabits({ endId, domainId, groupId, personId });
+        if (habits.length === 0) {
+          return { success: true, message: "No habits found." };
+        }
+        const allEnds = await listEnds();
+        const lines = habits.map((h) => {
+          const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
+          return `  ${h.name} (${h.id}) → serves: ${endNames}`;
+        });
+        return {
+          success: true,
+          message: `Habits:\n\n${lines.join("\n")}`,
+        };
+      }
+
+      case "list_organizations": {
+        const { expand } = params as { expand?: boolean };
+        const orgs = await listOrganizations();
+        if (orgs.length === 0) {
+          return { success: true, message: "No organizations found." };
+        }
+        if (!expand) {
+          const lines = orgs.map((o) => `  ${o.name} (${o.id})`);
+          return { success: true, message: `Organizations:\n\n${lines.join("\n")}` };
+        }
+        const sections: string[] = [];
+        for (const org of orgs) {
+          const groups = await listGroups(org.id);
+          const parts: string[] = [`  ${org.name} (${org.id})`, "    Groups:"];
+          if (groups.length === 0) {
+            parts.push("      (no groups)");
+          } else {
+            for (const g of groups) {
+              const people = await listPersons({ groupId: g.id });
+              const peopleNames = people.map((p) => `${p.firstName} ${p.lastName}`).join(", ");
+              parts.push(`      - ${g.name} (${g.id})`);
+              parts.push(`        ${peopleNames || "(no members)"}`);
+            }
+          }
+          sections.push(parts.join("\n"));
+        }
+        return {
+          success: true,
+          message: `Organizations:\n\n${sections.join("\n\n")}`,
+        };
+      }
+
+      case "list_groups": {
+        const { organizationId } = params as { organizationId?: string };
+        const groups = await listGroups(organizationId);
+        if (groups.length === 0) {
+          return {
+            success: true,
+            message: organizationId ? "No groups found for this organization." : "No groups found.",
+          };
+        }
+        const lines = groups.map((g) => `  ${g.name} (${g.id}) - Organization: ${g.organizationId}`);
+        return {
+          success: true,
+          message: `Groups:\n\n${lines.join("\n")}`,
+        };
+      }
+
+      case "list_people": {
+        const { organizationId, groupId, relationshipType } = params as {
+          organizationId?: string;
+          groupId?: string;
+          relationshipType?: string;
+        };
+        const people = await listPersons({ organizationId, groupId, relationshipType });
+        if (people.length === 0) {
+          return { success: true, message: "No people found." };
+        }
+        const lines = await Promise.all(
+          people.map(async (p) => {
+            const groupNames: string[] = [];
+            for (const gId of p.groupIds ?? []) {
+              const grp = await getGroupById(gId);
+              groupNames.push(grp?.name ?? gId);
+            }
+            const parts = [
+              `${p.firstName} ${p.lastName} (${p.id})`,
+              `  Email: ${p.email}`,
+              p.phone && `  Phone: ${p.phone}`,
+              p.title && `  Title: ${p.title}`,
+              p.relationshipType && `  Relationship: ${p.relationshipType}`,
+              groupNames.length > 0 && `  Groups: ${groupNames.join(", ")}`,
+            ].filter(Boolean);
+            return parts.join("\n");
+          })
+        );
+        return {
+          success: true,
+          message: `People:\n\n${lines.join("\n\n")}`,
+        };
+      }
+
+      case "list_actions": {
+        const { habitId, fromDate, toDate } = params as {
+          habitId?: string;
+          fromDate?: string;
+          toDate?: string;
+        };
+        const actions = await listActions({ habitId, fromDate, toDate });
+        if (actions.length === 0) {
+          return { success: true, message: "No actions found." };
+        }
+        const habitMap = new Map((await listHabits()).map((h) => [h.id, h.name]));
+        const lines = actions.map((a) => {
+          const habitName = habitMap.get(a.habitId) ?? a.habitId;
+          const date = a.completedAt.slice(0, 10);
+          const extra = a.actualDurationMinutes != null ? ` (${a.actualDurationMinutes} min)` : "";
+          return `  ${date}: ${habitName}${extra}`;
+        });
+        return {
+          success: true,
+          message: `Actions:\n\n${lines.join("\n")}`,
+        };
+      }
+
+      case "list_ends_and_habits": {
+        const { domainId } = params as { domainId?: string };
+        const domains = await listDomains();
+        const allEnds = await listEnds();
+        const allHabits = await listHabits();
+        const domainIdsToShow = domainId
+          ? (await getDomainById(domainId) ? [domainId] : [])
+          : domains.map((d) => d.id);
+        if (domainId && domainIdsToShow.length === 0) {
+          return { success: false, message: `Domain with ID ${domainId} not found.` };
+        }
+        const sections: string[] = [];
+        for (const dId of domainIdsToShow) {
+          const domain = domains.find((d) => d.id === dId);
+          const domainName = domain?.name ?? dId;
+          const ends = allEnds.filter((e) => e.domainId === dId);
+          const habits = allHabits.filter((h) => h.domainId === dId);
+          if (ends.length === 0 && habits.length === 0) continue;
+          const parts: string[] = [`## ${domainName}`];
+          if (ends.length > 0) {
+            parts.push("Ends:");
+            ends.forEach((e) => parts.push(`  - ${e.name} (${e.id})`));
+          }
+          if (habits.length > 0) {
+            parts.push("Habits:");
+            habits.forEach((h) => {
+              const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
+              parts.push(`  - ${h.name} (${h.id}) → serves: ${endNames}`);
+            });
+          }
+          sections.push(parts.join("\n"));
+        }
+        const uncategorizedEnds = allEnds.filter((e) => !e.domainId);
+        const uncategorizedHabits = allHabits.filter((h) => !h.domainId);
+        if (uncategorizedEnds.length > 0 || uncategorizedHabits.length > 0) {
+          const parts: string[] = ["## Uncategorized"];
+          if (uncategorizedEnds.length > 0) {
+            parts.push("Ends:");
+            uncategorizedEnds.forEach((e) => parts.push(`  - ${e.name} (${e.id})`));
+          }
+          if (uncategorizedHabits.length > 0) {
+            parts.push("Habits:");
+            uncategorizedHabits.forEach((h) => {
+              const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
+              parts.push(`  - ${h.name} (${h.id}) → serves: ${endNames}`);
+            });
+          }
+          sections.push(parts.join("\n"));
+        }
+        if (sections.length === 0) {
+          return {
+            success: true,
+            message: domainId ? "No ends or habits found for this domain." : "No ends or habits found.",
+          };
+        }
+        return {
+          success: true,
+          message: sections.join("\n\n"),
+        };
+      }
+
+      case "get_person": {
+        const { personId } = params as { personId?: string };
+        if (!personId) {
+          return {
+            success: false,
+            message: "Missing personId for get_person. Match the person by name from the Persons list.",
+          };
+        }
+        const person = await getPersonById(personId);
+        if (!person) {
+          return {
+            success: false,
+            message: `Person with ID ${personId} not found.`,
+          };
+        }
+        const groupNames: string[] = [];
+        for (const gId of person.groupIds ?? []) {
+          const grp = await getGroupById(gId);
+          groupNames.push(grp?.name ?? gId);
+        }
+        const parts = [
+          `${person.firstName} ${person.lastName} (${person.id})`,
+          `  Email: ${person.email}`,
+          person.phone && `  Phone: ${person.phone}`,
+          person.title && `  Title: ${person.title}`,
+          person.relationshipType && `  Relationship: ${person.relationshipType}`,
+          groupNames.length > 0 && `  Groups: ${groupNames.join(", ")}`,
+          `  Created: ${person.createdAt}`,
+        ].filter(Boolean);
+        return {
+          success: true,
+          message: parts.join("\n"),
+        };
+      }
+
       case "unknown":
         return {
           success: false,
-          message: `I couldn't understand that. Try phrases like "I went to the gym today for 60 minutes", "I want to be a better father", "What habits would help me be a better father?", "Create an Engineering group in Newco", or "Add my wife Jennifer, jennifer@example.com".`,
+          message: `I couldn't understand that. Try phrases like "I went to the gym today for 60 minutes", "I want to be a better father", "What habits would help me be a better father?", "Create an Engineering group in Newco", "Add my wife Jennifer, jennifer@example.com", "show my habits", or "show me John".`,
         };
 
       default:
         return {
           success: false,
-          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_group, create_person, update_person, suggest_habits.`,
+          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_group, create_person, update_person, suggest_habits, list_domains, list_ends, list_habits, list_organizations, list_groups, list_people, list_actions, list_ends_and_habits, get_person.`,
         };
     }
   } catch (err) {
