@@ -118,6 +118,17 @@ server.registerPrompt(
 );
 ```
 
+## MCP Inspector (Development)
+
+Use [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) to test and debug tools interactively:
+
+```bash
+npm run build
+npm run inspector
+```
+
+Then open http://localhost:6274 in your browser. You can call tools with custom inputs, inspect schemas, and view resources and prompts.
+
 ## Connecting to Clients
 
 ### Cursor
