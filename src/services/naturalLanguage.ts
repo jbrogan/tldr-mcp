@@ -16,6 +16,8 @@ const INTENT_SCHEMA = `Respond with ONLY valid JSON, no other text. Use this sch
   "params": { ... }
 }
 
+ROUTING PRIORITY: If the user asks about groups for a specific person (e.g. "what groups is [NAME] in?", "what groups is [NAME] a member of?", "list the groups for [NAME]", "groups for [NAME]", "which groups does [NAME] belong to?") -> ALWAYS use intent "list_groups" with personId = that person's id from Persons list. You MUST include personId (match by name). Do NOT use organizationId. Do NOT use get_person or list_people. Use __self__ ONLY when the user says me/I/my/myself - never when a different person's name is given.
+
 For create_action: { "habitId": "<id>", "completedAt": "YYYY-MM-DD", "actualDurationMinutes": number (optional), "notes": string (optional) }
 - Match the user's habit reference (e.g. "gym", "guitar") to the closest habit by name. Use the habit's id.
 - "today" = ${new Date().toISOString().slice(0, 10)}, "yesterday" = previous day
@@ -68,12 +70,15 @@ For list_organizations: { "expand": boolean (optional) }
 - Use when user wants to see organizations (e.g. "show organizations", "list orgs", "organizations with groups")
 - Set expand: true if user wants to see groups and people under each org
 
-For list_groups: { "organizationId": "<id>" (optional) }
+For list_groups: { "organizationId": "<id>" (optional), "personId": "<id>" or "__self__" (optional) }
 - Use when user wants to see groups (e.g. "show groups", "list groups", "groups in Acme")
-- Match organization by name if mentioned
+- For "my groups", "groups I'm in", "groups I'm a member of" -> use personId: "__self__" only. Do NOT use organizationId.
+- For "what groups is [person] in?", "what groups is [person] a member of?", "list the groups for [person]", "groups for [person]" -> use personId = that person's id (match by name from Persons list). REQUIRED: include personId. Do NOT use organizationId.
+- Match organization by name only when user asks for "groups in [org]" or "groups in Acme" (listing org's groups, not a person's groups)
 
 For list_people: { "organizationId": "<id>" (optional), "groupId": "<id>" (optional), "relationshipType": "self"|"spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional) }
 - Use when user wants to see people (e.g. "show people", "list people", "people in Engineering", "my colleagues")
+- Do NOT use for "what groups is X in?" - use list_groups with personId instead.
 - Match org or group by name. Map relationship words to relationshipType.
 
 For list_actions: { "habitId": "<id>" (optional), "fromDate": "YYYY-MM-DD" (optional), "toDate": "YYYY-MM-DD" (optional) }
@@ -86,6 +91,7 @@ For list_ends_and_habits: { "areaId": "<id>" (optional) }
 
 For get_person: { "personId": "<id>" }
 - Use when user wants details for a specific person (e.g. "show me John", "get John Doe's details", "who is Sarah?", "show me" / "my details")
+- Do NOT use for "what groups is X in?" or "what groups is X a member of?" - use list_groups with personId instead (returns groups only).
 - Match person by name from Persons list and use their id. When user says show me, my details, who am I -> use personId: "__self__"
 
 - Use "unknown" if the intent is unclear`;
@@ -415,12 +421,24 @@ JSON response:`;
       }
 
       case "list_groups": {
-        const { organizationId } = params as { organizationId?: string };
-        const groups = await listGroups(organizationId);
+        const { organizationId, personId } = params as { organizationId?: string; personId?: string };
+        let groups = await listGroups(personId ? undefined : organizationId);
+        if (personId) {
+          const person = await getPersonById(personId);
+          if (!person) {
+            return { success: false, message: `Person with ID ${personId} not found.` };
+          }
+          const memberGroupIds = new Set(person.groupIds ?? []);
+          groups = groups.filter((g) => memberGroupIds.has(g.id));
+        }
         if (groups.length === 0) {
           return {
             success: true,
-            message: organizationId ? "No groups found for this organization." : "No groups found.",
+            message: personId
+              ? "No groups found for this person."
+              : organizationId
+                ? "No groups found for this organization."
+                : "No groups found.",
           };
         }
         const lines = groups.map((g) => `  ${g.name} (${g.id}) - Organization: ${g.organizationId}`);

@@ -281,15 +281,38 @@ export function registerTools(server: McpServer): void {
     {
       title: "List Groups",
       description:
-        "Lists groups. Optionally filter by organization ID.",
+        "Lists groups. For 'list groups for [person]', 'what groups is X in?', 'groups for Alex' - use personId with that person's ID (from list_people). For 'my groups' use personId: __self__. For 'groups in Acme' use organizationId. Do NOT use organizationId when listing a specific person's groups.",
       inputSchema: {
-        organizationId: z.string().optional().describe("Filter by organization ID"),
+        organizationId: z.string().optional().describe("Filter by organization ID (only when listing all groups in an org, NOT for person-specific queries)"),
+        personId: z.string().optional().describe("Filter to groups this person belongs to. REQUIRED for 'list groups for [person]' - use person's ID from list_people. Use __self__ for current user."),
       },
     },
-    async ({ organizationId }) => {
-      const groups = await listGroups(organizationId);
+    async ({ organizationId, personId }) => {
+      let groups = await listGroups(personId ? undefined : organizationId);
+      if (personId) {
+        const person = await getPersonById(personId);
+        if (!person) {
+          return {
+            content: [{ type: "text", text: `Person with ID ${personId} not found.` }],
+            isError: true,
+          };
+        }
+        const memberGroupIds = new Set(person.groupIds ?? []);
+        groups = groups.filter((g) => memberGroupIds.has(g.id));
+      }
       if (groups.length === 0) {
-        return { content: [{ type: "text", text: "No groups found." }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: personId
+                ? "No groups found for this person."
+                : organizationId
+                  ? "No groups found for this organization."
+                  : "No groups found.",
+            },
+          ],
+        };
       }
       const lines = groups.map((g) => `  ${g.name} (${g.id}) - Organization: ${g.organizationId}`);
       return {
