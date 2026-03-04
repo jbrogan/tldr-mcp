@@ -61,6 +61,12 @@ export async function getPersonById(id: string): Promise<PersonEntity | undefine
   return persons.find((p) => p.id === id);
 }
 
+/** Returns the person with relationshipType "self" (the current user). Used to resolve "me"/"I" in NL. */
+export async function getSelfPerson(): Promise<PersonEntity | undefined> {
+  const persons = await listPersons({ relationshipType: "self" });
+  return persons[0];
+}
+
 /** Removes a group from all persons' membership. Call before deleting a group. */
 export async function removeGroupFromAllPersons(groupId: string): Promise<void> {
   const persons = await loadPersons();

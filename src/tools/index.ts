@@ -7,6 +7,7 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { RelationshipType } from "../schemas/person.js";
 import {
   createPerson,
   deletePerson,
@@ -652,7 +653,7 @@ export function registerTools(server: McpServer): void {
           .optional()
           .describe("IDs of groups this person belongs to"),
         relationshipType: z
-          .enum(["spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
+          .enum(["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
           .optional()
           .describe("Type of relationship (e.g. spouse, child, friend, colleague)"),
       },
@@ -666,7 +667,7 @@ export function registerTools(server: McpServer): void {
         title,
         notes,
         groupIds: groupIds ?? [],
-        relationshipType,
+        relationshipType: relationshipType as RelationshipType | undefined,
       });
 
       const summary = [
@@ -742,7 +743,7 @@ export function registerTools(server: McpServer): void {
         organizationId: z.string().optional().describe("Filter by organization ID"),
         groupId: z.string().optional().describe("Filter by group ID"),
         relationshipType: z
-          .enum(["spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
+          .enum(["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
           .optional()
           .describe("Filter by relationship type"),
       },
@@ -804,7 +805,7 @@ export function registerTools(server: McpServer): void {
         groupIds: z.array(z.string()).optional().describe("Group IDs (replaces entire list)"),
         groupIdsToAdd: z.array(z.string()).optional().describe("Group IDs to add (merges with existing; use when adding person to new groups)"),
         relationshipType: z
-          .enum(["spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
+          .enum(["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
           .optional()
           .describe("Relationship type"),
       },

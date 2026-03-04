@@ -5,7 +5,10 @@ import { listAreas, getAreaById } from "../store/areas.js";
 import { listOrganizations } from "../store/organizations.js";
 import { listGroups, createGroup, getGroupById } from "../store/groups.js";
 import { createAction, listActions } from "../store/actions.js";
-import { createPerson, listPersons, updatePerson, getPersonById } from "../store/persons.js";
+import type { RelationshipType } from "../schemas/person.js";
+import { createPerson, listPersons, updatePerson, getPersonById, getSelfPerson } from "../store/persons.js";
+
+const SELF_PLACEHOLDER = "__self__";
 
 const INTENT_SCHEMA = `Respond with ONLY valid JSON, no other text. Use this schema:
 {
@@ -26,14 +29,14 @@ For create_habit: { "name": string, "endIds": ["<id>"], "frequency": string (opt
 - Extract habit name and which end(s) it serves
 - If the end has an areaId in context, include it. Or infer area from the habit topic (e.g. sleep -> Health, work -> Career)
 - Match group by name from Groups list if mentioned (e.g. "for Engineering" -> groupId)
-- personId = the person expected to PERFORM the habit (the doer), NOT the focus/recipient. Match by name from Persons list (e.g. "John's habit", "assigned to Sarah" -> personId)
+- personId = the person expected to PERFORM the habit (the doer), NOT the focus/recipient. Match by name from Persons list (e.g. "John's habit", "assigned to Sarah" -> personId). When user says me, I, my, or myself -> use personId: "__self__"
 - If both group and person are mentioned, include both groupId and personId
 
 For create_group: { "name": string, "organizationId": "<id>" }
 - Extract group name and match organization by name (use org id from context)
 - e.g. "Create an Engineering group in Newco" -> name: Engineering, organizationId: Newco's id
 
-For create_person: { "firstName": string, "lastName": string, "email": string, "phone": string (optional), "title": string (optional), "notes": string (optional), "relationshipType": "spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional), "groupIds": ["<id>"] (optional) }
+For create_person: { "firstName": string, "lastName": string, "email": string, "phone": string (optional), "title": string (optional), "notes": string (optional), "relationshipType": "self"|"spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional), "groupIds": ["<id>"] (optional) }
 - IMPORTANT: Check the Persons list first. If the person already exists (match by name or email), use update_person instead.
 - Extract name and split into firstName and lastName (use last word as lastName, rest as firstName if full name given)
 - Map relationship words to relationshipType: wife/husband/partner -> spouse, kid/son/daughter -> child, mom/dad/parent -> parent, brother/sister -> sibling, coworker -> colleague
@@ -42,7 +45,7 @@ For create_person: { "firstName": string, "lastName": string, "email": string, "
 
 For update_person: { "id": "<id>", "groupIdsToAdd": ["<id>", ...] (optional) }
 - Use when the person ALREADY EXISTS in Persons list and you need to add them to a group.
-- Match person by name from Persons list and use their id.
+- Match person by name from Persons list and use their id. When user says me, I, my, or myself -> use id: "__self__"
 - Use groupIdsToAdd with the NEW group id(s) to add. This merges with existing groups; do not pass existing groups.
 
 For suggest_habits: { "query": string, "suggestions": ["habit 1", "habit 2", ...] }
@@ -59,7 +62,7 @@ For list_ends: { "areaId": "<id>" (optional) }
 
 For list_habits: { "endId": "<id>" (optional), "areaId": "<id>" (optional), "groupId": "<id>" (optional), "personId": "<id>" (optional) }
 - Use when user wants to see habits (e.g. "show my habits", "list habits", "habits for guitar end")
-- Match end, area, group, or person by name from context if mentioned
+- Match end, area, group, or person by name from context if mentioned. When user says my habits -> use personId: "__self__"
 
 For list_organizations: { "expand": boolean (optional) }
 - Use when user wants to see organizations (e.g. "show organizations", "list orgs", "organizations with groups")
@@ -69,7 +72,7 @@ For list_groups: { "organizationId": "<id>" (optional) }
 - Use when user wants to see groups (e.g. "show groups", "list groups", "groups in Acme")
 - Match organization by name if mentioned
 
-For list_people: { "organizationId": "<id>" (optional), "groupId": "<id>" (optional), "relationshipType": "spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional) }
+For list_people: { "organizationId": "<id>" (optional), "groupId": "<id>" (optional), "relationshipType": "self"|"spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional) }
 - Use when user wants to see people (e.g. "show people", "list people", "people in Engineering", "my colleagues")
 - Match org or group by name. Map relationship words to relationshipType.
 
@@ -82,8 +85,8 @@ For list_ends_and_habits: { "areaId": "<id>" (optional) }
 - Match area by name if mentioned
 
 For get_person: { "personId": "<id>" }
-- Use when user wants details for a specific person (e.g. "show me John", "get John Doe's details", "who is Sarah?")
-- Match person by name from Persons list and use their id
+- Use when user wants details for a specific person (e.g. "show me John", "get John Doe's details", "who is Sarah?", "show me" / "my details")
+- Match person by name from Persons list and use their id. When user says show me, my details, who am I -> use personId: "__self__"
 
 - Use "unknown" if the intent is unclear`;
 
@@ -115,8 +118,10 @@ ${organizations.map((o) => `  ${o.id}: ${o.name}`).join("\n")}
 Groups (id, name, organizationId):
 ${groups.map((g) => `  ${g.id}: ${g.name} (org: ${g.organizationId})`).join("\n")}
 
-Persons (id, firstName, lastName, email, groupIds):
-${(await listPersons()).map((p) => `  ${p.id}: ${p.firstName} ${p.lastName}, ${p.email}, groups: [${(p.groupIds ?? []).join(", ")}]`).join("\n") || "  (none)"}
+Persons (id, firstName, lastName, email, relationshipType, groupIds):
+${(await listPersons()).map((p) => `  ${p.id}: ${p.firstName} ${p.lastName}, ${p.email}${p.relationshipType ? ` (${p.relationshipType})` : ""}, groups: [${(p.groupIds ?? []).join(", ")}]`).join("\n") || "  (none)"}
+
+When user says me, I, my, or myself - use "__self__" for personId or id. Resolves to the person with relationshipType "self".
 
 Today's date: ${new Date().toISOString().slice(0, 10)}
 `;
@@ -145,6 +150,20 @@ JSON response:`;
   }
 
   const { intent, params = {} } = parsed;
+
+  // Resolve __self__ placeholder to the person with relationshipType "self"
+  if (params && (params.personId === SELF_PLACEHOLDER || params.id === SELF_PLACEHOLDER)) {
+    const selfPerson = await getSelfPerson();
+    if (!selfPerson) {
+      return {
+        success: false,
+        message:
+          'No person with relationshipType "self" found. Create yourself with -r self, or add relationshipType "self" to your person via update-person.',
+      };
+    }
+    if (params.personId === SELF_PLACEHOLDER) params.personId = selfPerson.id;
+    if (params.id === SELF_PLACEHOLDER) params.id = selfPerson.id;
+  }
 
   try {
     switch (intent) {
@@ -266,7 +285,7 @@ JSON response:`;
             message: "Missing firstName, lastName, or email for create_person. Please include the person's full name and email.",
           };
         }
-        const validRelationshipTypes = ["spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"];
+        const validRelationshipTypes = ["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"];
         const relationshipTypeValid =
           !relationshipType || validRelationshipTypes.includes(relationshipType);
         if (!relationshipTypeValid) {
@@ -279,7 +298,7 @@ JSON response:`;
           phone,
           title,
           notes,
-          relationshipType: relationshipTypeValid && relationshipType ? (relationshipType as "spouse" | "child" | "parent" | "sibling" | "friend" | "colleague" | "mentor" | "client" | "other") : undefined,
+          relationshipType: relationshipTypeValid && relationshipType ? (relationshipType as RelationshipType) : undefined,
           groupIds: groupIds ?? [],
         });
         return {

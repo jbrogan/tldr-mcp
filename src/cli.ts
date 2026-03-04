@@ -364,7 +364,7 @@ function printToolResult(result: unknown): void {
   }
 }
 
-const RELATIONSHIP_TYPES = ["spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"] as const;
+const RELATIONSHIP_TYPES = ["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"] as const;
 
 program
   .command("create-person")
