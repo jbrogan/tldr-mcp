@@ -105,39 +105,24 @@ export function registerTools(server: McpServer): void {
         const area = areas.find((a) => a.id === aId);
         const areaName = area?.name ?? aId;
         const ends = allEnds.filter((e) => e.areaId === aId);
-        const habits = allHabits.filter((h) => h.areaId === aId);
-
-        if (ends.length === 0 && habits.length === 0) continue;
+        if (ends.length === 0) continue;
 
         const parts: string[] = [`## ${areaName}`];
-        if (ends.length > 0) {
-          parts.push("Ends:");
-          ends.forEach((e) => parts.push(`  - ${e.name} (${e.id})`));
-        }
-        if (habits.length > 0) {
-          parts.push("Habits:");
-          habits.forEach((h) => {
-            const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
-            parts.push(`  - ${h.name} (${h.id}) → serves: ${endNames}`);
-          });
+        for (const e of ends) {
+          const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
+          parts.push(`  - ${e.name} (${e.id})`);
+          habitsForEnd.forEach((h) => parts.push(`    - ${h.name} (${h.id})`));
         }
         sections.push(parts.join("\n"));
       }
 
       const uncategorizedEnds = allEnds.filter((e) => !e.areaId);
-      const uncategorizedHabits = allHabits.filter((h) => !h.areaId);
-      if (uncategorizedEnds.length > 0 || uncategorizedHabits.length > 0) {
+      if (uncategorizedEnds.length > 0) {
         const parts: string[] = ["## Uncategorized"];
-        if (uncategorizedEnds.length > 0) {
-          parts.push("Ends:");
-          uncategorizedEnds.forEach((e) => parts.push(`  - ${e.name} (${e.id})`));
-        }
-        if (uncategorizedHabits.length > 0) {
-          parts.push("Habits:");
-          uncategorizedHabits.forEach((h) => {
-            const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
-            parts.push(`  - ${h.name} (${h.id}) → serves: ${endNames}`);
-          });
+        for (const e of uncategorizedEnds) {
+          const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
+          parts.push(`  - ${e.name} (${e.id})`);
+          habitsForEnd.forEach((h) => parts.push(`    - ${h.name} (${h.id})`));
         }
         sections.push(parts.join("\n"));
       }
