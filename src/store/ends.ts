@@ -46,10 +46,18 @@ export async function getEndById(id: string): Promise<EndEntity | undefined> {
   return ends.find((e) => e.id === id);
 }
 
-export async function listEnds(areaId?: string): Promise<EndEntity[]> {
+export async function listEnds(options?: {
+  areaId?: string;
+  collectionId?: string;
+}): Promise<EndEntity[]> {
   const ends = await loadEnds();
-  if (areaId) return ends.filter((e) => e.areaId === areaId);
-  return [...ends];
+  if (!options) return [...ends];
+  return ends.filter((e) => {
+    if (options.areaId && e.areaId !== options.areaId) return false;
+    if (options.collectionId && e.collectionId !== options.collectionId)
+      return false;
+    return true;
+  });
 }
 
 export async function deleteEnd(id: string): Promise<EndEntity | null> {

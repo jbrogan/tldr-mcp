@@ -31,6 +31,13 @@ import {
   deleteTeamsByOrganizationId,
 } from "../store/teams.js";
 import {
+  createCollection,
+  deleteCollection,
+  getCollectionById,
+  listCollections,
+  updateCollection,
+} from "../store/collections.js";
+import {
   createEnd,
   deleteEnd,
   getEndById,
@@ -358,6 +365,155 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "create_collection",
+    {
+      title: "Create Collection",
+      description:
+        "Creates a collection - a grouping of ends under an org, team, or person. Enables the view: (org/team/person) -> collection -> ends -> habits.",
+      inputSchema: {
+        name: z.string().min(1).describe("Collection name"),
+        ownerType: z
+          .enum(["organization", "team", "person"])
+          .describe("Type of owner (org, team, or person)"),
+        ownerId: z.string().min(1).describe("ID of the organization, team, or person"),
+        collectionType: z
+          .enum(["goals", "projects", "quarterly", "backlog", "operations", "other"])
+          .optional()
+          .describe("Type of collection (goals, projects, quarterly, backlog, other)"),
+        description: z.string().optional().describe("Optional description"),
+      },
+    },
+    async ({ name, ownerType, ownerId, collectionType, description }) => {
+      const collection = await createCollection({
+        name,
+        ownerType,
+        ownerId,
+        collectionType,
+        description,
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Created collection: ${collection.name}\nID: ${collection.id}\nOwner: ${collection.ownerType} ${collection.ownerId}\n${collection.collectionType ? `Type: ${collection.collectionType}\n` : ""}${collection.description ? `Description: ${collection.description}\n` : ""}Created at: ${collection.createdAt}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "list_collections",
+    {
+      title: "List Collections",
+      description:
+        "Lists collections. Filter by owner (ownerType + ownerId) or by collectionType.",
+      inputSchema: {
+        ownerType: z
+          .enum(["organization", "team", "person"])
+          .optional()
+          .describe("Filter by owner type"),
+        ownerId: z.string().optional().describe("Filter by owner ID"),
+        collectionType: z
+          .enum(["goals", "projects", "quarterly", "backlog", "operations", "other"])
+          .optional()
+          .describe("Filter by collection type"),
+      },
+    },
+    async ({ ownerType, ownerId, collectionType }) => {
+      const collections = await listCollections(
+        ownerType || ownerId || collectionType
+          ? { ownerType, ownerId, collectionType }
+          : undefined
+      );
+      if (collections.length === 0) {
+        return { content: [{ type: "text", text: "No collections found." }] };
+      }
+      const lines = collections.map(
+        (c) =>
+          `  ${c.name} (${c.id}) - ${c.ownerType}: ${c.ownerId}${c.collectionType ? ` [${c.collectionType}]` : ""}`
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Found ${collections.length} collection(s):\n\n${lines.join("\n")}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "update_collection",
+    {
+      title: "Update Collection",
+      description: "Updates a collection by ID. Only provided fields are updated.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the collection to update"),
+        name: z.string().min(1).optional().describe("Collection name"),
+        collectionType: z
+          .enum(["goals", "projects", "quarterly", "backlog", "operations", "other"])
+          .optional()
+          .describe("Collection type"),
+        description: z.string().optional().describe("Description"),
+      },
+    },
+    async ({ id, name, collectionType, description }) => {
+      const existing = await getCollectionById(id);
+      if (!existing) {
+        return {
+          content: [{ type: "text", text: `Collection with ID ${id} not found.` }],
+          isError: true,
+        };
+      }
+      const updates: Record<string, unknown> = {};
+      if (name != null) updates.name = name;
+      if (collectionType !== undefined) updates.collectionType = collectionType;
+      if (description !== undefined) updates.description = description;
+      const collection = await updateCollection(id, updates);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Updated collection: ${collection?.name} (${id})`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "delete_collection",
+    {
+      title: "Delete Collection",
+      description:
+        "Deletes a collection by ID. Ends in the collection are not deleted; their collectionId is not automatically cleared.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the collection to delete"),
+      },
+    },
+    async ({ id }) => {
+      const collection = await getCollectionById(id);
+      if (!collection) {
+        return {
+          content: [{ type: "text", text: `Collection with ID ${id} not found.` }],
+          isError: true,
+        };
+      }
+      await deleteCollection(id);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Deleted collection: ${collection.name} (${id})`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
     "create_end",
     {
       title: "Create End",
@@ -366,15 +522,16 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         name: z.string().min(1).describe("Name of the end"),
         areaId: z.string().optional().describe("Area this end belongs to"),
+        collectionId: z.string().optional().describe("Collection this end belongs to"),
       },
     },
-    async ({ name, areaId }) => {
-      const end = await createEnd({ name, areaId });
+    async ({ name, areaId, collectionId }) => {
+      const end = await createEnd({ name, areaId, collectionId });
       return {
         content: [
           {
             type: "text",
-            text: `Created end: ${end.name}\nID: ${end.id}\n${end.areaId ? `Area: ${end.areaId}\n` : ""}Created at: ${end.createdAt}`,
+            text: `Created end: ${end.name}\nID: ${end.id}\n${end.areaId ? `Area: ${end.areaId}\n` : ""}${end.collectionId ? `Collection: ${end.collectionId}\n` : ""}Created at: ${end.createdAt}`,
           },
         ],
       };
@@ -385,18 +542,20 @@ export function registerTools(server: McpServer): void {
     "list_ends",
     {
       title: "List Ends",
-      description: "Lists ends. Optionally filter by area ID.",
+      description: "Lists ends. Optionally filter by area ID or collection ID.",
       inputSchema: {
         areaId: z.string().optional().describe("Filter by area ID"),
+        collectionId: z.string().optional().describe("Filter by collection ID"),
       },
     },
-    async ({ areaId }) => {
-      const ends = await listEnds(areaId);
+    async ({ areaId, collectionId }) => {
+      const ends = await listEnds(areaId || collectionId ? { areaId, collectionId } : undefined);
       if (ends.length === 0) {
         return { content: [{ type: "text", text: "No ends found." }] };
       }
       const lines = ends.map(
-        (e) => `  ${e.name} (${e.id})${e.areaId ? ` - Area: ${e.areaId}` : ""}`
+        (e) =>
+          `  ${e.name} (${e.id})${e.areaId ? ` - Area: ${e.areaId}` : ""}${e.collectionId ? ` - Collection: ${e.collectionId}` : ""}`
       );
       return {
         content: [

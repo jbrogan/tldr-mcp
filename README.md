@@ -33,7 +33,8 @@ npm start
 - **Areas** – Life areas (Career, Family, Health, Spiritual, etc.), seeded on first use
 - **Organizations** – Top-level containers for teams and people (e.g., "Smith Family", "Acme Corp")
 - **People** – Members of organizations
-- **Ends** – Ongoing aspirations you work toward (e.g., "Be a better father", "Practice guitar")
+- **Collections** – Groupings of ends under an org, team, or person (e.g., "Q1 Goals", "Personal")
+- **Ends** – Ongoing aspirations you work toward (e.g., "Be a better father", "Practice guitar"); can belong to an area and/or collection
 - **Habits** – Recurring behaviors that serve ends; can link to area, team, or person
 - **Actions** – Tracked completions of habits (e.g., "Practiced guitar on Feb 24")
 
@@ -54,6 +55,8 @@ npm run cli -- create-team -n "Engineering" -o <organizationId>
 npm run cli -- list-teams
 npm run cli -- list-teams -o <organizationId>
 npm run cli -- list-teams -p <personId>
+npm run cli -- create-collection -n "Q1 Goals" -p organization -i <organizationId>
+npm run cli -- list-collections -p organization -i <organizationId>
 npm run cli -- list-ends-and-habits-by-area
 npm run cli -- list-ends-and-habits-by-area -a <areaId>
 
@@ -64,8 +67,8 @@ npm run cli -- list-people -o <organizationId>
 npm run cli -- list-people -t <teamId>
 
 # Ends, habits, actions
-npm run cli -- create-end -n "Be a better father" -a <areaId>
-npm run cli -- list-ends
+npm run cli -- create-end -n "Be a better father" -a <areaId> -c <collectionId>
+npm run cli -- list-ends -a <areaId> -c <collectionId>
 npm run cli -- create-habit -n "Family dinner" -e <endId1>,<endId2> -f daily -a <areaId>
 npm run cli -- list-habits -e <endId>
 npm run cli -- create-action -h <habitId> -d 2026-02-25

@@ -186,14 +186,96 @@ program
   });
 
 program
+  .command("create-collection")
+  .description("Create a collection (grouping of ends under org, team, or person)")
+  .requiredOption("-n, --name <name>", "Collection name")
+  .requiredOption("-o, --ownerType <type>", "Owner type: organization, team, or person")
+  .requiredOption("-i, --ownerId <id>", "Owner ID (org, team, or person)")
+  .option("-t, --collectionType <type>", "Collection type: goals, projects, quarterly, backlog, operations, other")
+  .option("-d, --description <desc>", "Optional description")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const args: Record<string, unknown> = {
+        name: opts.name,
+        ownerType: opts.ownerType,
+        ownerId: opts.ownerId,
+      };
+      if (opts.collectionType) args.collectionType = opts.collectionType;
+      if (opts.description) args.description = opts.description;
+      const result = await client.callTool({
+        name: "create_collection",
+        arguments: args,
+      });
+      printToolResult(result);
+    });
+  });
+
+program
+  .command("list-collections")
+  .description("List collections, optionally by owner or type")
+  .option("-o, --ownerType <type>", "Filter by owner type: organization, team, person")
+  .option("-i, --ownerId <id>", "Filter by owner ID")
+  .option("-t, --collectionType <type>", "Filter by collection type")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const args: Record<string, unknown> = {};
+      if (opts.ownerType) args.ownerType = opts.ownerType;
+      if (opts.ownerId) args.ownerId = opts.ownerId;
+      if (opts.collectionType) args.collectionType = opts.collectionType;
+      const result = await client.callTool({
+        name: "list_collections",
+        arguments: args,
+      });
+      printToolResult(result);
+    });
+  });
+
+program
+  .command("update-collection")
+  .description("Update a collection by ID")
+  .requiredOption("-i, --id <id>", "Collection ID")
+  .option("-n, --name <name>", "Collection name")
+  .option("-t, --collectionType <type>", "Collection type")
+  .option("-d, --description <desc>", "Description")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const args: Record<string, unknown> = { id: opts.id };
+      if (opts.name) args.name = opts.name;
+      if (opts.collectionType) args.collectionType = opts.collectionType;
+      if (opts.description !== undefined) args.description = opts.description;
+      const result = await client.callTool({
+        name: "update_collection",
+        arguments: args,
+      });
+      printToolResult(result);
+    });
+  });
+
+program
+  .command("delete-collection")
+  .description("Delete a collection by ID")
+  .requiredOption("-i, --id <id>", "Collection ID")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "delete_collection",
+        arguments: { id: opts.id },
+      });
+      printToolResult(result);
+    });
+  });
+
+program
   .command("create-end")
   .description("Create an end (ongoing aspiration)")
   .requiredOption("-n, --name <name>", "End name")
   .option("-a, --areaId <id>", "Area ID")
+  .option("-c, --collectionId <id>", "Collection ID")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = { name: opts.name };
       if (opts.areaId) args.areaId = opts.areaId;
+      if (opts.collectionId) args.collectionId = opts.collectionId;
       const result = await client.callTool({
         name: "create_end",
         arguments: args,
@@ -204,13 +286,17 @@ program
 
 program
   .command("list-ends")
-  .description("List ends, optionally by area")
+  .description("List ends, optionally by area or collection")
   .option("-a, --areaId <id>", "Filter by area ID")
+  .option("-c, --collectionId <id>", "Filter by collection ID")
   .action(async (opts) => {
     await withClient(async (client) => {
+      const args: Record<string, unknown> = {};
+      if (opts.areaId) args.areaId = opts.areaId;
+      if (opts.collectionId) args.collectionId = opts.collectionId;
       const result = await client.callTool({
         name: "list_ends",
-        arguments: opts.areaId ? { areaId: opts.areaId } : {},
+        arguments: args,
       });
       printToolResult(result);
     });

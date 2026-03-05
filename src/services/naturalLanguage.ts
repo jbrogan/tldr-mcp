@@ -4,6 +4,7 @@ import { listEnds, createEnd, getEndById } from "../store/ends.js";
 import { listAreas, getAreaById } from "../store/areas.js";
 import { listOrganizations } from "../store/organizations.js";
 import { listTeams, createTeam, getTeamById } from "../store/teams.js";
+import { listCollections, createCollection } from "../store/collections.js";
 import { createAction, listActions } from "../store/actions.js";
 import type { RelationshipType } from "../schemas/person.js";
 import { createPerson, listPersons, updatePerson, getPersonById, getSelfPerson } from "../store/persons.js";
@@ -12,7 +13,7 @@ const SELF_PLACEHOLDER = "__self__";
 
 const INTENT_SCHEMA = `Respond with ONLY valid JSON, no other text. Use this schema:
 {
-  "intent": "create_action" | "create_end" | "create_habit" | "create_team" | "create_person" | "update_person" | "suggest_habits" | "list_areas" | "list_ends" | "list_habits" | "list_organizations" | "list_teams" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "unknown",
+  "intent": "create_action" | "create_end" | "create_habit" | "create_team" | "create_collection" | "create_person" | "update_person" | "suggest_habits" | "list_areas" | "list_ends" | "list_habits" | "list_organizations" | "list_teams" | "list_collections" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "unknown",
   "params": { ... }
 }
 
@@ -23,9 +24,10 @@ For create_action: { "habitId": "<id>", "completedAt": "YYYY-MM-DD", "actualDura
 - "today" = ${new Date().toISOString().slice(0, 10)}, "yesterday" = previous day
 - Extract duration in minutes if mentioned (e.g. "60 minutes" -> 60)
 
-For create_end: { "name": string, "areaId": string (optional) }
+For create_end: { "name": string, "areaId": string (optional), "collectionId": string (optional) }
 - Extract the aspiration/goal from the user's text
 - Match area if mentioned (e.g. "family" -> Family area id)
+- Match collection by name from Collections list if mentioned
 
 For create_habit: { "name": string, "endIds": ["<id>"], "frequency": string (optional), "durationMinutes": number (optional), "areaId": string (optional), "teamId": string (optional), "personId": string (optional) }
 - Extract habit name and which end(s) it serves
@@ -58,9 +60,15 @@ For suggest_habits: { "query": string, "suggestions": ["habit 1", "habit 2", ...
 For list_areas: {}
 - Use when user wants to see areas (e.g. "show areas", "list areas", "what areas do I have")
 
-For list_ends: { "areaId": "<id>" (optional) }
+For create_collection: { "name": string, "ownerType": "organization"|"team"|"person", "ownerId": "<id>", "collectionType": "goals"|"projects"|"quarterly"|"backlog"|"operations"|"other" (optional), "description": string (optional) }
+- Use when user wants to create a collection (grouping of ends)
+- ownerType + ownerId = which org, team, or person owns the collection
+- Match org, team, or person by name from context. For "my collection" use ownerType: "person", ownerId: "__self__"
+
+For list_ends: { "areaId": "<id>" (optional), "collectionId": "<id>" (optional) }
 - Use when user wants to see ends/aspirations (e.g. "show my ends", "list aspirations", "what ends do I have")
 - Match area by name if mentioned (e.g. "ends in Career" -> areaId)
+- Match collection by name if mentioned (e.g. "ends in Q1 Goals" -> collectionId)
 
 For list_habits: { "endId": "<id>" (optional), "areaId": "<id>" (optional), "teamId": "<id>" (optional), "personId": "<id>" (optional) }
 - Use when user wants to see habits (e.g. "show my habits", "list habits", "habits for guitar end")
@@ -69,6 +77,12 @@ For list_habits: { "endId": "<id>" (optional), "areaId": "<id>" (optional), "tea
 For list_organizations: { "expand": boolean (optional) }
 - Use when user wants to see organizations (e.g. "show organizations", "list orgs", "organizations with teams")
 - Set expand: true if user wants to see teams and people under each org
+
+For list_collections: { "ownerType": "organization"|"team"|"person" (optional), "ownerId": "<id>" (optional), "collectionType": "goals"|"projects"|"quarterly"|"backlog"|"operations"|"other" (optional) }
+- Use when user wants to see collections (e.g. "list collections", "collections for Acme", "my collections")
+- For "collections for [org]" use ownerType: "organization", ownerId: org id
+- For "collections for [team]" use ownerType: "team", ownerId: team id
+- For "my collections" use ownerType: "person", ownerId: "__self__"
 
 For list_teams: { "organizationId": "<id>" (optional), "personId": "<id>" or "__self__" (optional) }
 - Use when user wants to see teams (e.g. "show teams", "list teams", "teams in Acme")
@@ -107,6 +121,7 @@ export async function interpretAndExecute(text: string): Promise<NLResult> {
   const areas = await listAreas();
   const organizations = await listOrganizations();
   const teams = await listTeams();
+  const collections = await listCollections();
 
   const context = `
 Habits (id, name):
@@ -123,6 +138,9 @@ ${organizations.map((o) => `  ${o.id}: ${o.name}`).join("\n")}
 
 Teams (id, name, organizationId):
 ${teams.map((t) => `  ${t.id}: ${t.name} (org: ${t.organizationId})`).join("\n")}
+
+Collections (id, name, ownerType, ownerId, collectionType):
+${collections.map((c) => `  ${c.id}: ${c.name} (${c.ownerType}: ${c.ownerId})${c.collectionType ? ` [${c.collectionType}]` : ""}`).join("\n") || "  (none)"}
 
 Persons (id, firstName, lastName, email, relationshipType, teamIds):
 ${(await listPersons()).map((p) => `  ${p.id}: ${p.firstName} ${p.lastName}, ${p.email}${p.relationshipType ? ` (${p.relationshipType})` : ""}, teams: [${(p.teamIds ?? []).join(", ")}]`).join("\n") || "  (none)"}
@@ -158,7 +176,12 @@ JSON response:`;
   const { intent, params = {} } = parsed;
 
   // Resolve __self__ placeholder to the person with relationshipType "self"
-  if (params && (params.personId === SELF_PLACEHOLDER || params.id === SELF_PLACEHOLDER)) {
+  if (
+    params &&
+    (params.personId === SELF_PLACEHOLDER ||
+      params.id === SELF_PLACEHOLDER ||
+      params.ownerId === SELF_PLACEHOLDER)
+  ) {
     const selfPerson = await getSelfPerson();
     if (!selfPerson) {
       return {
@@ -169,6 +192,7 @@ JSON response:`;
     }
     if (params.personId === SELF_PLACEHOLDER) params.personId = selfPerson.id;
     if (params.id === SELF_PLACEHOLDER) params.id = selfPerson.id;
+    if (params.ownerId === SELF_PLACEHOLDER) params.ownerId = selfPerson.id;
   }
 
   try {
@@ -199,11 +223,11 @@ JSON response:`;
       }
 
       case "create_end": {
-        const { name, areaId } = params as { name?: string; areaId?: string };
+        const { name, areaId, collectionId } = params as { name?: string; areaId?: string; collectionId?: string };
         if (!name) {
           return { success: false, message: "Missing name for create_end" };
         }
-        const end = await createEnd({ name, areaId });
+        const end = await createEnd({ name, areaId, collectionId });
         return {
           success: true,
           message: `Created end: ${end.name} (${end.id})`,
@@ -244,6 +268,41 @@ JSON response:`;
         return {
           success: true,
           message: `Created habit: ${habit.name} (${habit.id})${extras.length ? ` - ${extras.join(", ")}` : ""}`,
+        };
+      }
+
+      case "create_collection": {
+        const { name, ownerType, ownerId, collectionType, description } = params as {
+          name?: string;
+          ownerType?: string;
+          ownerId?: string;
+          collectionType?: string;
+          description?: string;
+        };
+        if (!name || !ownerType || !ownerId) {
+          return {
+            success: false,
+            message:
+              "Missing name, ownerType, or ownerId for create_collection. Specify the collection name and owner (organization, team, or person).",
+          };
+        }
+        const validOwnerTypes = ["organization", "team", "person"];
+        if (!validOwnerTypes.includes(ownerType)) {
+          return {
+            success: false,
+            message: `Invalid ownerType. Use one of: ${validOwnerTypes.join(", ")}`,
+          };
+        }
+        const collection = await createCollection({
+          name,
+          ownerType: ownerType as "organization" | "team" | "person",
+          ownerId,
+          collectionType: collectionType as "goals" | "projects" | "quarterly" | "backlog" | "operations" | "other" | undefined,
+          description,
+        });
+        return {
+          success: true,
+          message: `Created collection: ${collection.name} (${collection.id}) owned by ${ownerType} ${ownerId}`,
         };
       }
 
@@ -351,8 +410,8 @@ JSON response:`;
       }
 
       case "list_ends": {
-        const { areaId } = params as { areaId?: string };
-        const ends = await listEnds(areaId);
+        const { areaId, collectionId } = params as { areaId?: string; collectionId?: string };
+        const ends = await listEnds(areaId || collectionId ? { areaId, collectionId } : undefined);
         if (ends.length === 0) {
           return {
             success: true,
@@ -417,6 +476,33 @@ JSON response:`;
         return {
           success: true,
           message: `Organizations:\n\n${sections.join("\n\n")}`,
+        };
+      }
+
+      case "list_collections": {
+        const { ownerType, ownerId, collectionType } = params as {
+          ownerType?: string;
+          ownerId?: string;
+          collectionType?: string;
+        };
+        const collections = await listCollections(
+          ownerType || ownerId || collectionType
+            ? { ownerType, ownerId, collectionType }
+            : undefined
+        );
+        if (collections.length === 0) {
+          return {
+            success: true,
+            message: "No collections found.",
+          };
+        }
+        const lines = collections.map(
+          (c) =>
+            `  ${c.name} (${c.id}) - ${c.ownerType}: ${c.ownerId}${c.collectionType ? ` [${c.collectionType}]` : ""}`
+        );
+        return {
+          success: true,
+          message: `Collections:\n\n${lines.join("\n")}`,
         };
       }
 
@@ -596,7 +682,7 @@ JSON response:`;
       default:
         return {
           success: false,
-          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_team, create_person, update_person, suggest_habits, list_areas, list_ends, list_habits, list_organizations, list_teams, list_people, list_actions, list_ends_and_habits, get_person.`,
+          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_team, create_collection, create_person, update_person, suggest_habits, list_areas, list_ends, list_habits, list_organizations, list_teams, list_collections, list_people, list_actions, list_ends_and_habits, get_person.`,
         };
     }
   } catch (err) {
