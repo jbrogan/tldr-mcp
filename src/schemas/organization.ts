@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Organization entity - a container for groups and people.
+ * Organization entity - a container for teams and people.
  * Top-level; not linked to an area.
  */
 export const OrganizationSchema = z.object({

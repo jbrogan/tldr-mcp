@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Person } from "../schemas/person.js";
 import type { PersonEntity } from "../schemas/person.js";
-import { listGroups } from "./groups.js";
+import { listTeams } from "./teams.js";
 
 function getDataPath(): string {
   // Use cwd so data lives where the server was started (project root when run via CLI)
@@ -17,10 +17,7 @@ async function ensureDataDir(): Promise<void> {
 
 function normalizePerson(p: Record<string, unknown>): PersonEntity {
   const { organizationIds: _omit, ...rest } = p;
-  return {
-    ...rest,
-    groupIds: Array.isArray(p.groupIds) ? p.groupIds : [],
-  } as PersonEntity;
+  return { ...rest, teamIds: Array.isArray(p.teamIds) ? p.teamIds : [] } as PersonEntity;
 }
 
 async function loadPersons(): Promise<PersonEntity[]> {
@@ -47,7 +44,7 @@ export async function createPerson(data: Person): Promise<PersonEntity> {
   const persons = await loadPersons();
   const entity: PersonEntity = {
     ...data,
-    groupIds: data.groupIds ?? [],
+    teamIds: data.teamIds ?? [],
     id: randomUUID(),
     createdAt: new Date().toISOString(),
   };
@@ -67,24 +64,24 @@ export async function getSelfPerson(): Promise<PersonEntity | undefined> {
   return persons[0];
 }
 
-/** Removes a group from all persons' membership. Call before deleting a group. */
-export async function removeGroupFromAllPersons(groupId: string): Promise<void> {
+/** Removes a team from all persons' membership. Call before deleting a team. */
+export async function removeTeamFromAllPersons(teamId: string): Promise<void> {
   const persons = await loadPersons();
   let changed = false;
   for (const p of persons) {
-    const ids = p.groupIds ?? [];
-    if (ids.includes(groupId)) {
-      (p as PersonEntity).groupIds = ids.filter((id) => id !== groupId);
+    const ids = p.teamIds ?? [];
+    if (ids.includes(teamId)) {
+      (p as PersonEntity).teamIds = ids.filter((id) => id !== teamId);
       changed = true;
     }
   }
   if (changed) await savePersons(persons);
 }
 
-export type PersonUpdate = Partial<Omit<Person, "groupIds">> & {
-  groupIds?: string[];
-  /** When provided, merges these group IDs with existing (add-only). Ignored if groupIds is also set. */
-  groupIdsToAdd?: string[];
+export type PersonUpdate = Partial<Omit<Person, "teamIds">> & {
+  teamIds?: string[];
+  /** When provided, merges these team IDs with existing (add-only). Ignored if teamIds is also set. */
+  teamIdsToAdd?: string[];
 };
 
 export async function updatePerson(
@@ -95,25 +92,25 @@ export async function updatePerson(
   const index = persons.findIndex((p) => p.id === id);
   if (index === -1) return null;
   const existing = persons[index];
-  const existingGroupIds = existing.groupIds ?? [];
-  let newGroupIds: string[];
-  if (updates.groupIds !== undefined) {
-    newGroupIds = updates.groupIds;
-  } else if (updates.groupIdsToAdd?.length) {
-    const toAdd = new Set(updates.groupIdsToAdd);
-    newGroupIds = [...existingGroupIds];
+  const existingTeamIds = existing.teamIds ?? [];
+  let newTeamIds: string[];
+  if (updates.teamIds !== undefined) {
+    newTeamIds = updates.teamIds;
+  } else if (updates.teamIdsToAdd?.length) {
+    const toAdd = new Set(updates.teamIdsToAdd);
+    newTeamIds = [...existingTeamIds];
     for (const id of toAdd) {
-      if (!newGroupIds.includes(id)) newGroupIds.push(id);
+      if (!newTeamIds.includes(id)) newTeamIds.push(id);
     }
   } else {
-    newGroupIds = existingGroupIds;
+    newTeamIds = existingTeamIds;
   }
   const updated: PersonEntity = {
     ...existing,
     ...updates,
     id: existing.id,
     createdAt: existing.createdAt,
-    groupIds: newGroupIds,
+    teamIds: newTeamIds,
   };
   persons[index] = updated;
   await savePersons(persons);
@@ -131,23 +128,23 @@ export async function deletePerson(id: string): Promise<PersonEntity | null> {
 
 export async function listPersons(options?: {
   organizationId?: string;
-  groupId?: string;
+  teamId?: string;
   relationshipType?: string;
 }): Promise<PersonEntity[]> {
   const persons = await loadPersons();
   let filtered = [...persons];
 
   if (options?.organizationId) {
-    const groupsInOrg = await listGroups(options.organizationId);
-    const groupIdsInOrg = new Set(groupsInOrg.map((g) => g.id));
+    const teamsInOrg = await listTeams(options.organizationId);
+    const teamIdsInOrg = new Set(teamsInOrg.map((t) => t.id));
     filtered = filtered.filter((p) =>
-      (p.groupIds ?? []).some((id) => groupIdsInOrg.has(id))
+      (p.teamIds ?? []).some((id) => teamIdsInOrg.has(id))
     );
   }
 
-  if (options?.groupId) {
+  if (options?.teamId) {
     filtered = filtered.filter((p) =>
-      (p.groupIds ?? []).includes(options.groupId!)
+      (p.teamIds ?? []).includes(options.teamId!)
     );
   }
 

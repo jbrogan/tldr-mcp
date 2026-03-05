@@ -14,7 +14,7 @@ async function ensureDataDir(): Promise<void> {
 
 function normalizeHabit(h: Record<string, unknown>): HabitEntity {
   const { organizationId: _omit, ...rest } = h;
-  return { ...rest, groupId: (h.groupId as string) || undefined } as HabitEntity;
+  return { ...rest, teamId: (h.teamId as string) || undefined } as HabitEntity;
 }
 
 async function loadHabits(): Promise<HabitEntity[]> {
@@ -55,7 +55,7 @@ export async function getHabitById(id: string): Promise<HabitEntity | undefined>
 export async function listHabits(options?: {
   endId?: string;
   areaId?: string;
-  groupId?: string;
+  teamId?: string;
   personId?: string;
 }): Promise<HabitEntity[]> {
   const habits = await loadHabits();
@@ -63,7 +63,7 @@ export async function listHabits(options?: {
   return habits.filter((h) => {
     if (options.endId && !h.endIds.includes(options.endId)) return false;
     if (options.areaId && h.areaId !== options.areaId) return false;
-    if (options.groupId && h.groupId !== options.groupId) return false;
+    if (options.teamId && h.teamId !== options.teamId) return false;
     if (options.personId && h.personId !== options.personId) return false;
     return true;
   });

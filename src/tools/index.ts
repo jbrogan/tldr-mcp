@@ -13,7 +13,7 @@ import {
   deletePerson,
   getPersonById,
   listPersons,
-  removeGroupFromAllPersons,
+  removeTeamFromAllPersons,
   updatePerson,
 } from "../store/persons.js";
 import { listAreas, getAreaById } from "../store/areas.js";
@@ -24,12 +24,12 @@ import {
   listOrganizations,
 } from "../store/organizations.js";
 import {
-  createGroup,
-  deleteGroup,
-  getGroupById,
-  listGroups,
-  deleteGroupsByOrganizationId,
-} from "../store/groups.js";
+  createTeam,
+  deleteTeam,
+  getTeamById,
+  listTeams,
+  deleteTeamsByOrganizationId,
+} from "../store/teams.js";
 import {
   createEnd,
   deleteEnd,
@@ -144,7 +144,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Create Organization",
       description:
-        "Creates a new organization - a container for groups and people (e.g., company, church, family).",
+        "Creates a new organization - a container for teams and people (e.g., company, church, family).",
       inputSchema: {
         name: z.string().min(1).describe("Organization name"),
       },
@@ -167,9 +167,9 @@ export function registerTools(server: McpServer): void {
     {
       title: "List Organizations",
       description:
-        "Lists all organizations. Use expand to show groups and people under each org.",
+        "Lists all organizations. Use expand to show teams and people under each org.",
       inputSchema: {
-        expand: z.boolean().optional().describe("If true, show groups and people under each organization"),
+        expand: z.boolean().optional().describe("If true, show teams and people under each organization"),
       },
     },
     async ({ expand }) => {
@@ -192,15 +192,15 @@ export function registerTools(server: McpServer): void {
       }
       const sections: string[] = [];
       for (const org of orgs) {
-        const groups = await listGroups(org.id);
-        const parts: string[] = [`  ${org.name} (${org.id})`, "    Groups:"];
-        if (groups.length === 0) {
-          parts.push("      (no groups)");
+        const teams = await listTeams(org.id);
+        const parts: string[] = [`  ${org.name} (${org.id})`, "    Teams:"];
+        if (teams.length === 0) {
+          parts.push("      (no teams)");
         } else {
-          for (const g of groups) {
-            const people = await listPersons({ groupId: g.id });
+          for (const t of teams) {
+            const people = await listPersons({ teamId: t.id });
             const peopleNames = people.map((p) => `${p.firstName} ${p.lastName}`).join(", ");
-            parts.push(`      - ${g.name} (${g.id})`);
+            parts.push(`      - ${t.name} (${t.id})`);
             parts.push(`        ${peopleNames || "(no members)"}`);
           }
         }
@@ -235,11 +235,11 @@ export function registerTools(server: McpServer): void {
           isError: true,
         };
       }
-      const groups = await listGroups(id);
-      for (const g of groups) {
-        await removeGroupFromAllPersons(g.id);
+      const teams = await listTeams(id);
+      for (const t of teams) {
+        await removeTeamFromAllPersons(t.id);
       }
-      await deleteGroupsByOrganizationId(id);
+      await deleteTeamsByOrganizationId(id);
       await deleteOrganization(id);
       return {
         content: [
@@ -253,23 +253,23 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
-    "create_group",
+    "create_team",
     {
-      title: "Create Group",
+      title: "Create Team",
       description:
-        "Creates a new group within an organization. Groups are sub-teams (e.g., Engineering, Leadership, Kids) that people can belong to.",
+        "Creates a new team within an organization. Teams are sub-groups (e.g., Engineering, Leadership, Kids) that people can belong to.",
       inputSchema: {
-        name: z.string().min(1).describe("Group name"),
-        organizationId: z.string().min(1).describe("ID of the organization this group belongs to"),
+        name: z.string().min(1).describe("Team name"),
+        organizationId: z.string().min(1).describe("ID of the organization this team belongs to"),
       },
     },
     async ({ name, organizationId }) => {
-      const group = await createGroup({ name, organizationId });
+      const team = await createTeam({ name, organizationId });
       return {
         content: [
           {
             type: "text",
-            text: `Created group: ${group.name}\nID: ${group.id}\nOrganization ID: ${group.organizationId}\nCreated at: ${group.createdAt}`,
+            text: `Created team: ${team.name}\nID: ${team.id}\nOrganization ID: ${team.organizationId}\nCreated at: ${team.createdAt}`,
           },
         ],
       };
@@ -277,18 +277,18 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
-    "list_groups",
+    "list_teams",
     {
-      title: "List Groups",
+      title: "List Teams",
       description:
-        "Lists groups. For 'list groups for [person]', 'what groups is X in?', 'groups for Alex' - use personId with that person's ID (from list_people). For 'my groups' use personId: __self__. For 'groups in Acme' use organizationId. Do NOT use organizationId when listing a specific person's groups.",
+        "Lists teams. For 'list teams for [person]', 'what teams is X in?', 'teams for Alex' - use personId with that person's ID (from list_people). For 'my teams' use personId: __self__. For 'teams in Acme' use organizationId. Do NOT use organizationId when listing a specific person's teams.",
       inputSchema: {
-        organizationId: z.string().optional().describe("Filter by organization ID (only when listing all groups in an org, NOT for person-specific queries)"),
-        personId: z.string().optional().describe("Filter to groups this person belongs to. REQUIRED for 'list groups for [person]' - use person's ID from list_people. Use __self__ for current user."),
+        organizationId: z.string().optional().describe("Filter by organization ID (only when listing all teams in an org, NOT for person-specific queries)"),
+        personId: z.string().optional().describe("Filter to teams this person belongs to. REQUIRED for 'list teams for [person]' - use person's ID from list_people. Use __self__ for current user."),
       },
     },
     async ({ organizationId, personId }) => {
-      let groups = await listGroups(personId ? undefined : organizationId);
+      let teams = await listTeams(personId ? undefined : organizationId);
       if (personId) {
         const person = await getPersonById(personId);
         if (!person) {
@@ -297,29 +297,29 @@ export function registerTools(server: McpServer): void {
             isError: true,
           };
         }
-        const memberGroupIds = new Set(person.groupIds ?? []);
-        groups = groups.filter((g) => memberGroupIds.has(g.id));
+        const memberTeamIds = new Set(person.teamIds ?? []);
+        teams = teams.filter((t) => memberTeamIds.has(t.id));
       }
-      if (groups.length === 0) {
+      if (teams.length === 0) {
         return {
           content: [
             {
               type: "text",
               text: personId
-                ? "No groups found for this person."
+                ? "No teams found for this person."
                 : organizationId
-                  ? "No groups found for this organization."
-                  : "No groups found.",
+                  ? "No teams found for this organization."
+                  : "No teams found.",
             },
           ],
         };
       }
-      const lines = groups.map((g) => `  ${g.name} (${g.id}) - Organization: ${g.organizationId}`);
+      const lines = teams.map((t) => `  ${t.name} (${t.id}) - Organization: ${t.organizationId}`);
       return {
         content: [
           {
             type: "text",
-            text: `Found ${groups.length} group(s):\n\n${lines.join("\n")}`,
+            text: `Found ${teams.length} team(s):\n\n${lines.join("\n")}`,
           },
         ],
       };
@@ -327,30 +327,30 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
-    "delete_group",
+    "delete_team",
     {
-      title: "Delete Group",
+      title: "Delete Team",
       description:
-        "Deletes a group by ID. Removes the group from all persons' memberships.",
+        "Deletes a team by ID. Removes the team from all persons' memberships.",
       inputSchema: {
-        id: z.string().min(1).describe("ID of the group to delete"),
+        id: z.string().min(1).describe("ID of the team to delete"),
       },
     },
     async ({ id }) => {
-      const group = await getGroupById(id);
-      if (!group) {
+      const team = await getTeamById(id);
+      if (!team) {
         return {
-          content: [{ type: "text", text: `Group with ID ${id} not found.` }],
+          content: [{ type: "text", text: `Team with ID ${id} not found.` }],
           isError: true,
         };
       }
-      await removeGroupFromAllPersons(id);
-      await deleteGroup(id);
+      await removeTeamFromAllPersons(id);
+      await deleteTeam(id);
       return {
         content: [
           {
             type: "text",
-            text: `Deleted group: ${group.name} (${group.id})`,
+            text: `Deleted team: ${team.name} (${team.id})`,
           },
         ],
       };
@@ -447,18 +447,18 @@ export function registerTools(server: McpServer): void {
         name: z.string().min(1).describe("Name of the habit"),
         endIds: z.array(z.string()).min(1).describe("IDs of ends this habit serves"),
         areaId: z.string().optional(),
-        groupId: z.string().optional(),
+        teamId: z.string().optional(),
         personId: z.string().optional().describe("ID of the person expected to perform the habit (the doer), not the focus/recipient"),
         frequency: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
         durationMinutes: z.number().int().positive().optional().describe("Estimated time in minutes"),
       },
     },
-    async ({ name, endIds, areaId, groupId, personId, frequency, durationMinutes }) => {
+    async ({ name, endIds, areaId, teamId, personId, frequency, durationMinutes }) => {
       const habit = await createHabit({
         name,
         endIds,
         areaId,
-        groupId,
+        teamId,
         personId,
         frequency,
         durationMinutes,
@@ -468,7 +468,7 @@ export function registerTools(server: McpServer): void {
         `ID: ${habit.id}`,
         `Ends: ${habit.endIds.join(", ")}`,
         habit.areaId && `Area: ${habit.areaId}`,
-        habit.groupId && `Group: ${habit.groupId}`,
+        habit.teamId && `Team: ${habit.teamId}`,
         habit.personId && `Performed by: ${habit.personId}`,
         habit.frequency && `Frequency: ${habit.frequency}`,
         habit.durationMinutes != null && `Duration: ${habit.durationMinutes} min`,
@@ -489,15 +489,15 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         endId: z.string().optional().describe("Filter by end ID"),
         areaId: z.string().optional().describe("Filter by area ID"),
-        groupId: z.string().optional().describe("Filter by group ID"),
+        teamId: z.string().optional().describe("Filter by team ID"),
         personId: z.string().optional().describe("Filter by person who performs the habit"),
       },
     },
-    async ({ endId, areaId, groupId, personId }) => {
+    async ({ endId, areaId, teamId, personId }) => {
       const habits = await listHabits({
         endId,
         areaId,
-        groupId,
+        teamId,
         personId,
       });
       if (habits.length === 0) {
@@ -508,7 +508,7 @@ export function registerTools(server: McpServer): void {
         if (h.frequency) meta.push(h.frequency);
         if (h.durationMinutes != null) meta.push(`${h.durationMinutes} min`);
         if (h.areaId) meta.push(`area: ${h.areaId}`);
-        if (h.groupId) meta.push(`group: ${h.groupId}`);
+        if (h.teamId) meta.push(`team: ${h.teamId}`);
         if (h.personId) meta.push(`person: ${h.personId}`);
         return `  ${h.name} (${h.id})\n    Ends: ${h.endIds.join(", ")}${meta.length ? ` | ${meta.join(", ")}` : ""}`;
       });
@@ -656,17 +656,17 @@ export function registerTools(server: McpServer): void {
         phone: z.string().optional().describe("Phone number"),
         title: z.string().optional().describe("Job title or role"),
         notes: z.string().optional().describe("Additional notes about the person"),
-        groupIds: z
+        teamIds: z
           .array(z.string())
           .optional()
-          .describe("IDs of groups this person belongs to"),
+          .describe("IDs of teams this person belongs to"),
         relationshipType: z
           .enum(["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
           .optional()
           .describe("Type of relationship (e.g. spouse, child, friend, colleague)"),
       },
     },
-    async ({ firstName, lastName, email, phone, title, notes, groupIds, relationshipType }) => {
+    async ({ firstName, lastName, email, phone, title, notes, teamIds, relationshipType }) => {
       const person = await createPerson({
         firstName,
         lastName,
@@ -674,7 +674,7 @@ export function registerTools(server: McpServer): void {
         phone,
         title,
         notes,
-        groupIds: groupIds ?? [],
+        teamIds: teamIds ?? [],
         relationshipType: relationshipType as RelationshipType | undefined,
       });
 
@@ -686,7 +686,7 @@ export function registerTools(server: McpServer): void {
         person.title && `Title: ${person.title}`,
         person.notes && `Notes: ${person.notes}`,
         person.relationshipType && `Relationship: ${person.relationshipType}`,
-        person.groupIds?.length && `Groups: ${person.groupIds.join(", ")}`,
+        person.teamIds?.length && `Teams: ${person.teamIds.join(", ")}`,
         `Created at: ${person.createdAt}`,
       ]
         .filter(Boolean)
@@ -708,7 +708,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Get Person",
       description:
-        "Gets a single person by ID with full details (groups, relationship, etc.). Use to verify a person exists or fetch their details before update_person.",
+        "Gets a single person by ID with full details (teams, relationship, etc.). Use to verify a person exists or fetch their details before update_person.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the person to fetch"),
       },
@@ -721,10 +721,10 @@ export function registerTools(server: McpServer): void {
           isError: true,
         };
       }
-      const groupNames: string[] = [];
-      for (const gId of person.groupIds ?? []) {
-        const grp = await getGroupById(gId);
-        groupNames.push(grp?.name ?? gId);
+      const teamNames: string[] = [];
+      for (const tId of person.teamIds ?? []) {
+        const team = await getTeamById(tId);
+        teamNames.push(team?.name ?? tId);
       }
       const parts = [
         `${person.firstName} ${person.lastName} (${person.id})`,
@@ -732,7 +732,7 @@ export function registerTools(server: McpServer): void {
         person.phone && `  Phone: ${person.phone}`,
         person.title && `  Title: ${person.title}`,
         person.relationshipType && `  Relationship: ${person.relationshipType}`,
-        groupNames.length > 0 && `  Groups: ${groupNames.join(", ")}`,
+        teamNames.length > 0 && `  Teams: ${teamNames.join(", ")}`,
         `  Created: ${person.createdAt}`,
       ].filter(Boolean);
       return {
@@ -746,18 +746,18 @@ export function registerTools(server: McpServer): void {
     {
       title: "List People",
       description:
-        "Lists people. Optionally filter by organization ID, group ID, or relationship type.",
+        "Lists people. Optionally filter by organization ID, team ID, or relationship type.",
       inputSchema: {
         organizationId: z.string().optional().describe("Filter by organization ID"),
-        groupId: z.string().optional().describe("Filter by group ID"),
+        teamId: z.string().optional().describe("Filter by team ID"),
         relationshipType: z
           .enum(["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
           .optional()
           .describe("Filter by relationship type"),
       },
     },
-    async ({ organizationId, groupId, relationshipType }) => {
-      const people = await listPersons({ organizationId, groupId, relationshipType });
+    async ({ organizationId, teamId, relationshipType }) => {
+      const people = await listPersons({ organizationId, teamId, relationshipType });
 
       if (people.length === 0) {
         return {
@@ -767,10 +767,10 @@ export function registerTools(server: McpServer): void {
 
       const lines = await Promise.all(
         people.map(async (p) => {
-          const groupNames: string[] = [];
-          for (const gId of p.groupIds ?? []) {
-            const grp = await getGroupById(gId);
-            groupNames.push(grp?.name ?? gId);
+          const teamNames: string[] = [];
+          for (const tId of p.teamIds ?? []) {
+            const team = await getTeamById(tId);
+            teamNames.push(team?.name ?? tId);
           }
           const parts = [
             `${p.firstName} ${p.lastName} (${p.id})`,
@@ -778,7 +778,7 @@ export function registerTools(server: McpServer): void {
             p.phone && `  Phone: ${p.phone}`,
             p.title && `  Title: ${p.title}`,
             p.relationshipType && `  Relationship: ${p.relationshipType}`,
-            groupNames.length > 0 && `  Groups: ${groupNames.join(", ")}`,
+            teamNames.length > 0 && `  Teams: ${teamNames.join(", ")}`,
             `  Created: ${p.createdAt}`,
           ].filter(Boolean);
           return parts.join("\n");
@@ -801,7 +801,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Update Person",
       description:
-        "Updates an existing person by ID. Use get_person or list_people to find the person. To add a person to new groups, use groupIdsToAdd (merges with existing). Use groupIds only to replace the entire list.",
+        "Updates an existing person by ID. Use get_person or list_people to find the person. To add a person to new teams, use teamIdsToAdd (merges with existing). Use teamIds only to replace the entire list.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the person to update"),
         firstName: z.string().min(1).optional().describe("First name"),
@@ -810,15 +810,15 @@ export function registerTools(server: McpServer): void {
         phone: z.string().optional().describe("Phone number"),
         title: z.string().optional().describe("Job title or role"),
         notes: z.string().optional().describe("Additional notes"),
-        groupIds: z.array(z.string()).optional().describe("Group IDs (replaces entire list)"),
-        groupIdsToAdd: z.array(z.string()).optional().describe("Group IDs to add (merges with existing; use when adding person to new groups)"),
+        teamIds: z.array(z.string()).optional().describe("Team IDs (replaces entire list)"),
+        teamIdsToAdd: z.array(z.string()).optional().describe("Team IDs to add (merges with existing; use when adding person to new teams)"),
         relationshipType: z
           .enum(["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
           .optional()
           .describe("Relationship type"),
       },
     },
-    async ({ id, firstName, lastName, email, phone, title, notes, groupIds, groupIdsToAdd, relationshipType }) => {
+    async ({ id, firstName, lastName, email, phone, title, notes, teamIds, teamIdsToAdd, relationshipType }) => {
       const existing = await getPersonById(id);
       if (!existing) {
         return {
@@ -833,8 +833,8 @@ export function registerTools(server: McpServer): void {
       if (phone !== undefined) updates.phone = phone;
       if (title !== undefined) updates.title = title;
       if (notes !== undefined) updates.notes = notes;
-      if (groupIds !== undefined) updates.groupIds = groupIds;
-      if (groupIdsToAdd !== undefined) updates.groupIdsToAdd = groupIdsToAdd;
+      if (teamIds !== undefined) updates.teamIds = teamIds;
+      if (teamIdsToAdd !== undefined) updates.teamIdsToAdd = teamIdsToAdd;
       if (relationshipType !== undefined) updates.relationshipType = relationshipType;
       const person = await updatePerson(id, updates as Parameters<typeof updatePerson>[1]);
       if (!person) {
@@ -850,7 +850,7 @@ export function registerTools(server: McpServer): void {
         person.title && `Title: ${person.title}`,
         person.notes && `Notes: ${person.notes}`,
         person.relationshipType && `Relationship: ${person.relationshipType}`,
-        person.groupIds?.length && `Groups: ${person.groupIds.join(", ")}`,
+        person.teamIds?.length && `Teams: ${person.teamIds.join(", ")}`,
       ].filter(Boolean).join("\n");
       return {
         content: [{ type: "text", text: summary }],
@@ -896,7 +896,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Natural Language Command",
       description:
-        "Interpret natural language and execute the appropriate action. Examples: 'I went to the gym today for 60 minutes', 'I want to be a better father', 'What habits would help me be a better father?', 'Create an Engineering group in Newco', 'Add my wife Jennifer, jennifer@example.com'.",
+        "Interpret natural language and execute the appropriate action. Examples: 'I went to the gym today for 60 minutes', 'I want to be a better father', 'What habits would help me be a better father?', 'Create an Engineering team in Newco', 'Add my wife Jennifer, jennifer@example.com'.",
       inputSchema: {
         text: z.string().min(1).describe("Natural language input from the user"),
       },

@@ -98,7 +98,7 @@ program
 
 program
   .command("create-organization")
-  .description("Create an organization (container for groups and people)")
+  .description("Create an organization (container for teams and people)")
   .requiredOption("-n, --name <name>", "Organization name")
   .action(async (opts) => {
     await withClient(async (client) => {
@@ -126,8 +126,8 @@ program
 
 program
   .command("list-organizations")
-  .description("List all organizations. Use -e to show groups and people.")
-  .option("-e, --expand", "Show groups and people under each organization")
+  .description("List all organizations. Use -e to show teams and people.")
+  .option("-e, --expand", "Show teams and people under each organization")
   .action(async (opts) => {
     await withClient(async (client) => {
       const result = await client.callTool({
@@ -139,14 +139,14 @@ program
   });
 
 program
-  .command("create-group")
-  .description("Create a group within an organization")
-  .requiredOption("-n, --name <name>", "Group name")
+  .command("create-team")
+  .description("Create a team within an organization")
+  .requiredOption("-n, --name <name>", "Team name")
   .requiredOption("-o, --organizationId <id>", "Organization ID")
   .action(async (opts) => {
     await withClient(async (client) => {
       const result = await client.callTool({
-        name: "create_group",
+        name: "create_team",
         arguments: { name: opts.name, organizationId: opts.organizationId },
       });
       printToolResult(result);
@@ -154,27 +154,31 @@ program
   });
 
 program
-  .command("list-groups")
-  .description("List groups, optionally by organization")
+  .command("list-teams")
+  .description("List teams, optionally by organization or person")
   .option("-o, --organizationId <id>", "Filter by organization ID")
+  .option("-p, --personId <id>", "Filter to teams this person belongs to")
   .action(async (opts) => {
     await withClient(async (client) => {
+      const args: Record<string, unknown> = {};
+      if (opts.organizationId) args.organizationId = opts.organizationId;
+      if (opts.personId) args.personId = opts.personId;
       const result = await client.callTool({
-        name: "list_groups",
-        arguments: opts.organizationId ? { organizationId: opts.organizationId } : {},
+        name: "list_teams",
+        arguments: args,
       });
       printToolResult(result);
     });
   });
 
 program
-  .command("delete-group")
-  .description("Delete a group by ID")
-  .requiredOption("-i, --id <id>", "Group ID to delete")
+  .command("delete-team")
+  .description("Delete a team by ID")
+  .requiredOption("-i, --id <id>", "Team ID to delete")
   .action(async (opts) => {
     await withClient(async (client) => {
       const result = await client.callTool({
-        name: "delete_group",
+        name: "delete_team",
         arguments: { id: opts.id },
       });
       printToolResult(result);
@@ -232,7 +236,7 @@ program
   .requiredOption("-n, --name <name>", "Habit name")
   .requiredOption("-e, --ends <ids>", "Comma-separated end IDs")
   .option("-a, --areaId <id>", "Area ID")
-  .option("-g, --groupId <id>", "Group ID")
+  .option("-t, --teamId <id>", "Team ID")
   .option("-p, --personId <id>", "Person expected to perform the habit (the doer)")
   .option("-f, --frequency <freq>", "e.g. daily, weekly, 3x/week")
   .option("-m, --durationMinutes <min>", "Estimated time in minutes")
@@ -243,7 +247,7 @@ program
         endIds: opts.ends.split(",").map((s: string) => s.trim()),
       };
       if (opts.areaId) args.areaId = opts.areaId;
-      if (opts.groupId) args.groupId = opts.groupId;
+      if (opts.teamId) args.teamId = opts.teamId;
       if (opts.personId) args.personId = opts.personId;
       if (opts.frequency) args.frequency = opts.frequency;
       const mins = opts.durationMinutes != null ? parseInt(String(opts.durationMinutes), 10) : NaN;
@@ -261,14 +265,14 @@ program
   .description("List habits, optionally filtered")
   .option("-e, --endId <id>", "Filter by end ID")
   .option("-a, --areaId <id>", "Filter by area ID")
-  .option("-g, --groupId <id>", "Filter by group ID")
+  .option("-g, --teamId <id>", "Filter by team ID")
   .option("-p, --personId <id>", "Filter by person who performs the habit")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = {};
       if (opts.endId) args.endId = opts.endId;
       if (opts.areaId) args.areaId = opts.areaId;
-      if (opts.groupId) args.groupId = opts.groupId;
+      if (opts.teamId) args.teamId = opts.teamId;
       if (opts.personId) args.personId = opts.personId;
       const result = await client.callTool({
         name: "list_habits",
@@ -373,10 +377,10 @@ program
   .requiredOption("-l, --lastName <name>", "Last name")
   .requiredOption("-e, --email <email>", "Email address")
   .option("-p, --phone <phone>", "Phone number")
-  .option("-t, --title <title>", "Job title or role")
+  .option("--title <title>", "Job title or role")
   .option("-n, --notes <notes>", "Additional notes")
   .option("-r, --relationshipType <type>", `Relationship type: ${RELATIONSHIP_TYPES.join(", ")}`)
-  .option("-g, --groups <ids>", "Comma-separated group IDs")
+  .option("-t, --teams <ids>", "Comma-separated team IDs")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = {
@@ -387,8 +391,8 @@ program
         ...(opts.title && { title: opts.title }),
         ...(opts.notes && { notes: opts.notes }),
       };
-      if (opts.groups) {
-        args.groupIds = opts.groups.split(",").map((s: string) => s.trim());
+      if (opts.teams) {
+        args.teamIds = opts.teams.split(",").map((s: string) => s.trim());
       }
       if (opts.relationshipType && RELATIONSHIP_TYPES.includes(opts.relationshipType as (typeof RELATIONSHIP_TYPES)[number])) {
         args.relationshipType = opts.relationshipType;
@@ -409,11 +413,11 @@ program
   .option("-l, --lastName <name>", "Last name")
   .option("-e, --email <email>", "Email address")
   .option("-p, --phone <phone>", "Phone number")
-  .option("-t, --title <title>", "Job title or role")
+  .option("--title <title>", "Job title or role")
   .option("-n, --notes <notes>", "Additional notes")
   .option("-r, --relationshipType <type>", `Relationship type: ${RELATIONSHIP_TYPES.join(", ")}`)
-  .option("-g, --groups <ids>", "Comma-separated group IDs (replaces entire list)")
-  .option("-a, --addGroups <ids>", "Comma-separated group IDs to add (merges with existing)")
+  .option("-t, --teams <ids>", "Comma-separated team IDs (replaces entire list)")
+  .option("-a, --addTeams <ids>", "Comma-separated team IDs to add (merges with existing)")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = { id: opts.id };
@@ -423,11 +427,11 @@ program
       if (opts.phone !== undefined) args.phone = opts.phone;
       if (opts.title !== undefined) args.title = opts.title;
       if (opts.notes !== undefined) args.notes = opts.notes;
-      if (opts.groups) {
-        args.groupIds = opts.groups.split(",").map((s: string) => s.trim());
+      if (opts.teams) {
+        args.teamIds = opts.teams.split(",").map((s: string) => s.trim());
       }
-      if (opts.addGroups) {
-        args.groupIdsToAdd = opts.addGroups.split(",").map((s: string) => s.trim());
+      if (opts.addTeams) {
+        args.teamIdsToAdd = opts.addTeams.split(",").map((s: string) => s.trim());
       }
       if (opts.relationshipType && RELATIONSHIP_TYPES.includes(opts.relationshipType as (typeof RELATIONSHIP_TYPES)[number])) {
         args.relationshipType = opts.relationshipType;
@@ -476,15 +480,15 @@ program
 
 program
   .command("list-people")
-  .description("List people, optionally by organization, group, or relationship type")
+  .description("List people, optionally by organization, team, or relationship type")
   .option("-o, --organizationId <id>", "Filter by organization ID")
-  .option("-g, --groupId <id>", "Filter by group ID")
+  .option("-g, --teamId <id>", "Filter by team ID")
   .option("-r, --relationshipType <type>", `Filter by relationship: ${RELATIONSHIP_TYPES.join(", ")}`)
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = {};
       if (opts.organizationId) args.organizationId = opts.organizationId;
-      if (opts.groupId) args.groupId = opts.groupId;
+      if (opts.teamId) args.teamId = opts.teamId;
       if (opts.relationshipType && RELATIONSHIP_TYPES.includes(opts.relationshipType as (typeof RELATIONSHIP_TYPES)[number])) {
         args.relationshipType = opts.relationshipType;
       }

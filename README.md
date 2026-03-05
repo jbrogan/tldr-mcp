@@ -31,10 +31,10 @@ npm start
 ## Data Model (Wheel of Life)
 
 - **Areas** – Life areas (Career, Family, Health, Spiritual, etc.), seeded on first use
-- **Organizations** – Top-level containers for groups and people (e.g., "Smith Family", "Acme Corp")
+- **Organizations** – Top-level containers for teams and people (e.g., "Smith Family", "Acme Corp")
 - **People** – Members of organizations
 - **Ends** – Ongoing aspirations you work toward (e.g., "Be a better father", "Practice guitar")
-- **Habits** – Recurring behaviors that serve ends; can link to area, group, or person
+- **Habits** – Recurring behaviors that serve ends; can link to area, team, or person
 - **Actions** – Tracked completions of habits (e.g., "Practiced guitar on Feb 24")
 
 ## CLI
@@ -50,14 +50,18 @@ npm run cli -- list-areas
 npm run cli -- create-organization -n "Smith Family"
 npm run cli -- list-organizations
 npm run cli -- list-organizations -e
+npm run cli -- create-team -n "Engineering" -o <organizationId>
+npm run cli -- list-teams
+npm run cli -- list-teams -o <organizationId>
+npm run cli -- list-teams -p <personId>
 npm run cli -- list-ends-and-habits-by-area
 npm run cli -- list-ends-and-habits-by-area -a <areaId>
 
 # People
-npm run cli -- create-person -f Jane -l Doe -e jane@example.com -g <groupId>
+npm run cli -- create-person -f Jane -l Doe -e jane@example.com -t <teamId>
 npm run cli -- list-people
 npm run cli -- list-people -o <organizationId>
-npm run cli -- list-people -g <groupId>
+npm run cli -- list-people -t <teamId>
 
 # Ends, habits, actions
 npm run cli -- create-end -n "Be a better father" -a <areaId>
@@ -68,7 +72,7 @@ npm run cli -- create-action -h <habitId> -d 2026-02-25
 npm run cli -- list-actions -h <habitId> -f 2026-02-01 -t 2026-02-28
 
 # Call any tool with JSON arguments
-npm run cli -- call create_person '{"firstName":"Bob","lastName":"Smith","email":"bob@test.com","groupIds":["<groupId>"]}'
+npm run cli -- call create_person '{"firstName":"Bob","lastName":"Smith","email":"bob@test.com","teamIds":["<teamId>"]}'
 ```
 
 After `npm link`, you can run `tldr-mcp-cli` directly.

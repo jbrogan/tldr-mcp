@@ -3,7 +3,7 @@ import { listHabits, createHabit, getHabitById } from "../store/habits.js";
 import { listEnds, createEnd, getEndById } from "../store/ends.js";
 import { listAreas, getAreaById } from "../store/areas.js";
 import { listOrganizations } from "../store/organizations.js";
-import { listGroups, createGroup, getGroupById } from "../store/groups.js";
+import { listTeams, createTeam, getTeamById } from "../store/teams.js";
 import { createAction, listActions } from "../store/actions.js";
 import type { RelationshipType } from "../schemas/person.js";
 import { createPerson, listPersons, updatePerson, getPersonById, getSelfPerson } from "../store/persons.js";
@@ -12,11 +12,11 @@ const SELF_PLACEHOLDER = "__self__";
 
 const INTENT_SCHEMA = `Respond with ONLY valid JSON, no other text. Use this schema:
 {
-  "intent": "create_action" | "create_end" | "create_habit" | "create_group" | "create_person" | "update_person" | "suggest_habits" | "list_areas" | "list_ends" | "list_habits" | "list_organizations" | "list_groups" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "unknown",
+  "intent": "create_action" | "create_end" | "create_habit" | "create_team" | "create_person" | "update_person" | "suggest_habits" | "list_areas" | "list_ends" | "list_habits" | "list_organizations" | "list_teams" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "unknown",
   "params": { ... }
 }
 
-ROUTING PRIORITY: If the user asks about groups for a specific person (e.g. "what groups is [NAME] in?", "what groups is [NAME] a member of?", "list the groups for [NAME]", "groups for [NAME]", "which groups does [NAME] belong to?") -> ALWAYS use intent "list_groups" with personId = that person's id from Persons list. You MUST include personId (match by name). Do NOT use organizationId. Do NOT use get_person or list_people. Use __self__ ONLY when the user says me/I/my/myself - never when a different person's name is given.
+ROUTING PRIORITY: If the user asks about teams for a specific person (e.g. "what teams is [NAME] in?", "what teams is [NAME] a member of?", "list the teams for [NAME]", "teams for [NAME]", "which teams does [NAME] belong to?") -> ALWAYS use intent "list_teams" with personId = that person's id from Persons list. You MUST include personId (match by name). Do NOT use organizationId. Do NOT use get_person or list_people. Use __self__ ONLY when the user says me/I/my/myself - never when a different person's name is given.
 
 For create_action: { "habitId": "<id>", "completedAt": "YYYY-MM-DD", "actualDurationMinutes": number (optional), "notes": string (optional) }
 - Match the user's habit reference (e.g. "gym", "guitar") to the closest habit by name. Use the habit's id.
@@ -27,28 +27,28 @@ For create_end: { "name": string, "areaId": string (optional) }
 - Extract the aspiration/goal from the user's text
 - Match area if mentioned (e.g. "family" -> Family area id)
 
-For create_habit: { "name": string, "endIds": ["<id>"], "frequency": string (optional), "durationMinutes": number (optional), "areaId": string (optional), "groupId": string (optional), "personId": string (optional) }
+For create_habit: { "name": string, "endIds": ["<id>"], "frequency": string (optional), "durationMinutes": number (optional), "areaId": string (optional), "teamId": string (optional), "personId": string (optional) }
 - Extract habit name and which end(s) it serves
 - If the end has an areaId in context, include it. Or infer area from the habit topic (e.g. sleep -> Health, work -> Career)
-- Match group by name from Groups list if mentioned (e.g. "for Engineering" -> groupId)
+- Match team by name from Teams list if mentioned (e.g. "for Engineering" -> teamId)
 - personId = the person expected to PERFORM the habit (the doer), NOT the focus/recipient. Match by name from Persons list (e.g. "John's habit", "assigned to Sarah" -> personId). When user says me, I, my, or myself -> use personId: "__self__"
-- If both group and person are mentioned, include both groupId and personId
+- If both team and person are mentioned, include both teamId and personId
 
-For create_group: { "name": string, "organizationId": "<id>" }
-- Extract group name and match organization by name (use org id from context)
-- e.g. "Create an Engineering group in Newco" -> name: Engineering, organizationId: Newco's id
+For create_team: { "name": string, "organizationId": "<id>" }
+- Extract team name and match organization by name (use org id from context)
+- e.g. "Create an Engineering team in Newco" -> name: Engineering, organizationId: Newco's id
 
-For create_person: { "firstName": string, "lastName": string, "email": string, "phone": string (optional), "title": string (optional), "notes": string (optional), "relationshipType": "self"|"spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional), "groupIds": ["<id>"] (optional) }
+For create_person: { "firstName": string, "lastName": string, "email": string, "phone": string (optional), "title": string (optional), "notes": string (optional), "relationshipType": "self"|"spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional), "teamIds": ["<id>"] (optional) }
 - IMPORTANT: Check the Persons list first. If the person already exists (match by name or email), use update_person instead.
 - Extract name and split into firstName and lastName (use last word as lastName, rest as firstName if full name given)
 - Map relationship words to relationshipType: wife/husband/partner -> spouse, kid/son/daughter -> child, mom/dad/parent -> parent, brother/sister -> sibling, coworker -> colleague
-- Match group by name if mentioned (use id from context). Person membership is through groups only.
+- Match team by name if mentioned (use id from context). Person membership is through teams only.
 - Email is required - use "unknown@example.com" only if truly not provided
 
-For update_person: { "id": "<id>", "groupIdsToAdd": ["<id>", ...] (optional) }
-- Use when the person ALREADY EXISTS in Persons list and you need to add them to a group.
+For update_person: { "id": "<id>", "teamIdsToAdd": ["<id>", ...] (optional) }
+- Use when the person ALREADY EXISTS in Persons list and you need to add them to a team.
 - Match person by name from Persons list and use their id. When user says me, I, my, or myself -> use id: "__self__"
-- Use groupIdsToAdd with the NEW group id(s) to add. This merges with existing groups; do not pass existing groups.
+- Use teamIdsToAdd with the NEW team id(s) to add. This merges with existing teams; do not pass existing teams.
 
 For suggest_habits: { "query": string, "suggestions": ["habit 1", "habit 2", ...] }
 - Use when user asks for habit suggestions (e.g. "What habits would help me be a better father?", "Suggest habits for getting promoted")
@@ -62,24 +62,24 @@ For list_ends: { "areaId": "<id>" (optional) }
 - Use when user wants to see ends/aspirations (e.g. "show my ends", "list aspirations", "what ends do I have")
 - Match area by name if mentioned (e.g. "ends in Career" -> areaId)
 
-For list_habits: { "endId": "<id>" (optional), "areaId": "<id>" (optional), "groupId": "<id>" (optional), "personId": "<id>" (optional) }
+For list_habits: { "endId": "<id>" (optional), "areaId": "<id>" (optional), "teamId": "<id>" (optional), "personId": "<id>" (optional) }
 - Use when user wants to see habits (e.g. "show my habits", "list habits", "habits for guitar end")
-- Match end, area, group, or person by name from context if mentioned. When user says my habits -> use personId: "__self__"
+- Match end, area, team, or person by name from context if mentioned. When user says my habits -> use personId: "__self__"
 
 For list_organizations: { "expand": boolean (optional) }
-- Use when user wants to see organizations (e.g. "show organizations", "list orgs", "organizations with groups")
-- Set expand: true if user wants to see groups and people under each org
+- Use when user wants to see organizations (e.g. "show organizations", "list orgs", "organizations with teams")
+- Set expand: true if user wants to see teams and people under each org
 
-For list_groups: { "organizationId": "<id>" (optional), "personId": "<id>" or "__self__" (optional) }
-- Use when user wants to see groups (e.g. "show groups", "list groups", "groups in Acme")
-- For "my groups", "groups I'm in", "groups I'm a member of" -> use personId: "__self__" only. Do NOT use organizationId.
-- For "what groups is [person] in?", "what groups is [person] a member of?", "list the groups for [person]", "groups for [person]" -> use personId = that person's id (match by name from Persons list). REQUIRED: include personId. Do NOT use organizationId.
-- Match organization by name only when user asks for "groups in [org]" or "groups in Acme" (listing org's groups, not a person's groups)
+For list_teams: { "organizationId": "<id>" (optional), "personId": "<id>" or "__self__" (optional) }
+- Use when user wants to see teams (e.g. "show teams", "list teams", "teams in Acme")
+- For "my teams", "teams I'm in", "teams I'm a member of" -> use personId: "__self__" only. Do NOT use organizationId.
+- For "what teams is [person] in?", "what teams is [person] a member of?", "list the teams for [person]", "teams for [person]" -> use personId = that person's id (match by name from Persons list). REQUIRED: include personId. Do NOT use organizationId.
+- Match organization by name only when user asks for "teams in [org]" or "teams in Acme" (listing org's teams, not a person's teams)
 
-For list_people: { "organizationId": "<id>" (optional), "groupId": "<id>" (optional), "relationshipType": "self"|"spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional) }
+For list_people: { "organizationId": "<id>" (optional), "teamId": "<id>" (optional), "relationshipType": "self"|"spouse"|"child"|"parent"|"sibling"|"friend"|"colleague"|"mentor"|"client"|"other" (optional) }
 - Use when user wants to see people (e.g. "show people", "list people", "people in Engineering", "my colleagues")
-- Do NOT use for "what groups is X in?" - use list_groups with personId instead.
-- Match org or group by name. Map relationship words to relationshipType.
+- Do NOT use for "what teams is X in?" - use list_teams with personId instead.
+- Match org or team by name. Map relationship words to relationshipType.
 
 For list_actions: { "habitId": "<id>" (optional), "fromDate": "YYYY-MM-DD" (optional), "toDate": "YYYY-MM-DD" (optional) }
 - Use when user wants to see tracked actions/completions (e.g. "show my actions", "what did I do", "gym completions this month")
@@ -91,7 +91,7 @@ For list_ends_and_habits: { "areaId": "<id>" (optional) }
 
 For get_person: { "personId": "<id>" }
 - Use when user wants details for a specific person (e.g. "show me John", "get John Doe's details", "who is Sarah?", "show me" / "my details")
-- Do NOT use for "what groups is X in?" or "what groups is X a member of?" - use list_groups with personId instead (returns groups only).
+- Do NOT use for "what teams is X in?" or "what teams is X a member of?" - use list_teams with personId instead (returns teams only).
 - Match person by name from Persons list and use their id. When user says show me, my details, who am I -> use personId: "__self__"
 
 - Use "unknown" if the intent is unclear`;
@@ -106,7 +106,7 @@ export async function interpretAndExecute(text: string): Promise<NLResult> {
   const ends = await listEnds();
   const areas = await listAreas();
   const organizations = await listOrganizations();
-  const groups = await listGroups();
+  const teams = await listTeams();
 
   const context = `
 Habits (id, name):
@@ -121,11 +121,11 @@ ${areas.map((a) => `  ${a.id}: ${a.name}`).join("\n")}
 Organizations (id, name):
 ${organizations.map((o) => `  ${o.id}: ${o.name}`).join("\n")}
 
-Groups (id, name, organizationId):
-${groups.map((g) => `  ${g.id}: ${g.name} (org: ${g.organizationId})`).join("\n")}
+Teams (id, name, organizationId):
+${teams.map((t) => `  ${t.id}: ${t.name} (org: ${t.organizationId})`).join("\n")}
 
-Persons (id, firstName, lastName, email, relationshipType, groupIds):
-${(await listPersons()).map((p) => `  ${p.id}: ${p.firstName} ${p.lastName}, ${p.email}${p.relationshipType ? ` (${p.relationshipType})` : ""}, groups: [${(p.groupIds ?? []).join(", ")}]`).join("\n") || "  (none)"}
+Persons (id, firstName, lastName, email, relationshipType, teamIds):
+${(await listPersons()).map((p) => `  ${p.id}: ${p.firstName} ${p.lastName}, ${p.email}${p.relationshipType ? ` (${p.relationshipType})` : ""}, teams: [${(p.teamIds ?? []).join(", ")}]`).join("\n") || "  (none)"}
 
 When user says me, I, my, or myself - use "__self__" for personId or id. Resolves to the person with relationshipType "self".
 
@@ -211,13 +211,13 @@ JSON response:`;
       }
 
       case "create_habit": {
-        const { name, endIds, frequency, durationMinutes, areaId, groupId, personId } = params as {
+        const { name, endIds, frequency, durationMinutes, areaId, teamId, personId } = params as {
           name?: string;
           endIds?: string[];
           frequency?: string;
           durationMinutes?: number;
           areaId?: string;
-          groupId?: string;
+          teamId?: string;
           personId?: string;
         };
         if (!name || !endIds?.length) {
@@ -229,13 +229,13 @@ JSON response:`;
           frequency,
           durationMinutes,
           areaId,
-          groupId,
+          teamId,
           personId,
         });
         const extras: string[] = [];
-        if (habit.groupId) {
-          const grp = await getGroupById(habit.groupId);
-          extras.push(`group: ${grp?.name ?? habit.groupId}`);
+        if (habit.teamId) {
+          const team = await getTeamById(habit.teamId);
+          extras.push(`team: ${team?.name ?? habit.teamId}`);
         }
         if (habit.personId) {
           const p = await getPersonById(habit.personId);
@@ -247,18 +247,18 @@ JSON response:`;
         };
       }
 
-      case "create_group": {
+      case "create_team": {
         const { name, organizationId } = params as { name?: string; organizationId?: string };
         if (!name || !organizationId) {
           return {
             success: false,
-            message: "Missing name or organizationId for create_group. Please include the group name and organization (e.g. 'Create an Engineering group in Newco').",
+            message: "Missing name or organizationId for create_team. Please include the team name and organization (e.g. 'Create an Engineering team in Newco').",
           };
         }
-        const group = await createGroup({ name, organizationId });
+        const team = await createTeam({ name, organizationId });
         return {
           success: true,
-          message: `Created group: ${group.name} (${group.id}) in organization ${group.organizationId}`,
+          message: `Created team: ${team.name} (${team.id}) in organization ${team.organizationId}`,
         };
       }
 
@@ -275,7 +275,7 @@ JSON response:`;
       }
 
       case "create_person": {
-        const { firstName, lastName, email, phone, title, notes, relationshipType, groupIds } = params as {
+        const { firstName, lastName, email, phone, title, notes, relationshipType, teamIds } = params as {
           firstName?: string;
           lastName?: string;
           email?: string;
@@ -283,7 +283,7 @@ JSON response:`;
           title?: string;
           notes?: string;
           relationshipType?: string;
-          groupIds?: string[];
+          teamIds?: string[];
         };
         if (!firstName || !lastName || !email) {
           return {
@@ -305,7 +305,7 @@ JSON response:`;
           title,
           notes,
           relationshipType: relationshipTypeValid && relationshipType ? (relationshipType as RelationshipType) : undefined,
-          groupIds: groupIds ?? [],
+          teamIds: teamIds ?? [],
         });
         return {
           success: true,
@@ -314,16 +314,16 @@ JSON response:`;
       }
 
       case "update_person": {
-        const { id, groupIdsToAdd } = params as { id?: string; groupIdsToAdd?: string[] };
+        const { id, teamIdsToAdd } = params as { id?: string; teamIdsToAdd?: string[] };
         if (!id) {
           return {
             success: false,
             message: "Missing id for update_person. Use the person's id from the Persons list.",
           };
         }
-        const updates: { groupIdsToAdd?: string[] } = {};
-        if (groupIdsToAdd != null && Array.isArray(groupIdsToAdd) && groupIdsToAdd.length > 0) {
-          updates.groupIdsToAdd = groupIdsToAdd;
+        const updates: { teamIdsToAdd?: string[] } = {};
+        if (teamIdsToAdd != null && Array.isArray(teamIdsToAdd) && teamIdsToAdd.length > 0) {
+          updates.teamIdsToAdd = teamIdsToAdd;
         }
         const person = await updatePerson(id, updates);
         if (!person) {
@@ -334,7 +334,7 @@ JSON response:`;
         }
         return {
           success: true,
-          message: `Updated person: ${person.firstName} ${person.lastName}${groupIdsToAdd?.length ? ` - added to groups: ${groupIdsToAdd.join(", ")}` : ""}`,
+          message: `Updated person: ${person.firstName} ${person.lastName}${teamIdsToAdd?.length ? ` - added to teams: ${teamIdsToAdd.join(", ")}` : ""}`,
         };
       }
 
@@ -367,13 +367,13 @@ JSON response:`;
       }
 
       case "list_habits": {
-        const { endId, areaId, groupId, personId } = params as {
+        const { endId, areaId, teamId, personId } = params as {
           endId?: string;
           areaId?: string;
-          groupId?: string;
+          teamId?: string;
           personId?: string;
         };
-        const habits = await listHabits({ endId, areaId, groupId, personId });
+        const habits = await listHabits({ endId, areaId, teamId, personId });
         if (habits.length === 0) {
           return { success: true, message: "No habits found." };
         }
@@ -400,15 +400,15 @@ JSON response:`;
         }
         const sections: string[] = [];
         for (const org of orgs) {
-          const groups = await listGroups(org.id);
-          const parts: string[] = [`  ${org.name} (${org.id})`, "    Groups:"];
-          if (groups.length === 0) {
-            parts.push("      (no groups)");
+          const teams = await listTeams(org.id);
+          const parts: string[] = [`  ${org.name} (${org.id})`, "    Teams:"];
+          if (teams.length === 0) {
+            parts.push("      (no teams)");
           } else {
-            for (const g of groups) {
-              const people = await listPersons({ groupId: g.id });
+            for (const t of teams) {
+              const people = await listPersons({ teamId: t.id });
               const peopleNames = people.map((p) => `${p.firstName} ${p.lastName}`).join(", ");
-              parts.push(`      - ${g.name} (${g.id})`);
+              parts.push(`      - ${t.name} (${t.id})`);
               parts.push(`        ${peopleNames || "(no members)"}`);
             }
           }
@@ -420,50 +420,50 @@ JSON response:`;
         };
       }
 
-      case "list_groups": {
+      case "list_teams": {
         const { organizationId, personId } = params as { organizationId?: string; personId?: string };
-        let groups = await listGroups(personId ? undefined : organizationId);
+        let teams = await listTeams(personId ? undefined : organizationId);
         if (personId) {
           const person = await getPersonById(personId);
           if (!person) {
             return { success: false, message: `Person with ID ${personId} not found.` };
           }
-          const memberGroupIds = new Set(person.groupIds ?? []);
-          groups = groups.filter((g) => memberGroupIds.has(g.id));
+          const memberTeamIds = new Set(person.teamIds ?? []);
+          teams = teams.filter((t) => memberTeamIds.has(t.id));
         }
-        if (groups.length === 0) {
+        if (teams.length === 0) {
           return {
             success: true,
             message: personId
-              ? "No groups found for this person."
+              ? "No teams found for this person."
               : organizationId
-                ? "No groups found for this organization."
-                : "No groups found.",
+                ? "No teams found for this organization."
+                : "No teams found.",
           };
         }
-        const lines = groups.map((g) => `  ${g.name} (${g.id}) - Organization: ${g.organizationId}`);
+        const lines = teams.map((t) => `  ${t.name} (${t.id}) - Organization: ${t.organizationId}`);
         return {
           success: true,
-          message: `Groups:\n\n${lines.join("\n")}`,
+          message: `Teams:\n\n${lines.join("\n")}`,
         };
       }
 
       case "list_people": {
-        const { organizationId, groupId, relationshipType } = params as {
+        const { organizationId, teamId, relationshipType } = params as {
           organizationId?: string;
-          groupId?: string;
+          teamId?: string;
           relationshipType?: string;
         };
-        const people = await listPersons({ organizationId, groupId, relationshipType });
+        const people = await listPersons({ organizationId, teamId, relationshipType });
         if (people.length === 0) {
           return { success: true, message: "No people found." };
         }
         const lines = await Promise.all(
           people.map(async (p) => {
-            const groupNames: string[] = [];
-            for (const gId of p.groupIds ?? []) {
-              const grp = await getGroupById(gId);
-              groupNames.push(grp?.name ?? gId);
+            const teamNames: string[] = [];
+            for (const tId of p.teamIds ?? []) {
+              const team = await getTeamById(tId);
+              teamNames.push(team?.name ?? tId);
             }
             const parts = [
               `${p.firstName} ${p.lastName} (${p.id})`,
@@ -471,7 +471,7 @@ JSON response:`;
               p.phone && `  Phone: ${p.phone}`,
               p.title && `  Title: ${p.title}`,
               p.relationshipType && `  Relationship: ${p.relationshipType}`,
-              groupNames.length > 0 && `  Groups: ${groupNames.join(", ")}`,
+              teamNames.length > 0 && `  Teams: ${teamNames.join(", ")}`,
             ].filter(Boolean);
             return parts.join("\n");
           })
@@ -567,10 +567,10 @@ JSON response:`;
             message: `Person with ID ${personId} not found.`,
           };
         }
-        const groupNames: string[] = [];
-        for (const gId of person.groupIds ?? []) {
-          const grp = await getGroupById(gId);
-          groupNames.push(grp?.name ?? gId);
+        const teamNames: string[] = [];
+        for (const tId of person.teamIds ?? []) {
+          const team = await getTeamById(tId);
+          teamNames.push(team?.name ?? tId);
         }
         const parts = [
           `${person.firstName} ${person.lastName} (${person.id})`,
@@ -578,7 +578,7 @@ JSON response:`;
           person.phone && `  Phone: ${person.phone}`,
           person.title && `  Title: ${person.title}`,
           person.relationshipType && `  Relationship: ${person.relationshipType}`,
-          groupNames.length > 0 && `  Groups: ${groupNames.join(", ")}`,
+          teamNames.length > 0 && `  Teams: ${teamNames.join(", ")}`,
           `  Created: ${person.createdAt}`,
         ].filter(Boolean);
         return {
@@ -596,7 +596,7 @@ JSON response:`;
       default:
         return {
           success: false,
-          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_group, create_person, update_person, suggest_habits, list_areas, list_ends, list_habits, list_organizations, list_groups, list_people, list_actions, list_ends_and_habits, get_person.`,
+          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_team, create_person, update_person, suggest_habits, list_areas, list_ends, list_habits, list_organizations, list_teams, list_people, list_actions, list_ends_and_habits, get_person.`,
         };
     }
   } catch (err) {
