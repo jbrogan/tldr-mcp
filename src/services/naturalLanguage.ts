@@ -1,6 +1,6 @@
 import { createLLMProvider } from "../llm/index.js";
 import { listHabits, createHabit, getHabitById } from "../store/habits.js";
-import { listEnds, createEnd, getEndById } from "../store/ends.js";
+import { listEnds, createEnd, getEndById, updateEnd } from "../store/ends.js";
 import { listAreas, getAreaById } from "../store/areas.js";
 import { listOrganizations } from "../store/organizations.js";
 import { listTeams, createTeam, getTeamById } from "../store/teams.js";
@@ -13,11 +13,13 @@ const SELF_PLACEHOLDER = "__self__";
 
 const INTENT_SCHEMA = `Respond with ONLY valid JSON, no other text. Use this schema:
 {
-  "intent": "create_action" | "create_end" | "create_habit" | "create_team" | "create_collection" | "create_person" | "update_person" | "suggest_habits" | "list_areas" | "list_ends" | "list_habits" | "list_organizations" | "list_teams" | "list_collections" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "unknown",
+  "intent": "create_action" | "create_end" | "create_habit" | "create_team" | "create_collection" | "create_person" | "update_person" | "update_end" | "suggest_habits" | "list_areas" | "list_ends" | "list_habits" | "list_organizations" | "list_teams" | "list_collections" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "unknown",
   "params": { ... }
 }
 
-ROUTING PRIORITY: If the user asks about teams for a specific person (e.g. "what teams is [NAME] in?", "what teams is [NAME] a member of?", "list the teams for [NAME]", "teams for [NAME]", "which teams does [NAME] belong to?") -> ALWAYS use intent "list_teams" with personId = that person's id from Persons list. You MUST include personId (match by name). Do NOT use organizationId. Do NOT use get_person or list_people. Use __self__ ONLY when the user says me/I/my/myself - never when a different person's name is given.
+ROUTING PRIORITY:
+- "Add [end] to [collection]" or "Put [end] in [collection]" or "Move [end] to [collection]" -> ALWAYS use intent "update_end" with id = end id from Ends list (match by name), collectionId = collection id from Collections list (match by name). Do NOT use create_collection or create_end.
+- If the user asks about teams for a specific person (e.g. "what teams is [NAME] in?", "what teams is [NAME] a member of?", "list the teams for [NAME]", "teams for [NAME]", "which teams does [NAME] belong to?") -> ALWAYS use intent "list_teams" with personId = that person's id from Persons list. You MUST include personId (match by name). Do NOT use organizationId. Do NOT use get_person or list_people. Use __self__ ONLY when the user says me/I/my/myself - never when a different person's name is given.
 
 For create_action: { "habitId": "<id>", "completedAt": "YYYY-MM-DD", "actualDurationMinutes": number (optional), "notes": string (optional) }
 - Match the user's habit reference (e.g. "gym", "guitar") to the closest habit by name. Use the habit's id.
@@ -28,6 +30,11 @@ For create_end: { "name": string, "areaId": string (optional), "collectionId": s
 - Extract the aspiration/goal from the user's text
 - Match area if mentioned (e.g. "family" -> Family area id)
 - Match collection by name from Collections list if mentioned
+
+For update_end: { "id": "<end-id>", "name": string (optional), "areaId": string (optional), "collectionId": string (optional) }
+- Use when user says "add [end] to [collection]", "put [end] in [collection]", "move [end] to [collection]", or wants to change an end's area/name
+- id = end id from Ends list (match the end name the user said, e.g. "DLI Monthly P&L")
+- collectionId = collection id from Collections list (match the collection name, e.g. "Droplight Financial")
 
 For create_habit: { "name": string, "endIds": ["<id>"], "frequency": string (optional), "durationMinutes": number (optional), "areaId": string (optional), "teamId": string (optional), "personId": string (optional) }
 - Extract habit name and which end(s) it serves
@@ -61,7 +68,7 @@ For list_areas: {}
 - Use when user wants to see areas (e.g. "show areas", "list areas", "what areas do I have")
 
 For create_collection: { "name": string, "ownerType": "organization"|"team"|"person", "ownerId": "<id>", "collectionType": "goals"|"projects"|"quarterly"|"backlog"|"operations"|"other" (optional), "description": string (optional) }
-- Use when user wants to create a collection (grouping of ends)
+- Use ONLY when user explicitly wants to CREATE a new collection (e.g. "create collection X", "make a new collection called Y"). Do NOT use for "add [end] to [collection]" - that is update_end.
 - ownerType + ownerId = which org, team, or person owns the collection
 - Match org, team, or person by name from context. For "my collection" use ownerType: "person", ownerId: "__self__"
 
@@ -115,20 +122,58 @@ export interface NLResult {
   message: string;
 }
 
+/** Match "add X to Y collection", "put X in Y collection", "move X to Y collection" */
+function parseAddEndToCollection(text: string): { endName: string; collectionName: string } | null {
+  const trimmed = text.trim().replace(/[.!?]+$/, "");
+  const addMatch = trimmed.match(/^add\s+(.+?)\s+to\s+(?:the\s+)?(.+?)\s+collection\s*$/i);
+  if (addMatch) return { endName: addMatch[1].trim(), collectionName: addMatch[2].trim() };
+  const putMatch = trimmed.match(/^put\s+(.+?)\s+in\s+(?:the\s+)?(.+?)\s+collection\s*$/i);
+  if (putMatch) return { endName: putMatch[1].trim(), collectionName: putMatch[2].trim() };
+  const moveMatch = trimmed.match(/^move\s+(.+?)\s+to\s+(?:the\s+)?(.+?)\s+collection\s*$/i);
+  if (moveMatch) return { endName: moveMatch[1].trim(), collectionName: moveMatch[2].trim() };
+  return null;
+}
+
+function findBestMatch<T>(items: T[], name: string, getName: (t: T) => string): T | undefined {
+  const lower = name.toLowerCase();
+  const exact = items.find((i) => getName(i).toLowerCase() === lower);
+  if (exact) return exact;
+  return items.find((i) => getName(i).toLowerCase().includes(lower) || lower.includes(getName(i).toLowerCase()));
+}
+
 export async function interpretAndExecute(text: string): Promise<NLResult> {
-  const habits = await listHabits();
   const ends = await listEnds();
+  const collections = await listCollections();
+
+  // Deterministic handling for "add X to Y collection" - bypass LLM to avoid wrong intent
+  const addToCollection = parseAddEndToCollection(text);
+  if (addToCollection) {
+    const end = findBestMatch(ends, addToCollection.endName, (e) => e.name);
+    const collection = findBestMatch(collections, addToCollection.collectionName, (c) => c.name);
+    if (!end) {
+      return { success: false, message: `End "${addToCollection.endName}" not found. Check the name or create it first.` };
+    }
+    if (!collection) {
+      return { success: false, message: `Collection "${addToCollection.collectionName}" not found. Check the name or create it first.` };
+    }
+    const updated = await updateEnd(end.id, { collectionId: collection.id });
+    return {
+      success: true,
+      message: `Updated end: ${updated?.name} (${updated?.id}) - added to collection ${collection.name}`,
+    };
+  }
+
+  const habits = await listHabits();
   const areas = await listAreas();
   const organizations = await listOrganizations();
   const teams = await listTeams();
-  const collections = await listCollections();
 
   const context = `
 Habits (id, name):
 ${habits.map((h) => `  ${h.id}: ${h.name}`).join("\n")}
 
-Ends (id, name, areaId):
-${ends.map((e) => `  ${e.id}: ${e.name}${e.areaId ? ` (area: ${e.areaId})` : ""}`).join("\n")}
+Ends (id, name, areaId, collectionId):
+${ends.map((e) => `  ${e.id}: ${e.name}${e.areaId ? ` area:${e.areaId}` : ""}${e.collectionId ? ` collection:${e.collectionId}` : ""}`).join("\n")}
 
 Areas (id, name):
 ${areas.map((a) => `  ${a.id}: ${a.name}`).join("\n")}
@@ -232,6 +277,32 @@ JSON response:`;
           success: true,
           message: `Created end: ${end.name} (${end.id})`,
         };
+      }
+
+      case "update_end": {
+        const { id, name, areaId, collectionId } = params as {
+          id?: string;
+          name?: string;
+          areaId?: string;
+          collectionId?: string;
+        };
+        if (!id) {
+          return { success: false, message: "Missing id for update_end. Specify the end to update." };
+        }
+        const updates: Record<string, unknown> = {};
+        if (name != null) updates.name = name;
+        if (areaId !== undefined) updates.areaId = areaId;
+        if (collectionId !== undefined) updates.collectionId = collectionId;
+        if (Object.keys(updates).length === 0) {
+          return { success: false, message: "No updates provided for update_end. Specify name, areaId, or collectionId." };
+        }
+        const end = await updateEnd(id, updates);
+        if (!end) {
+          return { success: false, message: `End with ID ${id} not found.` };
+        }
+        const parts = [`Updated end: ${end.name} (${end.id})`];
+        if (collectionId !== undefined) parts.push("added to collection");
+        return { success: true, message: parts.join(" - ") };
       }
 
       case "create_habit": {
@@ -682,7 +753,7 @@ JSON response:`;
       default:
         return {
           success: false,
-          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_team, create_collection, create_person, update_person, suggest_habits, list_areas, list_ends, list_habits, list_organizations, list_teams, list_collections, list_people, list_actions, list_ends_and_habits, get_person.`,
+          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_team, create_collection, create_person, update_person, update_end, suggest_habits, list_areas, list_ends, list_habits, list_organizations, list_teams, list_collections, list_people, list_actions, list_ends_and_habits, get_person.`,
         };
     }
   } catch (err) {

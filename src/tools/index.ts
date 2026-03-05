@@ -42,6 +42,7 @@ import {
   deleteEnd,
   getEndById,
   listEnds,
+  updateEnd,
 } from "../store/ends.js";
 import {
   createHabit,
@@ -562,6 +563,43 @@ export function registerTools(server: McpServer): void {
           {
             type: "text",
             text: `Found ${ends.length} end(s):\n\n${lines.join("\n")}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "update_end",
+    {
+      title: "Update End",
+      description:
+        "Updates an end by ID. Only provided fields are updated. Use to add an end to a collection, change its area, or rename it.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the end to update"),
+        name: z.string().min(1).optional().describe("End name"),
+        areaId: z.string().optional().describe("Area this end belongs to"),
+        collectionId: z.string().optional().describe("Collection this end belongs to"),
+      },
+    },
+    async ({ id, name, areaId, collectionId }) => {
+      const existing = await getEndById(id);
+      if (!existing) {
+        return {
+          content: [{ type: "text", text: `End with ID ${id} not found.` }],
+          isError: true,
+        };
+      }
+      const updates: Record<string, unknown> = {};
+      if (name != null) updates.name = name;
+      if (areaId !== undefined) updates.areaId = areaId;
+      if (collectionId !== undefined) updates.collectionId = collectionId;
+      const end = await updateEnd(id, updates);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Updated end: ${end?.name} (${id})${end?.collectionId ? ` - Collection: ${end.collectionId}` : ""}`,
           },
         ],
       };

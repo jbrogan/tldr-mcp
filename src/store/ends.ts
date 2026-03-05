@@ -46,6 +46,19 @@ export async function getEndById(id: string): Promise<EndEntity | undefined> {
   return ends.find((e) => e.id === id);
 }
 
+export async function updateEnd(
+  id: string,
+  updates: Partial<Pick<EndEntity, "name" | "areaId" | "collectionId">>
+): Promise<EndEntity | null> {
+  const ends = await loadEnds();
+  const index = ends.findIndex((e) => e.id === id);
+  if (index === -1) return null;
+  const updated = { ...ends[index], ...updates };
+  ends[index] = updated;
+  await saveEnds(ends);
+  return updated;
+}
+
 export async function listEnds(options?: {
   areaId?: string;
   collectionId?: string;
