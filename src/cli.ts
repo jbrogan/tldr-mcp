@@ -83,14 +83,18 @@ program
   });
 
 program
-  .command("list-ends-and-habits-by-area")
-  .description("List ends and habits by area. Omit -a to show all areas.")
+  .command("list-ends-and-habits")
+  .description("List ends and habits. Use -a for area or -c for collection (mutually exclusive). Omit both for all areas.")
   .option("-a, --areaId <id>", "Filter to a specific area")
+  .option("-c, --collectionId <id>", "Filter to a specific collection")
   .action(async (opts) => {
     await withClient(async (client) => {
+      const args: Record<string, unknown> = {};
+      if (opts.areaId) args.areaId = opts.areaId;
+      if (opts.collectionId) args.collectionId = opts.collectionId;
       const result = await client.callTool({
-        name: "list_ends_and_habits_by_area",
-        arguments: opts.areaId ? { areaId: opts.areaId } : {},
+        name: "list_ends_and_habits",
+        arguments: args,
       });
       printToolResult(result);
     });

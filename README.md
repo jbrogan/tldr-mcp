@@ -57,8 +57,9 @@ npm run cli -- list-teams -o <organizationId>
 npm run cli -- list-teams -p <personId>
 npm run cli -- create-collection -n "Q1 Goals" -p organization -i <organizationId>
 npm run cli -- list-collections -p organization -i <organizationId>
-npm run cli -- list-ends-and-habits-by-area
-npm run cli -- list-ends-and-habits-by-area -a <areaId>
+npm run cli -- list-ends-and-habits
+npm run cli -- list-ends-and-habits -a <areaId>
+npm run cli -- list-ends-and-habits -c <collectionId>
 
 # People
 npm run cli -- create-person -f Jane -l Doe -e jane@example.com -t <teamId>

@@ -4,7 +4,7 @@ import { listEnds, createEnd, getEndById, updateEnd } from "../store/ends.js";
 import { listAreas, getAreaById } from "../store/areas.js";
 import { listOrganizations } from "../store/organizations.js";
 import { listTeams, createTeam, getTeamById } from "../store/teams.js";
-import { listCollections, createCollection } from "../store/collections.js";
+import { listCollections, createCollection, getCollectionById } from "../store/collections.js";
 import { createAction, listActions } from "../store/actions.js";
 import type { RelationshipType } from "../schemas/person.js";
 import { createPerson, listPersons, updatePerson, getPersonById, getSelfPerson } from "../store/persons.js";
@@ -106,9 +106,10 @@ For list_actions: { "habitId": "<id>" (optional), "fromDate": "YYYY-MM-DD" (opti
 - Use when user wants to see tracked actions/completions (e.g. "show my actions", "what did I do", "gym completions this month")
 - Match habit by name. "this month" = first and last day of current month. "this week" = Mon-Sun of current week.
 
-For list_ends_and_habits: { "areaId": "<id>" (optional) }
-- Use when user wants ends and habits grouped by area (e.g. "show my ends and habits", "ends and habits by area")
-- Match area by name if mentioned
+For list_ends_and_habits: { "areaId": "<id>" (optional), "collectionId": "<id>" (optional) }
+- Use when user wants ends and habits (e.g. "show my ends and habits", "ends and habits by area", "ends in Droplight Financial collection")
+- Provide areaId OR collectionId, not both. Omit both to show all areas.
+- Match area or collection by name from context
 
 For get_person: { "personId": "<id>" }
 - Use when user wants details for a specific person (e.g. "show me John", "get John Doe's details", "who is Sarah?", "show me" / "my details")
@@ -663,10 +664,32 @@ JSON response:`;
       }
 
       case "list_ends_and_habits": {
-        const { areaId } = params as { areaId?: string };
+        const { areaId, collectionId } = params as { areaId?: string; collectionId?: string };
+        if (areaId && collectionId) {
+          return { success: false, message: "Provide areaId OR collectionId, not both." };
+        }
         const areas = await listAreas();
         const allEnds = await listEnds();
         const allHabits = await listHabits();
+
+        if (collectionId) {
+          const collection = await getCollectionById(collectionId);
+          if (!collection) {
+            return { success: false, message: `Collection with ID ${collectionId} not found.` };
+          }
+          const ends = allEnds.filter((e) => e.collectionId === collectionId);
+          const parts: string[] = [`## ${collection.name}`];
+          for (const e of ends) {
+            const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
+            parts.push(`  - ${e.name} (${e.id})`);
+            habitsForEnd.forEach((h) => parts.push(`    - ${h.name} (${h.id})`));
+          }
+          if (ends.length === 0) {
+            return { success: true, message: `No ends or habits in collection "${collection.name}".` };
+          }
+          return { success: true, message: parts.join("\n") };
+        }
+
         const areaIdsToShow = areaId
           ? (await getAreaById(areaId) ? [areaId] : [])
           : areas.map((a) => a.id);

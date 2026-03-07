@@ -82,19 +82,52 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
-    "list_ends_and_habits_by_area",
+    "list_ends_and_habits",
     {
-      title: "List Ends and Habits by Area",
+      title: "List Ends and Habits",
       description:
-        "Lists ends and habits grouped by area. If areaId is specified, shows only that area. Otherwise shows all areas.",
+        "Lists ends and habits. Filter by areaId OR collectionId (mutually exclusive). Omit both to show all areas.",
       inputSchema: {
-        areaId: z.string().optional().describe("Filter to a specific area. Omit to show all areas."),
+        areaId: z.string().optional().describe("Filter to a specific area. Mutually exclusive with collectionId."),
+        collectionId: z.string().optional().describe("Filter to a specific collection. Mutually exclusive with areaId."),
       },
     },
-    async ({ areaId }) => {
+    async ({ areaId, collectionId }) => {
+      if (areaId && collectionId) {
+        return {
+          content: [{ type: "text", text: "Provide areaId OR collectionId, not both." }],
+          isError: true,
+        };
+      }
+
       const areas = await listAreas();
       const allEnds = await listEnds();
       const allHabits = await listHabits();
+
+      if (collectionId) {
+        const collection = await getCollectionById(collectionId);
+        if (!collection) {
+          return {
+            content: [{ type: "text", text: `Collection with ID ${collectionId} not found.` }],
+            isError: true,
+          };
+        }
+        const ends = allEnds.filter((e) => e.collectionId === collectionId);
+        const parts: string[] = [`## ${collection.name}`];
+        for (const e of ends) {
+          const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
+          parts.push(`  - ${e.name} (${e.id})`);
+          habitsForEnd.forEach((h) => parts.push(`    - ${h.name} (${h.id})`));
+        }
+        if (ends.length === 0) {
+          return {
+            content: [{ type: "text", text: `No ends or habits in collection "${collection.name}".` }],
+          };
+        }
+        return {
+          content: [{ type: "text", text: parts.join("\n") }],
+        };
+      }
 
       const areaIdsToShow = areaId
         ? (await getAreaById(areaId) ? [areaId] : [])
