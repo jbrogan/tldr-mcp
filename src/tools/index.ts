@@ -829,17 +829,43 @@ export function registerTools(server: McpServer): void {
     {
       title: "List Actions",
       description:
-        "Lists tracked actions. Optionally filter by habit or date range.",
+        "Lists tracked actions. Use period (today, yesterday, this_week) or fromDate/toDate. Optionally filter by habit.",
       inputSchema: {
         habitId: z.string().optional().describe("Filter by habit ID"),
-        fromDate: z.string().optional().describe("From date (YYYY-MM-DD)"),
-        toDate: z.string().optional().describe("To date (YYYY-MM-DD)"),
+        period: z
+          .enum(["today", "yesterday", "this_week"])
+          .optional()
+          .describe("Convenience: today, yesterday, or this_week (Mon-Sun)"),
+        fromDate: z.string().optional().describe("From date (YYYY-MM-DD). Ignored if period is set."),
+        toDate: z.string().optional().describe("To date (YYYY-MM-DD). Ignored if period is set."),
       },
     },
-    async ({ habitId, fromDate, toDate }) => {
-      const actions = await listActions({ habitId, fromDate, toDate });
+    async ({ habitId, period, fromDate, toDate }) => {
+      let resolvedFrom = fromDate;
+      let resolvedTo = toDate;
+      if (period) {
+        const now = new Date();
+        const today = now.toISOString().slice(0, 10);
+        const yesterday = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+        if (period === "today") {
+          resolvedFrom = resolvedTo = today;
+        } else if (period === "yesterday") {
+          resolvedFrom = resolvedTo = yesterday;
+        } else if (period === "this_week") {
+          const day = now.getDay();
+          const mondayOffset = day === 0 ? -6 : 1 - day;
+          const monday = new Date(now);
+          monday.setDate(now.getDate() + mondayOffset);
+          resolvedFrom = monday.toISOString().slice(0, 10);
+          const sunday = new Date(monday);
+          sunday.setDate(monday.getDate() + 6);
+          resolvedTo = sunday.toISOString().slice(0, 10);
+        }
+      }
+      const actions = await listActions({ habitId, fromDate: resolvedFrom, toDate: resolvedTo });
       if (actions.length === 0) {
-        return { content: [{ type: "text", text: "No actions found." }] };
+        const periodLabel = period ? ` for ${period.replace("_", " ")}` : "";
+        return { content: [{ type: "text", text: `No actions found${periodLabel}.` }] };
       }
       const lines = await Promise.all(
         actions.map(async (a) => {

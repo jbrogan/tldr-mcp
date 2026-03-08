@@ -19,15 +19,16 @@ const INTENT_SCHEMA = `Respond with ONLY valid JSON, no other text. Use this sch
 
 ROUTING PRIORITY:
 - "Add [end] to [collection]" or "Put [end] in [collection]" or "Move [end] to [collection]" -> ALWAYS use intent "update_end" with id = end id from Ends list (match by name), collectionId = collection id from Collections list (match by name). Do NOT use create_collection or create_end.
+- When user records an action and says "with [name]" or "with [name] and [name]" (e.g. "I had dinner with Patrick and Andrew", "I did X with Jennifer") -> create_action MUST include withPersonIds: [person ids] for each named person. Match each name to Persons list by firstName. REQUIRED.
+- When user records an action and says "for [name]" (e.g. "I did X for mom", "helped Alex with homework") -> create_action MUST include forPersonIds: [person ids]. Match name to Persons list. REQUIRED.
 - If the user asks about teams for a specific person (e.g. "what teams is [NAME] in?", "what teams is [NAME] a member of?", "list the teams for [NAME]", "teams for [NAME]", "which teams does [NAME] belong to?") -> ALWAYS use intent "list_teams" with personId = that person's id from Persons list. You MUST include personId (match by name). Do NOT use organizationId. Do NOT use get_person or list_people. Use __self__ ONLY when the user says me/I/my/myself - never when a different person's name is given.
 
 For create_action: { "habitId": "<id>", "completedAt": "YYYY-MM-DD", "actualDurationMinutes": number (optional), "notes": string (optional), "withPersonIds": ["<id>"] (optional), "forPersonIds": ["<id>"] (optional) }
-- Match the user's habit reference (e.g. "gym", "guitar") to the closest habit by name. Use the habit's id.
+- Match the user's habit reference (e.g. "gym", "guitar", "dinner", "family dinner") to the closest habit by name. Use the habit's id.
 - "today" = ${new Date().toISOString().slice(0, 10)}, "yesterday" = previous day
 - Extract duration in minutes if mentioned (e.g. "60 minutes" -> 60)
-- withPersonIds = did it WITH (shared experience, e.g. "date night with Jennifer", "family dinner with the kids")
-- forPersonIds = did it FOR (acts of service, e.g. "picked up medicine for mom", "helped Alex with homework")
-- Match person by name from Persons list
+- REQUIRED when user says "with [names]": include withPersonIds with each person's id from Persons list (match by firstName, e.g. "Patrick" -> Patrick Brogan's id, "Andrew" -> Andrew Brogan's id). "I had dinner with Patrick and Andrew" -> withPersonIds: [Patrick's id, Andrew's id].
+- REQUIRED when user says "for [name]": include forPersonIds with that person's id from Persons list.
 
 For create_end: { "name": string, "areaId": string (optional), "collectionId": string (optional) }
 - Extract the aspiration/goal from the user's text
@@ -105,9 +106,10 @@ For list_people: { "organizationId": "<id>" (optional), "teamId": "<id>" (option
 - Do NOT use for "what teams is X in?" - use list_teams with personId instead.
 - Match org or team by name. Map relationship words to relationshipType.
 
-For list_actions: { "habitId": "<id>" (optional), "fromDate": "YYYY-MM-DD" (optional), "toDate": "YYYY-MM-DD" (optional) }
-- Use when user wants to see tracked actions/completions (e.g. "show my actions", "what did I do", "gym completions this month")
-- Match habit by name. "this month" = first and last day of current month. "this week" = Mon-Sun of current week.
+For list_actions: { "habitId": "<id>" (optional), "period": "today"|"yesterday"|"this_week" (optional), "fromDate": "YYYY-MM-DD" (optional), "toDate": "YYYY-MM-DD" (optional) }
+- Use when user wants to see tracked actions (e.g. "show my actions today", "what did I do yesterday", "actions this week")
+- Prefer period over fromDate/toDate: "today" -> period: "today", "yesterday" -> period: "yesterday", "this week" -> period: "this_week"
+- For custom ranges use fromDate and toDate. "this month" = first and last day of current month.
 
 For list_ends_and_habits: { "areaId": "<id>" (optional), "collectionId": "<id>" (optional) }
 - Use when user wants ends and habits (e.g. "show my ends and habits", "ends and habits by area", "ends in Droplight Financial collection")
@@ -651,12 +653,34 @@ JSON response:`;
       }
 
       case "list_actions": {
-        const { habitId, fromDate, toDate } = params as {
+        const { habitId, period, fromDate, toDate } = params as {
           habitId?: string;
+          period?: string;
           fromDate?: string;
           toDate?: string;
         };
-        const actions = await listActions({ habitId, fromDate, toDate });
+        let resolvedFrom = fromDate;
+        let resolvedTo = toDate;
+        if (period === "today" || period === "yesterday" || period === "this_week") {
+          const now = new Date();
+          const today = now.toISOString().slice(0, 10);
+          const yesterday = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+          if (period === "today") {
+            resolvedFrom = resolvedTo = today;
+          } else if (period === "yesterday") {
+            resolvedFrom = resolvedTo = yesterday;
+          } else {
+            const day = now.getDay();
+            const mondayOffset = day === 0 ? -6 : 1 - day;
+            const monday = new Date(now);
+            monday.setDate(now.getDate() + mondayOffset);
+            resolvedFrom = monday.toISOString().slice(0, 10);
+            const sunday = new Date(monday);
+            sunday.setDate(monday.getDate() + 6);
+            resolvedTo = sunday.toISOString().slice(0, 10);
+          }
+        }
+        const actions = await listActions({ habitId, fromDate: resolvedFrom, toDate: resolvedTo });
         if (actions.length === 0) {
           return { success: true, message: "No actions found." };
         }

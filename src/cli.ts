@@ -440,12 +440,17 @@ program
   .command("list-actions")
   .description("List actions, optionally filtered")
   .option("-h, --habitId <id>", "Filter by habit ID")
+  .option("-p, --period <period>", "today, yesterday, or this-week")
   .option("-f, --from <date>", "From date (YYYY-MM-DD)")
   .option("-t, --to <date>", "To date (YYYY-MM-DD)")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = {};
       if (opts.habitId) args.habitId = opts.habitId;
+      if (opts.period) {
+        const p = String(opts.period).toLowerCase().replace(/-/g, "_");
+        if (["today", "yesterday", "this_week"].includes(p)) args.period = p;
+      }
       if (opts.from) args.fromDate = opts.from;
       if (opts.to) args.toDate = opts.to;
       const result = await client.callTool({
