@@ -17,7 +17,11 @@ async function ensureDataDir(): Promise<void> {
 
 function normalizePerson(p: Record<string, unknown>): PersonEntity {
   const { organizationIds: _omit, ...rest } = p;
-  return { ...rest, teamIds: Array.isArray(p.teamIds) ? p.teamIds : [] } as PersonEntity;
+  return {
+    ...rest,
+    teamIds: Array.isArray(p.teamIds) ? p.teamIds : [],
+    userId: typeof p.userId === "string" ? p.userId : undefined,
+  } as PersonEntity;
 }
 
 async function loadPersons(): Promise<PersonEntity[]> {

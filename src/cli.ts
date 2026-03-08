@@ -590,6 +590,19 @@ program
   });
 
 program
+  .command("list-users")
+  .description("List users (account holders). For testing Person vs User linkage.")
+  .action(async () => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "list_users",
+        arguments: {},
+      });
+      printToolResult(result);
+    });
+  });
+
+program
   .command("list-people")
   .description("List people, optionally by organization, team, or relationship type")
   .option("-o, --organizationId <id>", "Filter by organization ID")

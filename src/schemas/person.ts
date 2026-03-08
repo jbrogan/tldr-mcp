@@ -27,6 +27,7 @@ export const PersonSchema = z.object({
   notes: z.string().optional(),
   teamIds: z.array(z.string()).optional().default([]),
   relationshipType: RelationshipTypeSchema.optional(),
+  userId: z.string().optional().describe("Link to User when this Person has an account"),
 });
 
 export type Person = z.infer<typeof PersonSchema>;

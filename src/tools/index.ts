@@ -56,6 +56,7 @@ import {
   deleteActionsByHabitId,
   listActions,
 } from "../store/actions.js";
+import { listUsers } from "../store/users.js";
 import { interpretAndExecute } from "../services/naturalLanguage.js";
 
 export function registerTools(server: McpServer): void {
@@ -894,9 +895,10 @@ export function registerTools(server: McpServer): void {
           .enum(["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
           .optional()
           .describe("Type of relationship (e.g. spouse, child, friend, colleague)"),
+        userId: z.string().optional().describe("Link to User when this Person has an account"),
       },
     },
-    async ({ firstName, lastName, email, phone, title, notes, teamIds, relationshipType }) => {
+    async ({ firstName, lastName, email, phone, title, notes, teamIds, relationshipType, userId }) => {
       const person = await createPerson({
         firstName,
         lastName,
@@ -906,6 +908,7 @@ export function registerTools(server: McpServer): void {
         notes,
         teamIds: teamIds ?? [],
         relationshipType: relationshipType as RelationshipType | undefined,
+        userId,
       });
 
       const summary = [
@@ -1005,6 +1008,7 @@ export function registerTools(server: McpServer): void {
           const parts = [
             `${p.firstName} ${p.lastName} (${p.id})`,
             `  Email: ${p.email}`,
+            p.userId && `  User ID: ${p.userId}`,
             p.phone && `  Phone: ${p.phone}`,
             p.title && `  Title: ${p.title}`,
             p.relationshipType && `  Relationship: ${p.relationshipType}`,
@@ -1020,6 +1024,33 @@ export function registerTools(server: McpServer): void {
           {
             type: "text",
             text: `Found ${people.length} person(s):\n\n${lines.join("\n\n")}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "list_users",
+    {
+      title: "List Users",
+      description:
+        "Lists users (account holders). For testing Person vs User linkage: Person.id is the representation; User.id is the account. When Person.userId is set, that Person is linked to this User.",
+      inputSchema: {},
+    },
+    async () => {
+      const users = await listUsers();
+      if (users.length === 0) {
+        return {
+          content: [{ type: "text", text: "No users found." }],
+        };
+      }
+      const lines = users.map((u) => `  ${u.displayName} (${u.id}) - ${u.email}`);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Found ${users.length} user(s):\n\n${lines.join("\n")}`,
           },
         ],
       };
@@ -1046,9 +1077,10 @@ export function registerTools(server: McpServer): void {
           .enum(["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
           .optional()
           .describe("Relationship type"),
+        userId: z.string().optional().describe("Link to User when this Person has an account"),
       },
     },
-    async ({ id, firstName, lastName, email, phone, title, notes, teamIds, teamIdsToAdd, relationshipType }) => {
+    async ({ id, firstName, lastName, email, phone, title, notes, teamIds, teamIdsToAdd, relationshipType, userId }) => {
       const existing = await getPersonById(id);
       if (!existing) {
         return {
@@ -1066,6 +1098,7 @@ export function registerTools(server: McpServer): void {
       if (teamIds !== undefined) updates.teamIds = teamIds;
       if (teamIdsToAdd !== undefined) updates.teamIdsToAdd = teamIdsToAdd;
       if (relationshipType !== undefined) updates.relationshipType = relationshipType;
+      if (userId !== undefined) updates.userId = userId;
       const person = await updatePerson(id, updates as Parameters<typeof updatePerson>[1]);
       if (!person) {
         return {
