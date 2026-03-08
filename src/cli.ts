@@ -475,6 +475,102 @@ program
     });
   });
 
+program
+  .command("create-task")
+  .description("Create an ad-hoc task")
+  .requiredOption("-n, --name <name>", "Task name")
+  .option("-e, --endId <id>", "End this task supports")
+  .option("-a, --areaId <id>", "Area this task belongs to")
+  .option("-w, --with <ids>", "Person IDs (with) - comma-separated")
+  .option("-F, --for <ids>", "Person IDs (for) - comma-separated")
+  .option("-d, --dueDate <date>", "Due date (YYYY-MM-DD)")
+  .option("--notes <notes>", "Notes")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const args: Record<string, unknown> = { name: opts.name };
+      if (opts.endId) args.endId = opts.endId;
+      if (opts.areaId) args.areaId = opts.areaId;
+      if (opts.with) args.withPersonIds = String(opts.with).split(",").map((s) => s.trim()).filter(Boolean);
+      if (opts.for) args.forPersonIds = String(opts.for).split(",").map((s) => s.trim()).filter(Boolean);
+      if (opts.dueDate) args.dueDate = opts.dueDate;
+      if (opts.notes) args.notes = opts.notes;
+      const result = await client.callTool({
+        name: "create_task",
+        arguments: args,
+      });
+      printToolResult(result);
+    });
+  });
+
+program
+  .command("list-tasks")
+  .description("List tasks, optionally filtered")
+  .option("-e, --endId <id>", "Filter by end ID")
+  .option("-a, --areaId <id>", "Filter by area ID")
+  .option("-c, --completed", "Completed tasks only")
+  .option("-o, --open", "Open tasks only")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const args: Record<string, unknown> = {};
+      if (opts.endId) args.endId = opts.endId;
+      if (opts.areaId) args.areaId = opts.areaId;
+      if (opts.completed) args.completed = true;
+      if (opts.open) args.completed = false;
+      const result = await client.callTool({
+        name: "list_tasks",
+        arguments: args,
+      });
+      printToolResult(result);
+    });
+  });
+
+program
+  .command("update-task")
+  .description("Update a task (e.g. complete it)")
+  .requiredOption("-i, --id <id>", "Task ID to update")
+  .option("-n, --name <name>", "Task name")
+  .option("-e, --endId <id>", "End ID")
+  .option("-a, --areaId <id>", "Area ID")
+  .option("-w, --with <ids>", "Person IDs (with) - comma-separated")
+  .option("-F, --for <ids>", "Person IDs (for) - comma-separated")
+  .option("-m, --actualDurationMinutes <min>", "Time spent when completed (minutes)")
+  .option("-d, --dueDate <date>", "Due date (YYYY-MM-DD)")
+  .option("-C, --complete", "Mark as completed (sets completedAt to now)")
+  .option("--notes <notes>", "Notes")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const args: Record<string, unknown> = { id: opts.id };
+      if (opts.name) args.name = opts.name;
+      if (opts.endId !== undefined) args.endId = opts.endId;
+      if (opts.areaId !== undefined) args.areaId = opts.areaId;
+      if (opts.with !== undefined) args.withPersonIds = String(opts.with).split(",").map((s) => s.trim()).filter(Boolean);
+      if (opts.for !== undefined) args.forPersonIds = String(opts.for).split(",").map((s) => s.trim()).filter(Boolean);
+      if (opts.actualDurationMinutes != null) args.actualDurationMinutes = parseInt(String(opts.actualDurationMinutes), 10);
+      if (opts.dueDate !== undefined) args.dueDate = opts.dueDate;
+      if (opts.complete) args.completedAt = new Date().toISOString();
+      if (opts.notes !== undefined) args.notes = opts.notes;
+      const result = await client.callTool({
+        name: "update_task",
+        arguments: args,
+      });
+      printToolResult(result);
+    });
+  });
+
+program
+  .command("delete-task")
+  .description("Delete a task by ID")
+  .requiredOption("-i, --id <id>", "Task ID to delete")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "delete_task",
+        arguments: { id: opts.id },
+      });
+      printToolResult(result);
+    });
+  });
+
 function printToolResult(result: unknown): void {
   if (typeof result === "object" && result !== null && "content" in result && Array.isArray((result as { content: unknown[] }).content)) {
     for (const block of (result as { content: { type: string; text?: string }[] }).content) {

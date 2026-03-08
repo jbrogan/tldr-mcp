@@ -6,6 +6,7 @@ import { listOrganizations } from "../store/organizations.js";
 import { listTeams, createTeam, getTeamById } from "../store/teams.js";
 import { listCollections, createCollection, getCollectionById } from "../store/collections.js";
 import { createAction, listActions } from "../store/actions.js";
+import { createTask, listTasks, updateTask, getTaskById } from "../store/tasks.js";
 import type { RelationshipType } from "../schemas/person.js";
 import { createPerson, listPersons, updatePerson, getPersonById, getSelfPerson } from "../store/persons.js";
 
@@ -13,7 +14,7 @@ const SELF_PLACEHOLDER = "__self__";
 
 const INTENT_SCHEMA = `Respond with ONLY valid JSON, no other text. Use this schema:
 {
-  "intent": "create_action" | "create_end" | "create_habit" | "create_team" | "create_collection" | "create_person" | "update_person" | "update_end" | "suggest_habits" | "list_areas" | "list_ends" | "list_habits" | "list_organizations" | "list_teams" | "list_collections" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "unknown",
+  "intent": "create_action" | "create_end" | "create_habit" | "create_team" | "create_collection" | "create_person" | "update_person" | "update_end" | "create_task" | "list_tasks" | "update_task" | "suggest_habits" | "list_areas" | "list_ends" | "list_habits" | "list_organizations" | "list_teams" | "list_collections" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "unknown",
   "params": { ... }
 }
 
@@ -21,6 +22,8 @@ ROUTING PRIORITY:
 - "Add [end] to [collection]" or "Put [end] in [collection]" or "Move [end] to [collection]" -> ALWAYS use intent "update_end" with id = end id from Ends list (match by name), collectionId = collection id from Collections list (match by name). Do NOT use create_collection or create_end.
 - When user records an action and says "with [name]" or "with [name] and [name]" (e.g. "I had dinner with Patrick and Andrew", "I did X with Jennifer") -> create_action MUST include withPersonIds: [person ids] for each named person. Match each name to Persons list by firstName. REQUIRED.
 - When user records an action and says "for [name]" (e.g. "I did X for mom", "helped Alex with homework") -> create_action MUST include forPersonIds: [person ids]. Match name to Persons list. REQUIRED.
+- When user creates a task involving a person (forPersonIds or withPersonIds): if that person has relationshipType spouse/child/parent/sibling -> create_task MUST include areaId = Family area id from Areas list. Infer area from task topic when possible.
+- When user creates a task with a reason/purpose (e.g. "to discuss X", "about Y", "re: Z"): create_task name MUST include that reason. "call Alex to discuss security deposit" -> name: "call Alex to discuss security deposit", NOT "call Alex".
 - If the user asks about teams for a specific person (e.g. "what teams is [NAME] in?", "what teams is [NAME] a member of?", "list the teams for [NAME]", "teams for [NAME]", "which teams does [NAME] belong to?") -> ALWAYS use intent "list_teams" with personId = that person's id from Persons list. You MUST include personId (match by name). Do NOT use organizationId. Do NOT use get_person or list_people. Use __self__ ONLY when the user says me/I/my/myself - never when a different person's name is given.
 
 For create_action: { "habitId": "<id>", "completedAt": "YYYY-MM-DD", "actualDurationMinutes": number (optional), "notes": string (optional), "withPersonIds": ["<id>"] (optional), "forPersonIds": ["<id>"] (optional) }
@@ -111,6 +114,20 @@ For list_actions: { "habitId": "<id>" (optional), "period": "today"|"yesterday"|
 - Prefer period over fromDate/toDate: "today" -> period: "today", "yesterday" -> period: "yesterday", "this week" -> period: "this_week"
 - For custom ranges use fromDate and toDate. "this month" = first and last day of current month.
 
+For create_task: { "name": string, "endId": "<id>" (optional), "areaId": "<id>" (optional), "withPersonIds": ["<id>"] (optional), "forPersonIds": ["<id>"] (optional), "dueDate": "YYYY-MM-DD" (optional), "notes": string (optional) }
+- Use when user wants to add an ad-hoc task (e.g. "add task call mom", "I need to get oil changed", "remind me to buy birthday gift for Alex")
+- name: PRESERVE the full task description including reason/purpose. "call Alex today to discuss security deposit issue" -> name: "call Alex to discuss security deposit issue" (include "to discuss X", "about X", "re: X"). Do NOT condense to "call Alex".
+- Match end or area by name from context. For "with [names]" or "for [name]" include withPersonIds/forPersonIds from Persons list.
+- INFER areaId when task topic suggests it: task involves family member (spouse, child, parent, sibling from Persons) -> areaId: Family; health/medical -> Health; work/career -> Career; finances -> Finance. Check Persons relationshipType and Areas list.
+
+For list_tasks: { "endId": "<id>" (optional), "areaId": "<id>" (optional), "completed": boolean (optional) }
+- Use when user wants to see tasks (e.g. "show my tasks", "open tasks", "tasks for [end]", "completed tasks")
+- completed: true = completed only, false = open only
+
+For update_task: { "id": "<id>", "completedAt": "YYYY-MM-DD" or ISO string (optional), "actualDurationMinutes": number (optional), "name": string (optional), "endId": string (optional), "areaId": string (optional), "withPersonIds": ["<id>"] (optional), "forPersonIds": ["<id>"] (optional), "notes": string (optional) }
+- Use when user wants to complete a task (e.g. "I finished call mom", "mark task X done") or update task details
+- completedAt = when completed. Use today's date if user says "completed" or "done". Match task by name from Tasks list.
+
 For list_ends_and_habits: { "areaId": "<id>" (optional), "collectionId": "<id>" (optional) }
 - Use when user wants ends and habits (e.g. "show my ends and habits", "ends and habits by area", "ends in Droplight Financial collection")
 - Provide areaId OR collectionId, not both. Omit both to show all areas.
@@ -173,6 +190,7 @@ export async function interpretAndExecute(text: string): Promise<NLResult> {
   const areas = await listAreas();
   const organizations = await listOrganizations();
   const teams = await listTeams();
+  const tasks = await listTasks();
 
   const context = `
 Habits (id, name):
@@ -192,6 +210,9 @@ ${teams.map((t) => `  ${t.id}: ${t.name} (org: ${t.organizationId})`).join("\n")
 
 Collections (id, name, ownerType, ownerId, collectionType):
 ${collections.map((c) => `  ${c.id}: ${c.name} (${c.ownerType}: ${c.ownerId})${c.collectionType ? ` [${c.collectionType}]` : ""}`).join("\n") || "  (none)"}
+
+Tasks (id, name, endId, areaId, completedAt):
+${tasks.map((t) => `  ${t.id}: ${t.name}${t.endId ? ` end:${t.endId}` : ""}${t.areaId ? ` area:${t.areaId}` : ""}${t.completedAt ? " [completed]" : " [open]"}`).join("\n") || "  (none)"}
 
 Persons (id, firstName, lastName, email, relationshipType, teamIds):
 ${(await listPersons()).map((p) => `  ${p.id}: ${p.firstName} ${p.lastName}, ${p.email}${p.relationshipType ? ` (${p.relationshipType})` : ""}, teams: [${(p.teamIds ?? []).join(", ")}]`).join("\n") || "  (none)"}
@@ -697,6 +718,118 @@ JSON response:`;
         };
       }
 
+      case "create_task": {
+        let { name, endId, areaId, withPersonIds, forPersonIds, dueDate, notes } = params as {
+          name?: string;
+          endId?: string;
+          areaId?: string;
+          withPersonIds?: string[];
+          forPersonIds?: string[];
+          dueDate?: string;
+          notes?: string;
+        };
+        if (!name) {
+          return { success: false, message: "Missing name for create_task." };
+        }
+        // Resolve areaId/endId: if LLM passed name instead of UUID, look up by name
+        const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (areaId && !uuidLike.test(areaId)) {
+          const areas = await listAreas();
+          const match = areas.find((a) => a.name.toLowerCase() === areaId!.toLowerCase());
+          if (match) areaId = match.id;
+        }
+        if (endId && !uuidLike.test(endId)) {
+          const allEnds = await listEnds();
+          const match = allEnds.find((e) => e.name.toLowerCase() === endId!.toLowerCase());
+          if (match) endId = match.id;
+        }
+        // Infer areaId when task involves family member but LLM didn't set it
+        if (!areaId && (forPersonIds?.length || withPersonIds?.length)) {
+          const personIds = [...(forPersonIds ?? []), ...(withPersonIds ?? [])];
+          const familyTypes = new Set(["spouse", "child", "parent", "sibling"]);
+          for (const pid of personIds) {
+            const person = await getPersonById(pid);
+            if (person?.relationshipType && familyTypes.has(person.relationshipType)) {
+              const areas = await listAreas();
+              const familyArea = areas.find((a) => a.name.toLowerCase() === "family");
+              if (familyArea) {
+                areaId = familyArea.id;
+                break;
+              }
+            }
+          }
+        }
+        const task = await createTask({
+          name,
+          endId,
+          areaId,
+          withPersonIds,
+          forPersonIds,
+          dueDate,
+          notes,
+        });
+        return {
+          success: true,
+          message: `Created task: ${task.name} (${task.id})${endId ? ` for end` : ""}${areaId ? ` in area` : ""}`,
+        };
+      }
+
+      case "list_tasks": {
+        const { endId, areaId, completed } = params as {
+          endId?: string;
+          areaId?: string;
+          completed?: boolean;
+        };
+        const tasks = await listTasks({ endId, areaId, completed });
+        if (tasks.length === 0) {
+          return { success: true, message: "No tasks found." };
+        }
+        const lines = tasks.map((t) => {
+          const status = t.completedAt ? `✓ ${t.completedAt.slice(0, 10)}` : "open";
+          return `  ${t.name} (${t.id}) [${status}]${t.dueDate ? ` due:${t.dueDate}` : ""}`;
+        });
+        return {
+          success: true,
+          message: `Tasks:\n\n${lines.join("\n")}`,
+        };
+      }
+
+      case "update_task": {
+        const { id, completedAt, actualDurationMinutes, name, endId, areaId, withPersonIds, forPersonIds, notes } = params as {
+          id?: string;
+          completedAt?: string;
+          actualDurationMinutes?: number;
+          name?: string;
+          endId?: string;
+          areaId?: string;
+          withPersonIds?: string[];
+          forPersonIds?: string[];
+          notes?: string;
+        };
+        if (!id) {
+          return { success: false, message: "Missing id for update_task. Match task by name from Tasks list." };
+        }
+        const updates: Record<string, unknown> = {};
+        if (name != null) updates.name = name;
+        if (endId !== undefined) updates.endId = endId;
+        if (areaId !== undefined) updates.areaId = areaId;
+        if (withPersonIds !== undefined) updates.withPersonIds = withPersonIds;
+        if (forPersonIds !== undefined) updates.forPersonIds = forPersonIds;
+        if (actualDurationMinutes !== undefined) updates.actualDurationMinutes = actualDurationMinutes;
+        if (completedAt !== undefined) {
+          updates.completedAt = completedAt.length === 10 ? `${completedAt}T12:00:00.000Z` : completedAt;
+        }
+        if (notes !== undefined) updates.notes = notes;
+        const task = await updateTask(id, updates as Parameters<typeof updateTask>[1]);
+        if (!task) {
+          return { success: false, message: `Task with ID ${id} not found.` };
+        }
+        return {
+          success: true,
+          message: task.completedAt ? `Completed task: ${task.name}` : `Updated task: ${task.name}`,
+        };
+      }
+
       case "list_ends_and_habits": {
         const { areaId, collectionId } = params as { areaId?: string; collectionId?: string };
         if (areaId && collectionId) {
@@ -810,7 +943,7 @@ JSON response:`;
       default:
         return {
           success: false,
-          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_team, create_collection, create_person, update_person, update_end, suggest_habits, list_areas, list_ends, list_habits, list_organizations, list_teams, list_collections, list_people, list_actions, list_ends_and_habits, get_person.`,
+          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_team, create_collection, create_person, update_person, update_end, create_task, list_tasks, update_task, suggest_habits, list_areas, list_ends, list_habits, list_organizations, list_teams, list_collections, list_people, list_actions, list_ends_and_habits, get_person.`,
         };
     }
   } catch (err) {

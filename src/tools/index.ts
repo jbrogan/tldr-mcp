@@ -56,6 +56,13 @@ import {
   deleteActionsByHabitId,
   listActions,
 } from "../store/actions.js";
+import {
+  createTask,
+  deleteTask,
+  getTaskById,
+  listTasks,
+  updateTask,
+} from "../store/tasks.js";
 import { listUsers } from "../store/users.js";
 import { interpretAndExecute } from "../services/naturalLanguage.js";
 
@@ -913,6 +920,159 @@ export function registerTools(server: McpServer): void {
           {
             type: "text",
             text: `Deleted action (${deleted.id})`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "create_task",
+    {
+      title: "Create Task",
+      description:
+        "Creates an ad-hoc task (e.g., Call mom this week, Get oil changed). Use withPersonIds/forPersonIds for reflection.",
+      inputSchema: {
+        name: z.string().min(1).describe("Task name"),
+        endId: z.string().optional().describe("End this task supports"),
+        areaId: z.string().optional().describe("Area this task belongs to"),
+        withPersonIds: z.array(z.string()).optional().describe("Person IDs - did it with"),
+        forPersonIds: z.array(z.string()).optional().describe("Person IDs - did it for"),
+        dueDate: z.string().optional().describe("Due date (YYYY-MM-DD)"),
+        notes: z.string().optional(),
+      },
+    },
+    async ({ name, endId, areaId, withPersonIds, forPersonIds, dueDate, notes }) => {
+      const task = await createTask({
+        name,
+        endId,
+        areaId,
+        withPersonIds,
+        forPersonIds,
+        dueDate,
+        notes,
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Created task: ${task.name} (${task.id})\n${endId ? `End: ${endId}\n` : ""}${areaId ? `Area: ${areaId}\n` : ""}${dueDate ? `Due: ${dueDate}\n` : ""}Created at: ${task.createdAt}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "list_tasks",
+    {
+      title: "List Tasks",
+      description: "Lists tasks. Filter by end, area, or completion status.",
+      inputSchema: {
+        endId: z.string().optional().describe("Filter by end ID"),
+        areaId: z.string().optional().describe("Filter by area ID"),
+        completed: z.boolean().optional().describe("Filter: true = completed only, false = open only"),
+      },
+    },
+    async ({ endId, areaId, completed }) => {
+      const tasks = await listTasks({ endId, areaId, completed });
+      if (tasks.length === 0) {
+        return { content: [{ type: "text", text: "No tasks found." }] };
+      }
+      const lines = tasks.map((t) => {
+        const status = t.completedAt ? `✓ ${t.completedAt.slice(0, 10)}` : "open";
+        const parts = [
+          `  ${t.name} (${t.id}) [${status}]`,
+          t.endId ? `end:${t.endId}` : null,
+          t.areaId ? `area:${t.areaId}` : null,
+          t.dueDate ? `due:${t.dueDate}` : null,
+          t.actualDurationMinutes != null ? `${t.actualDurationMinutes} min` : null,
+          t.withPersonIds?.length ? `with: ${t.withPersonIds.join(", ")}` : null,
+          t.forPersonIds?.length ? `for: ${t.forPersonIds.join(", ")}` : null,
+        ].filter(Boolean);
+        return parts.join(" | ");
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Found ${tasks.length} task(s):\n\n${lines.join("\n")}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "update_task",
+    {
+      title: "Update Task",
+      description: "Updates a task. Use to complete (completedAt, actualDurationMinutes), change details, or add with/for.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the task to update"),
+        name: z.string().min(1).optional().describe("Task name"),
+        endId: z.string().optional().describe("End ID"),
+        areaId: z.string().optional().describe("Area ID"),
+        withPersonIds: z.array(z.string()).optional().describe("Person IDs - did it with"),
+        forPersonIds: z.array(z.string()).optional().describe("Person IDs - did it for"),
+        actualDurationMinutes: z.number().int().positive().optional().describe("Time spent when completed (minutes)"),
+        dueDate: z.string().optional().describe("Due date (YYYY-MM-DD)"),
+        completedAt: z.string().optional().describe("When completed (ISO). Set to mark complete."),
+        notes: z.string().optional(),
+      },
+    },
+    async ({ id, name, endId, areaId, withPersonIds, forPersonIds, actualDurationMinutes, dueDate, completedAt, notes }) => {
+      const existing = await getTaskById(id);
+      if (!existing) {
+        return {
+          content: [{ type: "text", text: `Task with ID ${id} not found.` }],
+          isError: true,
+        };
+      }
+      const updates: Record<string, unknown> = {};
+      if (name != null) updates.name = name;
+      if (endId !== undefined) updates.endId = endId;
+      if (areaId !== undefined) updates.areaId = areaId;
+      if (withPersonIds !== undefined) updates.withPersonIds = withPersonIds;
+      if (forPersonIds !== undefined) updates.forPersonIds = forPersonIds;
+      if (actualDurationMinutes !== undefined) updates.actualDurationMinutes = actualDurationMinutes;
+      if (dueDate !== undefined) updates.dueDate = dueDate;
+      if (completedAt !== undefined) updates.completedAt = completedAt;
+      if (notes !== undefined) updates.notes = notes;
+      const task = await updateTask(id, updates as Parameters<typeof updateTask>[1]);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Updated task: ${task?.name} (${id})${task?.completedAt ? " - completed" : ""}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "delete_task",
+    {
+      title: "Delete Task",
+      description: "Deletes a task by ID.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the task to delete"),
+      },
+    },
+    async ({ id }) => {
+      const deleted = await deleteTask(id);
+      if (!deleted) {
+        return {
+          content: [{ type: "text", text: `Task with ID ${id} not found.` }],
+          isError: true,
+        };
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Deleted task: ${deleted.name} (${id})`,
           },
         ],
       };
