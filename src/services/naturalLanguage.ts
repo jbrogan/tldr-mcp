@@ -21,10 +21,13 @@ ROUTING PRIORITY:
 - "Add [end] to [collection]" or "Put [end] in [collection]" or "Move [end] to [collection]" -> ALWAYS use intent "update_end" with id = end id from Ends list (match by name), collectionId = collection id from Collections list (match by name). Do NOT use create_collection or create_end.
 - If the user asks about teams for a specific person (e.g. "what teams is [NAME] in?", "what teams is [NAME] a member of?", "list the teams for [NAME]", "teams for [NAME]", "which teams does [NAME] belong to?") -> ALWAYS use intent "list_teams" with personId = that person's id from Persons list. You MUST include personId (match by name). Do NOT use organizationId. Do NOT use get_person or list_people. Use __self__ ONLY when the user says me/I/my/myself - never when a different person's name is given.
 
-For create_action: { "habitId": "<id>", "completedAt": "YYYY-MM-DD", "actualDurationMinutes": number (optional), "notes": string (optional) }
+For create_action: { "habitId": "<id>", "completedAt": "YYYY-MM-DD", "actualDurationMinutes": number (optional), "notes": string (optional), "withPersonIds": ["<id>"] (optional), "forPersonIds": ["<id>"] (optional) }
 - Match the user's habit reference (e.g. "gym", "guitar") to the closest habit by name. Use the habit's id.
 - "today" = ${new Date().toISOString().slice(0, 10)}, "yesterday" = previous day
 - Extract duration in minutes if mentioned (e.g. "60 minutes" -> 60)
+- withPersonIds = did it WITH (shared experience, e.g. "date night with Jennifer", "family dinner with the kids")
+- forPersonIds = did it FOR (acts of service, e.g. "picked up medicine for mom", "helped Alex with homework")
+- Match person by name from Persons list
 
 For create_end: { "name": string, "areaId": string (optional), "collectionId": string (optional) }
 - Extract the aspiration/goal from the user's text
@@ -244,11 +247,13 @@ JSON response:`;
   try {
     switch (intent) {
       case "create_action": {
-        const { habitId, completedAt, actualDurationMinutes, notes } = params as {
+        const { habitId, completedAt, actualDurationMinutes, notes, withPersonIds, forPersonIds } = params as {
           habitId?: string;
           completedAt?: string;
           actualDurationMinutes?: number;
           notes?: string;
+          withPersonIds?: string[];
+          forPersonIds?: string[];
         };
         if (!habitId || !completedAt) {
           return { success: false, message: "Missing habitId or completedAt for create_action" };
@@ -260,11 +265,16 @@ JSON response:`;
           completedAt: completedAtISO,
           actualDurationMinutes,
           notes,
+          withPersonIds,
+          forPersonIds,
         });
         const habit = await getHabitById(habitId);
+        const extras: string[] = [];
+        if (withPersonIds?.length) extras.push(`with ${withPersonIds.length} person(s)`);
+        if (forPersonIds?.length) extras.push(`for ${forPersonIds.length} person(s)`);
         return {
           success: true,
-          message: `Recorded: ${habit?.name ?? habitId} on ${completedAt.slice(0, 10)}${actualDurationMinutes != null ? ` (${actualDurationMinutes} min)` : ""}`,
+          message: `Recorded: ${habit?.name ?? habitId} on ${completedAt.slice(0, 10)}${actualDurationMinutes != null ? ` (${actualDurationMinutes} min)` : ""}${extras.length ? ` ${extras.join(", ")}` : ""}`,
         };
       }
 

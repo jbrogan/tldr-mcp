@@ -414,6 +414,8 @@ program
   .requiredOption("-d, --date <date>", "Date completed (YYYY-MM-DD)")
   .option("-m, --actualDurationMinutes <min>", "Actual time spent in minutes")
   .option("-n, --notes <notes>", "Optional notes")
+  .option("-w, --with <ids>", "Person IDs (with) - comma-separated")
+  .option("-F, --for <ids>", "Person IDs (for) - comma-separated")
   .action(async (opts) => {
     await withClient(async (client) => {
       const completedAt = opts.date.includes("T") ? opts.date : `${opts.date}T12:00:00.000Z`;
@@ -424,6 +426,8 @@ program
       const mins = opts.actualDurationMinutes != null ? parseInt(String(opts.actualDurationMinutes), 10) : NaN;
       if (!isNaN(mins)) args.actualDurationMinutes = mins;
       if (opts.notes) args.notes = opts.notes;
+      if (opts.with) args.withPersonIds = String(opts.with).split(",").map((s) => s.trim()).filter(Boolean);
+      if (opts.for) args.forPersonIds = String(opts.for).split(",").map((s) => s.trim()).filter(Boolean);
       const result = await client.callTool({
         name: "create_action",
         arguments: args,

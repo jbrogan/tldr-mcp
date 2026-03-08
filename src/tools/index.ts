@@ -790,22 +790,34 @@ export function registerTools(server: McpServer): void {
     {
       title: "Create Action",
       description:
-        "Records a completed habit action (e.g., practiced guitar on Feb 24).",
+        "Records a completed habit action (e.g., practiced guitar on Feb 24). Use withPersonIds for shared experience, forPersonIds for acts of service.",
       inputSchema: {
         habitId: z.string().min(1).describe("ID of the habit"),
         completedAt: z.string().describe("ISO date when completed (e.g. 2026-02-24)"),
         actualDurationMinutes: z.number().int().positive().optional().describe("Actual time spent in minutes"),
         notes: z.string().optional(),
+        withPersonIds: z.array(z.string()).optional().describe("Person IDs - did it with (shared experience)"),
+        forPersonIds: z.array(z.string()).optional().describe("Person IDs - did it for (acts of service)"),
       },
     },
-    async ({ habitId, completedAt, actualDurationMinutes, notes }) => {
-      const action = await createAction({ habitId, completedAt, actualDurationMinutes, notes });
+    async ({ habitId, completedAt, actualDurationMinutes, notes, withPersonIds, forPersonIds }) => {
+      const action = await createAction({
+        habitId,
+        completedAt,
+        actualDurationMinutes,
+        notes,
+        withPersonIds,
+        forPersonIds,
+      });
       const habit = await getHabitById(habitId);
+      const extras: string[] = [];
+      if (withPersonIds?.length) extras.push(`With: ${withPersonIds.join(", ")}`);
+      if (forPersonIds?.length) extras.push(`For: ${forPersonIds.join(", ")}`);
       return {
         content: [
           {
             type: "text",
-            text: `Recorded action: ${habit?.name ?? habitId} on ${completedAt.slice(0, 10)}\nID: ${action.id}\n${actualDurationMinutes != null ? `Actual duration: ${actualDurationMinutes} min\n` : ""}${notes ? `Notes: ${notes}\n` : ""}Created at: ${action.createdAt}`,
+            text: `Recorded action: ${habit?.name ?? habitId} on ${completedAt.slice(0, 10)}\nID: ${action.id}\n${actualDurationMinutes != null ? `Actual duration: ${actualDurationMinutes} min\n` : ""}${notes ? `Notes: ${notes}\n` : ""}${extras.length ? extras.join("\n") + "\n" : ""}Created at: ${action.createdAt}`,
           },
         ],
       };
@@ -832,7 +844,14 @@ export function registerTools(server: McpServer): void {
       const lines = await Promise.all(
         actions.map(async (a) => {
           const habit = await getHabitById(a.habitId);
-          return `  ${habit?.name ?? a.habitId} - ${a.completedAt.slice(0, 10)} (${a.id})${a.actualDurationMinutes != null ? ` - ${a.actualDurationMinutes} min` : ""}${a.notes ? ` - ${a.notes}` : ""}`;
+          const parts = [
+            `  ${habit?.name ?? a.habitId} - ${a.completedAt.slice(0, 10)} (${a.id})`,
+            a.actualDurationMinutes != null ? `${a.actualDurationMinutes} min` : null,
+            a.notes ? a.notes : null,
+            a.withPersonIds?.length ? `with: ${a.withPersonIds.join(", ")}` : null,
+            a.forPersonIds?.length ? `for: ${a.forPersonIds.join(", ")}` : null,
+          ].filter(Boolean);
+          return parts.join(" | ");
         })
       );
       return {
