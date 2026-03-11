@@ -1,6 +1,6 @@
 import { createLLMProvider } from "../llm/index.js";
 import { listHabits, createHabit, getHabitById } from "../store/habits.js";
-import { listEnds, createEnd, getEndById, updateEnd } from "../store/ends.js";
+import { listEnds, createEnd, getEndById, updateEnd, shareEnd, unshareEnd, listSharedEnds } from "../store/ends.js";
 import { listAreas, getAreaById } from "../store/areas.js";
 import { listOrganizations } from "../store/organizations.js";
 import { listTeams, createTeam, getTeamById } from "../store/teams.js";
@@ -14,7 +14,7 @@ const SELF_PLACEHOLDER = "__self__";
 
 const INTENT_SCHEMA = `Respond with ONLY valid JSON, no other text. Use this schema:
 {
-  "intent": "create_action" | "create_end" | "create_habit" | "create_team" | "create_collection" | "create_person" | "update_person" | "update_end" | "create_task" | "list_tasks" | "update_task" | "suggest_habits" | "list_areas" | "list_ends" | "list_habits" | "list_organizations" | "list_teams" | "list_collections" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "unknown",
+  "intent": "create_action" | "create_end" | "create_habit" | "create_team" | "create_collection" | "create_person" | "update_person" | "update_end" | "create_task" | "list_tasks" | "update_task" | "suggest_habits" | "list_areas" | "list_ends" | "list_habits" | "list_organizations" | "list_teams" | "list_collections" | "list_people" | "list_actions" | "list_ends_and_habits" | "get_person" | "share_end" | "unshare_end" | "list_shared_ends" | "unknown",
   "params": { ... }
 }
 
@@ -137,6 +137,18 @@ For get_person: { "personId": "<id>" }
 - Use when user wants details for a specific person (e.g. "show me John", "get John Doe's details", "who is Sarah?", "show me" / "my details")
 - Do NOT use for "what teams is X in?" or "what teams is X a member of?" - use list_teams with personId instead (returns teams only).
 - Match person by name from Persons list and use their id. When user says show me, my details, who am I -> use personId: "__self__"
+
+For share_end: { "endId": "<id>", "email": "user@example.com" }
+- Use when user wants to share an end/aspiration with another user (e.g. "share my fitness goal with john@example.com", "share guitar practice with spouse@example.com")
+- Match end by name from Ends list and use its id
+- email = the email address of the user to share with
+
+For unshare_end: { "endId": "<id>", "email": "user@example.com" }
+- Use when user wants to stop sharing an end (e.g. "stop sharing fitness goal with john@example.com", "unshare guitar practice")
+- Match end by name from Ends list and use its id
+
+For list_shared_ends: {}
+- Use when user wants to see ends shared with them (e.g. "show shared ends", "what ends are shared with me", "shared aspirations")
 
 - Use "unknown" if the intent is unclear`;
 
@@ -934,16 +946,83 @@ JSON response:`;
         };
       }
 
+      case "share_end": {
+        const { endId, email } = params as { endId?: string; email?: string };
+        if (!endId || !email) {
+          return {
+            success: false,
+            message: "Missing endId or email for share_end.",
+          };
+        }
+        try {
+          const share = await shareEnd(endId, email);
+          return {
+            success: true,
+            message: `Shared "${share.endName}" with ${share.sharedWithEmail}`,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            message: `Failed to share: ${(error as Error).message}`,
+          };
+        }
+      }
+
+      case "unshare_end": {
+        const { endId, userId } = params as { endId?: string; userId?: string };
+        if (!endId || !userId) {
+          return {
+            success: false,
+            message: "Missing endId or userId for unshare_end.",
+          };
+        }
+        try {
+          const removed = await unshareEnd(endId, userId);
+          if (removed) {
+            return {
+              success: true,
+              message: "Sharing removed successfully.",
+            };
+          }
+          return {
+            success: false,
+            message: "Share not found.",
+          };
+        } catch (error) {
+          return {
+            success: false,
+            message: `Failed to unshare: ${(error as Error).message}`,
+          };
+        }
+      }
+
+      case "list_shared_ends": {
+        const sharedEnds = await listSharedEnds();
+        if (sharedEnds.length === 0) {
+          return {
+            success: true,
+            message: "No ends have been shared with you.",
+          };
+        }
+        const lines = sharedEnds.map(
+          (e) => `  ${e.name} (${e.id}) - shared by ${e.ownerDisplayName ?? "Unknown"}`
+        );
+        return {
+          success: true,
+          message: `Ends shared with you:\n\n${lines.join("\n")}`,
+        };
+      }
+
       case "unknown":
         return {
           success: false,
-          message: `I couldn't understand that. Try phrases like "I went to the gym today for 60 minutes", "I want to be a better father", "What habits would help me be a better father?", "Create an Engineering group in Newco", "Add my wife Jennifer, jennifer@example.com", "show my habits", or "show me John".`,
+          message: `I couldn't understand that. Try phrases like "I went to the gym today for 60 minutes", "I want to be a better father", "What habits would help me be a better father?", "Create an Engineering group in Newco", "Add my wife Jennifer, jennifer@example.com", "show my habits", "show me John", or "share my fitness goal with john@example.com".`,
         };
 
       default:
         return {
           success: false,
-          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_team, create_collection, create_person, update_person, update_end, create_task, list_tasks, update_task, suggest_habits, list_areas, list_ends, list_habits, list_organizations, list_teams, list_collections, list_people, list_actions, list_ends_and_habits, get_person.`,
+          message: `Unknown intent: ${intent}. Supported: create_action, create_end, create_habit, create_team, create_collection, create_person, update_person, update_end, create_task, list_tasks, update_task, suggest_habits, list_areas, list_ends, list_habits, list_organizations, list_teams, list_collections, list_people, list_actions, list_ends_and_habits, get_person, share_end, unshare_end, list_shared_ends.`,
         };
     }
   } catch (err) {

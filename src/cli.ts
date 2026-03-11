@@ -777,4 +777,97 @@ program
     });
   });
 
+// ============================================================================
+// SHARING COMMANDS
+// ============================================================================
+
+program
+  .command("share-end")
+  .description("Share an end (aspiration) with another user")
+  .requiredOption("-i, --endId <id>", "End ID to share")
+  .requiredOption("-e, --email <email>", "Email of user to share with")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "share_end",
+        arguments: { endId: opts.endId, email: opts.email },
+      });
+      printToolResult(result);
+    });
+  });
+
+program
+  .command("unshare-end")
+  .description("Remove sharing of an end with a user")
+  .requiredOption("-i, --endId <id>", "End ID to unshare")
+  .requiredOption("-u, --userId <id>", "User ID to remove sharing for")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "unshare_end",
+        arguments: { endId: opts.endId, userId: opts.userId },
+      });
+      printToolResult(result);
+    });
+  });
+
+program
+  .command("list-shared-ends")
+  .description("List ends shared with you by other users")
+  .action(async () => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "list_shared_ends",
+        arguments: {},
+      });
+      printToolResult(result);
+    });
+  });
+
+program
+  .command("list-my-shares")
+  .description("List ends you have shared with other users")
+  .action(async () => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "list_my_shares",
+        arguments: {},
+      });
+      printToolResult(result);
+    });
+  });
+
+// ============================================================================
+// AUTH COMMANDS
+// ============================================================================
+
+program
+  .command("login")
+  .description("Login to tldr-mcp via Supabase (saves token to ~/.tldr-mcp/auth.json)")
+  .action(async () => {
+    console.log("Login is handled via Supabase Auth.");
+    console.log("");
+    console.log("For development, set TLDR_DEV_USER_ID in your .env file.");
+    console.log("For production, integrate with your Supabase Auth flow.");
+    console.log("");
+    console.log("Steps for development:");
+    console.log("1. Create a test user in your Supabase dashboard");
+    console.log("2. Copy the user's UUID from the Authentication > Users page");
+    console.log("3. Add TLDR_DEV_USER_ID=<uuid> to your .env file");
+    console.log("4. Restart the server/CLI");
+  });
+
+program
+  .command("whoami")
+  .description("Show current user info")
+  .action(async () => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "list_users",
+        arguments: {},
+      });
+      printToolResult(result);
+    });
+  });
+
 program.parse();

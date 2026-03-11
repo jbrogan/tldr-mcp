@@ -1,70 +1,121 @@
-import { randomUUID } from "node:crypto";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+/**
+ * Organizations Store
+ *
+ * Manages organizations for users.
+ */
+
+import { getSupabase, getUserId } from "./base.js";
 import type { Organization } from "../schemas/organization.js";
 import type { OrganizationEntity } from "../schemas/organization.js";
+import type { Organization as DbOrganization } from "../supabase/types.js";
 
-function getDataPath(): string {
-  // Use cwd so data lives where the server was started (project root when run via CLI)
-  return join(process.cwd(), "data", "organizations.json");
+/**
+ * Convert database row to entity format
+ */
+function toEntity(row: DbOrganization): OrganizationEntity {
+  return {
+    id: row.id,
+    name: row.name,
+    createdAt: row.created_at,
+  };
 }
 
-async function ensureDataDir(): Promise<void> {
-  await mkdir(dirname(getDataPath()), { recursive: true });
-}
-
-async function loadOrganizations(): Promise<OrganizationEntity[]> {
-  try {
-    const data = await readFile(getDataPath(), "utf-8");
-    const parsed = JSON.parse(data);
-    const arr = Array.isArray(parsed) ? parsed : [];
-    return arr as OrganizationEntity[];
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code === "ENOENT") {
-      return [];
-    }
-    throw err;
-  }
-}
-
-async function saveOrganizations(orgs: OrganizationEntity[]): Promise<void> {
-  await ensureDataDir();
-  await writeFile(getDataPath(), JSON.stringify(orgs, null, 2), "utf-8");
-}
-
+/**
+ * Create a new organization.
+ */
 export async function createOrganization(
   data: Organization
 ): Promise<OrganizationEntity> {
-  const orgs = await loadOrganizations();
-  const entity: OrganizationEntity = {
-    ...data,
-    id: randomUUID(),
-    createdAt: new Date().toISOString(),
-  };
-  orgs.push(entity);
-  await saveOrganizations(orgs);
-  return entity;
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const { data: created, error } = await supabase
+    .from("organizations")
+    .insert({
+      user_id: userId,
+      name: data.name,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create organization: ${error.message}`);
+  }
+
+  return toEntity(created);
 }
 
+/**
+ * Get an organization by ID.
+ */
 export async function getOrganizationById(
   id: string
 ): Promise<OrganizationEntity | undefined> {
-  const orgs = await loadOrganizations();
-  return orgs.find((o) => o.id === id);
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") {
+      return undefined;
+    }
+    throw new Error(`Failed to get organization: ${error.message}`);
+  }
+
+  return data ? toEntity(data) : undefined;
 }
 
+/**
+ * List all organizations for the current user.
+ */
 export async function listOrganizations(): Promise<OrganizationEntity[]> {
-  return loadOrganizations();
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("*")
+    .eq("user_id", userId)
+    .order("name");
+
+  if (error) {
+    throw new Error(`Failed to list organizations: ${error.message}`);
+  }
+
+  return (data ?? []).map(toEntity);
 }
 
+/**
+ * Delete an organization.
+ * Note: Teams will be cascade deleted by database FK constraint.
+ */
 export async function deleteOrganization(
   id: string
 ): Promise<OrganizationEntity | null> {
-  const orgs = await loadOrganizations();
-  const index = orgs.findIndex((o) => o.id === id);
-  if (index === -1) return null;
-  const [deleted] = orgs.splice(index, 1);
-  await saveOrganizations(orgs);
-  return deleted;
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  // First get the organization to return it
+  const existing = await getOrganizationById(id);
+  if (!existing) {
+    return null;
+  }
+
+  const { error } = await supabase
+    .from("organizations")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw new Error(`Failed to delete organization: ${error.message}`);
+  }
+
+  return existing;
 }

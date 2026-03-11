@@ -43,6 +43,10 @@ import {
   getEndById,
   listEnds,
   updateEnd,
+  shareEnd,
+  unshareEnd,
+  listSharedEnds,
+  listMyShares,
 } from "../store/ends.js";
 import {
   createHabit,
@@ -1374,6 +1378,152 @@ export function registerTools(server: McpServer): void {
       return {
         content: [{ type: "text", text: result.message }],
         isError: !result.success,
+      };
+    }
+  );
+
+  // ============================================================================
+  // SHARING TOOLS
+  // ============================================================================
+
+  server.registerTool(
+    "share_end",
+    {
+      title: "Share End",
+      description:
+        "Share an end (aspiration) with another user by their email address. The shared user will have read-only access to the end and its habits/actions.",
+      inputSchema: {
+        endId: z.string().min(1).describe("ID of the end to share"),
+        email: z.string().email().describe("Email address of the user to share with"),
+      },
+    },
+    async ({ endId, email }) => {
+      try {
+        const share = await shareEnd(endId, email);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Shared "${share.endName}" with ${share.sharedWithEmail}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to share: ${(error as Error).message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
+    "unshare_end",
+    {
+      title: "Unshare End",
+      description:
+        "Remove sharing of an end with a user. You can unshare ends you own, or remove yourself from ends shared with you.",
+      inputSchema: {
+        endId: z.string().min(1).describe("ID of the end to unshare"),
+        userId: z.string().min(1).describe("ID of the user to remove sharing for"),
+      },
+    },
+    async ({ endId, userId }) => {
+      try {
+        const removed = await unshareEnd(endId, userId);
+        if (removed) {
+          return {
+            content: [{ type: "text", text: "Sharing removed successfully." }],
+          };
+        } else {
+          return {
+            content: [{ type: "text", text: "Share not found." }],
+            isError: true,
+          };
+        }
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to unshare: ${(error as Error).message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
+    "list_shared_ends",
+    {
+      title: "List Shared Ends",
+      description:
+        "Lists ends that have been shared with you by other users. These are read-only ends you can track progress on together.",
+      inputSchema: {},
+    },
+    async () => {
+      const ends = await listSharedEnds();
+      if (ends.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No ends have been shared with you.",
+            },
+          ],
+        };
+      }
+      const lines = ends.map(
+        (e) => `  ${e.name} (${e.id}) - shared by ${e.ownerDisplayName ?? "Unknown"}`
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Ends shared with you:\n\n${lines.join("\n")}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "list_my_shares",
+    {
+      title: "List My Shares",
+      description: "Lists ends you have shared with other users.",
+      inputSchema: {},
+    },
+    async () => {
+      const shares = await listMyShares();
+      if (shares.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "You haven't shared any ends with others.",
+            },
+          ],
+        };
+      }
+      const lines = shares.map(
+        (s) =>
+          `  "${s.endName}" shared with ${s.sharedWithEmail} (user: ${s.sharedWithUserId})`
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Your shared ends:\n\n${lines.join("\n")}`,
+          },
+        ],
       };
     }
   );
