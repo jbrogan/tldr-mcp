@@ -5,6 +5,7 @@
  * All store modules use this to get the current user's Supabase client.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../supabase/types.js";
 import {
@@ -18,12 +19,15 @@ import {
  * Store context containing the Supabase client and current user ID.
  * Set this before performing any store operations.
  */
-interface StoreContext {
+export interface StoreContext {
   supabase: SupabaseClient<Database>;
   userId: string;
 }
 
-// Global context (set per request in MCP server)
+// AsyncLocalStorage for concurrent multi-user context (HTTP mode)
+const asyncContext = new AsyncLocalStorage<StoreContext>();
+
+// Global context fallback for stdio mode (single user, no concurrency)
 let currentContext: StoreContext | null = null;
 
 /**
@@ -49,6 +53,13 @@ export function clearStoreContext(): void {
  * @throws Error if no context is set and Supabase is not configured
  */
 export function getSupabase(): SupabaseClient<Database> {
+  // Check AsyncLocalStorage first (HTTP multi-user mode)
+  const asyncCtx = asyncContext.getStore();
+  if (asyncCtx) {
+    return asyncCtx.supabase;
+  }
+
+  // Fallback to global context (stdio single-user mode)
   if (currentContext) {
     return currentContext.supabase;
   }
@@ -74,6 +85,13 @@ export function getSupabase(): SupabaseClient<Database> {
  * @throws Error if no context is set and no dev user ID is configured
  */
 export function getUserId(): string {
+  // Check AsyncLocalStorage first (HTTP multi-user mode)
+  const asyncCtx = asyncContext.getStore();
+  if (asyncCtx) {
+    return asyncCtx.userId;
+  }
+
+  // Fallback to global context (stdio single-user mode)
   if (currentContext) {
     return currentContext.userId;
   }
@@ -93,7 +111,22 @@ export function getUserId(): string {
  * Check if a store context is currently set
  */
 export function hasStoreContext(): boolean {
-  return currentContext !== null || Boolean(process.env.TLDR_DEV_USER_ID);
+  return (
+    asyncContext.getStore() !== undefined ||
+    currentContext !== null ||
+    Boolean(process.env.TLDR_DEV_USER_ID)
+  );
+}
+
+/**
+ * Run an async function with a store context bound via AsyncLocalStorage.
+ * Use this in the HTTP server to bind per-request user context for concurrent safety.
+ */
+export function runWithContextAsync<T>(
+  context: StoreContext,
+  fn: () => Promise<T>
+): Promise<T> {
+  return asyncContext.run(context, fn);
 }
 
 /**
