@@ -22,21 +22,25 @@ const PORT = parseInt(process.env.PORT || "3000", 10);
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",") ?? ["http://localhost:3001"];
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
-// --- MCP Server (shared, stateless — context comes from AsyncLocalStorage) ---
+// --- Per-session MCP server factory ---
+// McpServer only supports one transport at a time, so each session gets its own instance.
 
-const server = new McpServer(
-  { name: "tldr-mcp", version: "0.1.0" },
-  { capabilities: { tools: {}, resources: {}, prompts: {} } }
-);
-
-registerTools(server);
-registerResources(server);
-registerPrompts(server);
+function createMcpServer(): McpServer {
+  const server = new McpServer(
+    { name: "tldr-mcp", version: "0.1.0" },
+    { capabilities: { tools: {}, resources: {}, prompts: {} } }
+  );
+  registerTools(server);
+  registerResources(server);
+  registerPrompts(server);
+  return server;
+}
 
 // --- Session management ---
 
 interface Session {
   transport: StreamableHTTPServerTransport;
+  server: McpServer;
   context: StoreContext;
   lastActivity: number;
 }
@@ -101,12 +105,14 @@ app.all(
       return;
     }
 
-    // New session — create transport and connect to shared server
+    // New session — create per-session MCP server and transport
+    const sessionServer = createMcpServer();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (newSessionId) => {
         sessions.set(newSessionId, {
           transport,
+          server: sessionServer,
           context,
           lastActivity: Date.now(),
         });
@@ -121,8 +127,7 @@ app.all(
       }
     };
 
-    // Connect the transport to the shared MCP server
-    await server.connect(transport);
+    await sessionServer.connect(transport);
 
     // Handle the initialization request within the user's context
     await runWithContextAsync(context, () =>
