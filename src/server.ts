@@ -19,7 +19,7 @@ import { authMiddleware } from "./middleware/auth.js";
 import { runWithContextAsync, type StoreContext } from "./store/base.js";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",") ?? ["http://localhost:3001"];
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",") ?? ["http://localhost:5173"];
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 // --- Per-session MCP server factory ---
