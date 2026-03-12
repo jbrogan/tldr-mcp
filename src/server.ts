@@ -69,72 +69,81 @@ app.use(
   cors({
     origin: ALLOWED_ORIGINS,
     credentials: true,
+    exposedHeaders: ["mcp-session-id"],
   })
 );
+
+// Parse JSON bodies for all routes
+app.use(express.json());
 
 // Health check (no auth)
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", sessions: sessions.size });
 });
 
-// MCP endpoint — all methods (POST for messages, GET for SSE, DELETE for session close)
-app.all(
-  "/mcp",
-  authMiddleware,
-  express.json(),
-  async (req: express.Request, res: express.Response) => {
-    const context = req.storeContext!;
+// Helper to handle MCP requests (shared by POST, GET, DELETE)
+async function handleMcpRequest(req: express.Request, res: express.Response) {
+  console.error(`[MCP] ${req.method} session=${req.headers["mcp-session-id"] || "none"} body=${JSON.stringify(req.body?.method || req.body)}`);
+  const context = req.storeContext!;
 
-    // Check for existing session via header
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+  // Check for existing session via header
+  const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
-    if (sessionId && sessions.has(sessionId)) {
-      // Existing session — update activity and handle request
-      const session = sessions.get(sessionId)!;
-      session.lastActivity = Date.now();
+  if (sessionId && sessions.has(sessionId)) {
+    const session = sessions.get(sessionId)!;
+    session.lastActivity = Date.now();
 
-      await runWithContextAsync(session.context, () =>
-        session.transport.handleRequest(req, res, req.body)
-      );
-      return;
-    }
-
-    if (sessionId && !sessions.has(sessionId)) {
-      // Session ID provided but not found — expired or invalid
-      res.status(404).json({ error: "Session not found or expired" });
-      return;
-    }
-
-    // New session — create per-session MCP server and transport
-    const sessionServer = createMcpServer();
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
-      onsessioninitialized: (newSessionId) => {
-        sessions.set(newSessionId, {
-          transport,
-          server: sessionServer,
-          context,
-          lastActivity: Date.now(),
-        });
-        console.error(`New session ${newSessionId} for user ${context.userId}`);
-      },
-    });
-
-    transport.onclose = () => {
-      if (transport.sessionId) {
-        sessions.delete(transport.sessionId);
-        console.error(`Session ${transport.sessionId} closed`);
-      }
-    };
-
-    await sessionServer.connect(transport);
-
-    // Handle the initialization request within the user's context
-    await runWithContextAsync(context, () =>
-      transport.handleRequest(req, res, req.body)
+    await runWithContextAsync(session.context, () =>
+      session.transport.handleRequest(req, res, req.body)
     );
+    return;
   }
-);
+
+  if (sessionId && !sessions.has(sessionId)) {
+    res.status(404).json({ error: "Session not found or expired" });
+    return;
+  }
+
+  // New session — only allowed for POST (initialize)
+  // GET without session returns 405 so the MCP SDK client knows
+  // standalone SSE streams aren't supported (it expects this per spec).
+  if (req.method !== "POST") {
+    res.status(405).set("Allow", "POST").json({ error: "Method not allowed" });
+    return;
+  }
+
+  const sessionServer = createMcpServer();
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+    onsessioninitialized: (newSessionId) => {
+      sessions.set(newSessionId, {
+        transport,
+        server: sessionServer,
+        context,
+        lastActivity: Date.now(),
+      });
+      console.error(`New session ${newSessionId} for user ${context.userId}`);
+    },
+  });
+
+  transport.onclose = () => {
+    if (transport.sessionId) {
+      sessions.delete(transport.sessionId);
+      console.error(`Session ${transport.sessionId} closed`);
+    }
+  };
+
+  await sessionServer.connect(transport);
+
+  await runWithContextAsync(context, () =>
+    transport.handleRequest(req, res, req.body)
+  );
+}
+
+// MCP endpoint — separate route registrations for each method
+app.post("/mcp", authMiddleware, handleMcpRequest);
+app.get("/mcp", authMiddleware, handleMcpRequest);
+app.delete("/mcp", authMiddleware, handleMcpRequest);
 
 // --- Start ---
 
