@@ -65,7 +65,7 @@ export const INTENT_CATALOG: IntentDefinition[] = [
       { name: "durationMinutes", type: "number", description: "Expected duration in minutes" },
       { name: "areaName", type: "string", description: "Area name (infer from topic: sleep→Health, work→Career)" },
       { name: "teamName", type: "string", description: "Team name if mentioned" },
-      { name: "personName", type: "string", description: 'Person who performs the habit (the doer). Use "__self__" for me/I/my/myself' },
+      { name: "personNames", type: "string[]", description: 'People who participate in the habit. Use ["__self__"] for me/I/my/myself. Include multiple names for group habits.' },
     ],
   },
   {
@@ -181,6 +181,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
       { name: "areaName", type: "string", description: "Filter by area name" },
       { name: "teamName", type: "string", description: "Filter by team name" },
       { name: "personName", type: "string", description: 'Filter by person. Use "__self__" ONLY when user explicitly says "my habits". Omit otherwise.' },
+    ],
+  },
+  {
+    name: "list_shared_habits",
+    description:
+      'User wants to see habits shared with them by other users (e.g. "show shared habits", "habits shared with me", "what habits are others sharing")',
+    rawParams: [
+      { name: "endName", type: "string", description: "Filter by end name" },
     ],
   },
   {

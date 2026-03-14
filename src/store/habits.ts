@@ -3,6 +3,7 @@
  *
  * Manages recurring behaviors for users.
  * Uses habit_ends junction table for end relationships.
+ * Uses habit_persons junction table for person relationships.
  * Habits can be viewed by users sharing any linked end.
  */
 
@@ -12,10 +13,11 @@ import type { HabitEntity } from "../schemas/habit.js";
 import type { Habit as DbHabit } from "../supabase/types.js";
 
 /**
- * Habit row with end IDs joined and owner info
+ * Habit row with end IDs and person IDs joined
  */
-interface HabitWithEnds extends DbHabit {
+interface HabitWithJoins extends DbHabit {
   habit_ends?: Array<{ end_id: string }>;
+  habit_persons?: Array<{ person_id: string }>;
 }
 
 /**
@@ -30,19 +32,25 @@ export interface HabitWithOwner extends HabitEntity {
 /**
  * Convert database row to entity format
  */
-function toEntity(row: HabitWithEnds): HabitEntity {
+function toEntity(row: HabitWithJoins): HabitEntity {
   return {
     id: row.id,
     name: row.name,
     endIds: row.habit_ends?.map((he) => he.end_id) ?? [],
     areaId: row.area_id ?? undefined,
     teamId: row.team_id ?? undefined,
-    personId: row.person_id ?? undefined,
+    personIds: row.habit_persons?.map((hp) => hp.person_id) ?? [],
     frequency: row.frequency ?? undefined,
     durationMinutes: row.duration_minutes ?? undefined,
     createdAt: row.created_at,
   };
 }
+
+const HABIT_SELECT = `
+  *,
+  habit_ends (end_id),
+  habit_persons (person_id)
+`;
 
 /**
  * Create a new habit.
@@ -59,7 +67,6 @@ export async function createHabit(data: Habit): Promise<HabitEntity> {
       name: data.name,
       area_id: data.areaId,
       team_id: data.teamId,
-      person_id: data.personId,
       frequency: data.frequency,
       duration_minutes: data.durationMinutes,
     })
@@ -85,9 +92,25 @@ export async function createHabit(data: Habit): Promise<HabitEntity> {
     }
   }
 
+  // Insert person relationships
+  const personIds = data.personIds ?? [];
+  if (personIds.length > 0) {
+    const { error: personError } = await supabase.from("habit_persons").insert(
+      personIds.map((personId) => ({
+        habit_id: created.id,
+        person_id: personId,
+      }))
+    );
+
+    if (personError) {
+      throw new Error(`Failed to create habit person relationships: ${personError.message}`);
+    }
+  }
+
   return {
     ...toEntity(created),
     endIds,
+    personIds,
   };
 }
 
@@ -100,12 +123,7 @@ export async function getHabitById(id: string): Promise<HabitEntity | undefined>
 
   const { data, error } = await supabase
     .from("habits")
-    .select(
-      `
-      *,
-      habit_ends (end_id)
-    `
-    )
+    .select(HABIT_SELECT)
     .eq("id", id)
     .single();
 
@@ -116,7 +134,7 @@ export async function getHabitById(id: string): Promise<HabitEntity | undefined>
     throw new Error(`Failed to get habit: ${error.message}`);
   }
 
-  return data ? toEntity(data as HabitWithEnds) : undefined;
+  return data ? toEntity(data as HabitWithJoins) : undefined;
 }
 
 /**
@@ -135,12 +153,7 @@ export async function listHabits(options?: {
   // Get owned habits
   let query = supabase
     .from("habits")
-    .select(
-      `
-      *,
-      habit_ends (end_id)
-    `
-    )
+    .select(HABIT_SELECT)
     .eq("user_id", userId);
 
   if (options?.areaId) {
@@ -149,9 +162,6 @@ export async function listHabits(options?: {
   if (options?.teamId) {
     query = query.eq("team_id", options.teamId);
   }
-  if (options?.personId) {
-    query = query.eq("person_id", options.personId);
-  }
 
   const { data, error } = await query.order("name");
 
@@ -159,11 +169,16 @@ export async function listHabits(options?: {
     throw new Error(`Failed to list habits: ${error.message}`);
   }
 
-  let habits = (data ?? []).map((row) => toEntity(row as HabitWithEnds));
+  let habits = (data ?? []).map((row) => toEntity(row as HabitWithJoins));
 
   // Filter by endId in memory (junction table)
   if (options?.endId) {
     habits = habits.filter((h) => h.endIds.includes(options.endId!));
+  }
+
+  // Filter by personId in memory (junction table)
+  if (options?.personId) {
+    habits = habits.filter((h) => h.personIds?.includes(options.personId!));
   }
 
   return habits;
@@ -186,6 +201,7 @@ export async function listHabitsWithShared(options?: {
       `
       *,
       habit_ends (end_id),
+      habit_persons (person_id),
       profiles!habits_user_id_fkey (display_name)
     `
     )
@@ -196,7 +212,7 @@ export async function listHabitsWithShared(options?: {
   }
 
   let habits: HabitWithOwner[] = (data ?? []).map((row) => {
-    const habit = row as HabitWithEnds & { profiles?: { display_name: string } };
+    const habit = row as HabitWithJoins & { profiles?: { display_name: string } };
     const isOwned = habit.user_id === userId;
 
     return {
@@ -228,12 +244,7 @@ export async function deleteHabit(id: string): Promise<HabitEntity | null> {
   // Get habit (must be owner)
   const { data: existing, error: getError } = await supabase
     .from("habits")
-    .select(
-      `
-      *,
-      habit_ends (end_id)
-    `
-    )
+    .select(HABIT_SELECT)
     .eq("id", id)
     .eq("user_id", userId)
     .single();
@@ -247,7 +258,7 @@ export async function deleteHabit(id: string): Promise<HabitEntity | null> {
 
   if (!existing) return null;
 
-  // Delete (cascade deletes habit_ends and actions)
+  // Delete (cascade deletes habit_ends, habit_persons, and actions)
   const { error } = await supabase
     .from("habits")
     .delete()
@@ -258,7 +269,7 @@ export async function deleteHabit(id: string): Promise<HabitEntity | null> {
     throw new Error(`Failed to delete habit: ${error.message}`);
   }
 
-  return toEntity(existing as HabitWithEnds);
+  return toEntity(existing as HabitWithJoins);
 }
 
 /**
@@ -304,6 +315,53 @@ export async function updateHabitEnds(
 
     if (insertError) {
       throw new Error(`Failed to update habit ends: ${insertError.message}`);
+    }
+  }
+}
+
+/**
+ * Update habit person relationships.
+ */
+export async function updateHabitPersons(
+  habitId: string,
+  personIds: string[]
+): Promise<void> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  // Verify ownership
+  const { data: habit } = await supabase
+    .from("habits")
+    .select("id")
+    .eq("id", habitId)
+    .eq("user_id", userId)
+    .single();
+
+  if (!habit) {
+    throw new Error("Habit not found or not owned by you");
+  }
+
+  // Delete existing relationships
+  const { error: deleteError } = await supabase
+    .from("habit_persons")
+    .delete()
+    .eq("habit_id", habitId);
+
+  if (deleteError) {
+    throw new Error(`Failed to update habit persons: ${deleteError.message}`);
+  }
+
+  // Insert new relationships
+  if (personIds.length > 0) {
+    const { error: insertError } = await supabase.from("habit_persons").insert(
+      personIds.map((personId) => ({
+        habit_id: habitId,
+        person_id: personId,
+      }))
+    );
+
+    if (insertError) {
+      throw new Error(`Failed to update habit persons: ${insertError.message}`);
     }
   }
 }

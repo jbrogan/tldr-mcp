@@ -44,6 +44,17 @@ export async function createPerson(data: Person): Promise<PersonEntity> {
   const supabase = getSupabase();
   const userId = getUserId();
 
+  // Auto-match: if email matches an existing profile, link to that user
+  let linkedUserId = data.userId;
+  if (!linkedUserId && data.email && data.email !== "unknown@example.com") {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("email", data.email)
+      .single();
+    if (profile) linkedUserId = profile.id;
+  }
+
   // Insert person
   const { data: created, error } = await supabase
     .from("persons")
@@ -56,7 +67,7 @@ export async function createPerson(data: Person): Promise<PersonEntity> {
       title: data.title,
       notes: data.notes,
       relationship_type: data.relationshipType,
-      linked_user_id: data.userId,
+      linked_user_id: linkedUserId,
     })
     .select()
     .single();

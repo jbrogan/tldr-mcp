@@ -92,6 +92,27 @@ export type Database = {
           },
         ];
       };
+      habit_persons: {
+        Row: HabitPersonRow;
+        Insert: HabitPersonInsert;
+        Update: Partial<HabitPersonInsert>;
+        Relationships: [
+          {
+            foreignKeyName: "habit_persons_habit_id_fkey";
+            columns: ["habit_id"];
+            isOneToOne: false;
+            referencedRelation: "habits";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "habit_persons_person_id_fkey";
+            columns: ["person_id"];
+            isOneToOne: false;
+            referencedRelation: "persons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       habit_ends: {
         Row: HabitEndRow;
         Insert: HabitEndInsert;
@@ -295,7 +316,6 @@ export type HabitRow = {
   name: string;
   area_id: string | null;
   team_id: string | null;
-  person_id: string | null;
   frequency: string | null;
   duration_minutes: number | null;
   created_at: string;
@@ -436,9 +456,22 @@ export type HabitInsert = {
   name: string;
   area_id?: string | null;
   team_id?: string | null;
-  person_id?: string | null;
   frequency?: string | null;
   duration_minutes?: number | null;
+  created_at?: string;
+};
+
+export type HabitPersonRow = {
+  id: string;
+  habit_id: string;
+  person_id: string;
+  created_at: string;
+};
+
+export type HabitPersonInsert = {
+  id?: string;
+  habit_id: string;
+  person_id: string;
   created_at?: string;
 };
 
@@ -502,6 +535,7 @@ export type Collection = CollectionRow;
 export type End = EndRow;
 export type EndShare = EndShareRow;
 export type Habit = HabitRow;
+export type HabitPerson = HabitPersonRow;
 export type HabitEnd = HabitEndRow;
 export type Action = ActionRow;
 export type ActionPerson = ActionPersonRow;

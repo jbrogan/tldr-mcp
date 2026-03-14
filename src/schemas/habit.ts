@@ -8,7 +8,7 @@ export const HabitSchema = z.object({
   endIds: z.array(z.string()).min(1, "At least one end is required"),
   areaId: z.string().optional(),
   teamId: z.string().optional(),
-  personId: z.string().optional().describe("Person expected to perform the habit (the doer), not the focus/recipient"),
+  personIds: z.array(z.string()).optional().describe("People who participate in the habit"),
   frequency: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
   durationMinutes: z.number().int().positive().optional().describe("Estimated time in minutes to perform the habit"),
 });

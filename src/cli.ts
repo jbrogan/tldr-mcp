@@ -348,7 +348,7 @@ program
   .requiredOption("-e, --ends <ids>", "Comma-separated end IDs")
   .option("-a, --areaId <id>", "Area ID")
   .option("-t, --teamId <id>", "Team ID")
-  .option("-p, --personId <id>", "Person expected to perform the habit (the doer)")
+  .option("-p, --personIds <ids>", "Comma-separated person IDs who participate in the habit")
   .option("-f, --frequency <freq>", "e.g. daily, weekly, 3x/week")
   .option("-m, --durationMinutes <min>", "Estimated time in minutes")
   .action(async (opts) => {
@@ -359,7 +359,7 @@ program
       };
       if (opts.areaId) args.areaId = opts.areaId;
       if (opts.teamId) args.teamId = opts.teamId;
-      if (opts.personId) args.personId = opts.personId;
+      if (opts.personIds) args.personIds = opts.personIds.split(",").map((s: string) => s.trim());
       if (opts.frequency) args.frequency = opts.frequency;
       const mins = opts.durationMinutes != null ? parseInt(String(opts.durationMinutes), 10) : NaN;
       if (!isNaN(mins)) args.durationMinutes = mins;

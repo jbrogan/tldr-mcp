@@ -5,7 +5,7 @@
  * the corresponding store operations. Returns a human-readable result.
  */
 
-import { listHabits, createHabit, getHabitById } from "../../store/habits.js";
+import { listHabits, listHabitsWithShared, createHabit, getHabitById } from "../../store/habits.js";
 import { listEnds, createEnd, updateEnd, shareEnd, unshareEnd, listSharedEnds } from "../../store/ends.js";
 import { listAreas, getAreaById } from "../../store/areas.js";
 import { listOrganizations, createOrganization } from "../../store/organizations.js";
@@ -69,24 +69,28 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async create_habit(p) {
-    const { name, endIds, frequency, durationMinutes, areaId, teamId, personId } = p as {
+    const { name, endIds, frequency, durationMinutes, areaId, teamId, personIds } = p as {
       name: string;
       endIds: string[];
       frequency?: string;
       durationMinutes?: number;
       areaId?: string;
       teamId?: string;
-      personId?: string;
+      personIds?: string[];
     };
-    const habit = await createHabit({ name, endIds, frequency, durationMinutes, areaId, teamId, personId });
+    const habit = await createHabit({ name, endIds, frequency, durationMinutes, areaId, teamId, personIds });
     const extras: string[] = [];
     if (habit.teamId) {
       const team = await getTeamById(habit.teamId);
       extras.push(`team: ${team?.name ?? habit.teamId}`);
     }
-    if (habit.personId) {
-      const person = await getPersonById(habit.personId);
-      extras.push(`performed by: ${person ? `${person.firstName} ${person.lastName}` : habit.personId}`);
+    if (habit.personIds?.length) {
+      const names: string[] = [];
+      for (const pid of habit.personIds) {
+        const person = await getPersonById(pid);
+        names.push(person ? `${person.firstName} ${person.lastName}` : pid);
+      }
+      extras.push(`participants: ${names.join(", ")}`);
     }
     return {
       success: true,
@@ -250,6 +254,19 @@ const executors: Record<string, ExecutorFn> = {
       return `  ${h.name} (${h.id}) → serves: ${endNames}`;
     });
     return { success: true, message: `Habits:\n\n${lines.join("\n")}` };
+  },
+
+  async list_shared_habits(p) {
+    const { endId } = p as { endId?: string };
+    const habits = await listHabitsWithShared({ endId });
+    const shared = habits.filter((h) => h.isShared);
+    if (shared.length === 0) return { success: true, message: "No shared habits found." };
+    const allEnds = await listEnds({ includeShared: true });
+    const lines = shared.map((h) => {
+      const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
+      return `  ${h.name} (${h.id}) → serves: ${endNames} — shared by ${h.ownerDisplayName ?? "Unknown"}`;
+    });
+    return { success: true, message: `Shared habits:\n\n${lines.join("\n")}` };
   },
 
   async list_organizations(p) {

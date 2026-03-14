@@ -690,18 +690,18 @@ export function registerTools(server: McpServer): void {
         endIds: z.array(z.string()).min(1).describe("IDs of ends this habit serves"),
         areaId: z.string().optional(),
         teamId: z.string().optional(),
-        personId: z.string().optional().describe("ID of the person expected to perform the habit (the doer), not the focus/recipient"),
+        personIds: z.array(z.string()).optional().describe("IDs of people who participate in the habit"),
         frequency: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
         durationMinutes: z.number().int().positive().optional().describe("Estimated time in minutes"),
       },
     },
-    async ({ name, endIds, areaId, teamId, personId, frequency, durationMinutes }) => {
+    async ({ name, endIds, areaId, teamId, personIds, frequency, durationMinutes }) => {
       const habit = await createHabit({
         name,
         endIds,
         areaId,
         teamId,
-        personId,
+        personIds,
         frequency,
         durationMinutes,
       });
@@ -711,7 +711,7 @@ export function registerTools(server: McpServer): void {
         `Ends: ${habit.endIds.join(", ")}`,
         habit.areaId && `Area: ${habit.areaId}`,
         habit.teamId && `Team: ${habit.teamId}`,
-        habit.personId && `Performed by: ${habit.personId}`,
+        habit.personIds?.length && `Participants: ${habit.personIds.join(", ")}`,
         habit.frequency && `Frequency: ${habit.frequency}`,
         habit.durationMinutes != null && `Duration: ${habit.durationMinutes} min`,
         `Created at: ${habit.createdAt}`,
@@ -751,7 +751,7 @@ export function registerTools(server: McpServer): void {
         if (h.durationMinutes != null) meta.push(`${h.durationMinutes} min`);
         if (h.areaId) meta.push(`area: ${h.areaId}`);
         if (h.teamId) meta.push(`team: ${h.teamId}`);
-        if (h.personId) meta.push(`person: ${h.personId}`);
+        if (h.personIds?.length) meta.push(`persons: ${h.personIds.join(", ")}`);
         return `  ${h.name} (${h.id})\n    Ends: ${h.endIds.join(", ")}${meta.length ? ` | ${meta.join(", ")}` : ""}`;
       });
       return {
