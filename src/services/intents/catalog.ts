@@ -180,7 +180,7 @@ export const INTENT_CATALOG: IntentDefinition[] = [
       { name: "endName", type: "string", description: "Filter by end name" },
       { name: "areaName", type: "string", description: "Filter by area name" },
       { name: "teamName", type: "string", description: "Filter by team name" },
-      { name: "personName", type: "string", description: 'Filter by person. Use "__self__" for my habits' },
+      { name: "personName", type: "string", description: 'Filter by person. Use "__self__" ONLY when user explicitly says "my habits". Omit otherwise.' },
     ],
   },
   {

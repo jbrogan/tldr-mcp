@@ -255,6 +255,9 @@ const resolvers: Record<string, ResolverFn> = {
     let personId: string | undefined;
     if (personName) {
       personId = await resolvePersonName(personName);
+    } else {
+      // Default to self when no person specified
+      personId = await resolveSelf();
     }
     return {
       name: raw.name as string,
@@ -371,7 +374,12 @@ const resolvers: Record<string, ResolverFn> = {
   async list_habits(raw) {
     const personName = raw.personName as string | undefined;
     let personId: string | undefined;
-    if (personName) personId = await resolvePersonName(personName);
+    if (personName) {
+      personId = await resolvePersonName(personName);
+    } else {
+      // Default to self — all habits have a personId after backfill
+      personId = await resolveSelf();
+    }
     return {
       endId: await resolveEndName(raw.endName as string),
       areaId: await resolveAreaName(raw.areaName as string),
@@ -397,19 +405,35 @@ const resolvers: Record<string, ResolverFn> = {
   },
 
   async list_teams(raw) {
+    const orgName = raw.organizationName as string | undefined;
     const personName = raw.personName as string | undefined;
+    // If org is specified, use org filter (ignore spurious personName)
+    if (orgName) {
+      return {
+        organizationId: await resolveOrgName(orgName),
+      };
+    }
     let personId: string | undefined;
     if (personName) personId = await resolvePersonName(personName);
-    return {
-      organizationId: personId ? undefined : await resolveOrgName(raw.organizationName as string),
-      personId,
-    };
+    return { personId };
   },
 
   async list_people(raw) {
+    const orgName = raw.organizationName as string | undefined;
+    const teamName = raw.teamName as string | undefined;
+    let organizationId = await resolveOrgName(orgName);
+    let teamId = await resolveTeamName(teamName);
+    // If classifier put a name in orgName but it's actually a team, try team lookup
+    if (orgName && !organizationId) {
+      teamId = teamId ?? await resolveTeamName(orgName);
+    }
+    // If classifier put a name in teamName but it's actually an org, try org lookup
+    if (teamName && !teamId) {
+      organizationId = organizationId ?? await resolveOrgName(teamName);
+    }
     return {
-      organizationId: await resolveOrgName(raw.organizationName as string),
-      teamId: await resolveTeamName(raw.teamName as string),
+      organizationId,
+      teamId,
       relationshipType: raw.relationshipType as string | undefined,
     };
   },
