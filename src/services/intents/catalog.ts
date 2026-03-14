@@ -69,6 +69,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "create_organization",
+    description:
+      'User wants to create a new organization (e.g. "Create an organization called Newco", "New org: Acme Corp")',
+    rawParams: [
+      { name: "name", type: "string", required: true, description: "Organization name" },
+    ],
+  },
+  {
     name: "create_team",
     description:
       'User wants to create a team in an organization (e.g. "Create an Engineering team in Newco")',

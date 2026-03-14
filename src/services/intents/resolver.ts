@@ -267,6 +267,10 @@ const resolvers: Record<string, ResolverFn> = {
     };
   },
 
+  async create_organization(raw) {
+    return { name: raw.name as string };
+  },
+
   async create_team(raw) {
     const organizationId = await resolveOrgName(raw.organizationName as string);
     if (!organizationId) throw new Error(`Organization "${raw.organizationName}" not found.`);

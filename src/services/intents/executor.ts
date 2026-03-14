@@ -8,7 +8,7 @@
 import { listHabits, createHabit, getHabitById } from "../../store/habits.js";
 import { listEnds, createEnd, updateEnd, shareEnd, unshareEnd, listSharedEnds } from "../../store/ends.js";
 import { listAreas, getAreaById } from "../../store/areas.js";
-import { listOrganizations } from "../../store/organizations.js";
+import { listOrganizations, createOrganization } from "../../store/organizations.js";
 import { listTeams, createTeam, getTeamById } from "../../store/teams.js";
 import { listCollections, createCollection, getCollectionById } from "../../store/collections.js";
 import { createAction, listActions } from "../../store/actions.js";
@@ -92,6 +92,12 @@ const executors: Record<string, ExecutorFn> = {
       success: true,
       message: `Created habit: ${habit.name} (${habit.id})${extras.length ? ` - ${extras.join(", ")}` : ""}`,
     };
+  },
+
+  async create_organization(p) {
+    const { name } = p as { name: string };
+    const org = await createOrganization({ name });
+    return { success: true, message: `Created organization: ${org.name} (${org.id})` };
   },
 
   async create_team(p) {
