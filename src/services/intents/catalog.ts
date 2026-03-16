@@ -161,6 +161,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "get_end",
+    description:
+      'User wants details about a specific end/aspiration (e.g. "show me Mentor Alex", "details for Healthy Lifestyle", "tell me about my fitness goal")',
+    rawParams: [
+      { name: "endName", type: "string", required: true, description: "Name of the end to show details for" },
+    ],
+  },
+  {
     name: "list_areas",
     description: 'User wants to see life areas (e.g. "show areas", "list areas", "what areas do I have")',
     rawParams: [],

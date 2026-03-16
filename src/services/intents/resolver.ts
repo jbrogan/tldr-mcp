@@ -368,6 +368,12 @@ const resolvers: Record<string, ResolverFn> = {
     };
   },
 
+  async get_end(raw) {
+    const endId = await resolveEndName(raw.endName as string);
+    if (!endId) throw new Error(`End "${raw.endName}" not found.`);
+    return { endId };
+  },
+
   async list_habits(raw) {
     const personName = raw.personName as string | undefined;
     let personId: string | undefined;

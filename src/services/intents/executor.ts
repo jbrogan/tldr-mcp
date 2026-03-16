@@ -6,7 +6,7 @@
  */
 
 import { listHabits, listHabitsWithShared, createHabit, getHabitById } from "../../store/habits.js";
-import { listEnds, createEnd, updateEnd, shareEnd, unshareEnd, listSharedEnds } from "../../store/ends.js";
+import { listEnds, createEnd, getEndById, updateEnd, shareEnd, unshareEnd, listSharedEnds, listMyShares } from "../../store/ends.js";
 import { listAreas, getAreaById } from "../../store/areas.js";
 import { listOrganizations, createOrganization } from "../../store/organizations.js";
 import { listTeams, createTeam, getTeamById } from "../../store/teams.js";
@@ -220,6 +220,50 @@ const executors: Record<string, ExecutorFn> = {
     if (!suggestions?.length) return { success: false, message: "Could not generate habit suggestions." };
     const lines = suggestions.map((s, i) => `${i + 1}. ${s}`);
     return { success: true, message: `Habits that could help with "${query}":\n\n${lines.join("\n")}` };
+  },
+
+  async get_end(p) {
+    const { endId } = p as { endId: string };
+    const end = await getEndById(endId);
+    if (!end) return { success: false, message: `End not found.` };
+
+    // Area
+    const area = end.areaId ? await getAreaById(end.areaId) : undefined;
+
+    // Collection
+    const collections = await listCollections();
+    const collection = end.collectionId ? collections.find((c) => c.id === end.collectionId) : undefined;
+
+    // Habits
+    const habits = await listHabits({ endId });
+    const habitLines: string[] = [];
+    for (const h of habits) {
+      const personNames: string[] = [];
+      for (const pid of h.personIds ?? []) {
+        const person = await getPersonById(pid);
+        personNames.push(person ? `${person.firstName} ${person.lastName}` : pid);
+      }
+      const meta: string[] = [];
+      if (h.frequency) meta.push(h.frequency);
+      if (personNames.length) meta.push(`participants: ${personNames.join(", ")}`);
+      habitLines.push(`    - ${h.name}${meta.length ? ` (${meta.join(", ")})` : ""}`);
+    }
+
+    // Shares
+    const shares = await listMyShares();
+    const endShares = shares.filter((s) => s.endId === endId);
+    const shareLines = endShares.map((s) => `    - ${s.sharedWithEmail}`);
+
+    const parts = [
+      `${end.name} (${end.id})`,
+      area && `  Area: ${area.name}`,
+      collection && `  Collection: ${collection.name}`,
+      `  Created: ${end.createdAt}`,
+      habits.length > 0 ? `  Habits:\n${habitLines.join("\n")}` : "  Habits: (none)",
+      shareLines.length > 0 ? `  Shared with:\n${shareLines.join("\n")}` : undefined,
+    ].filter(Boolean);
+
+    return { success: true, message: parts.join("\n") };
   },
 
   async list_areas() {
