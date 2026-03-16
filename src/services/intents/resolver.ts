@@ -488,13 +488,27 @@ const resolvers: Record<string, ResolverFn> = {
   async share_end(raw) {
     const endId = await resolveEndName(raw.endName as string);
     if (!endId) throw new Error(`End "${raw.endName}" not found.`);
-    return { endId, email: raw.email as string };
+    const personId = await resolvePersonName(raw.personName as string);
+    if (!personId) throw new Error(`Person "${raw.personName}" not found.`);
+    const person = await getPersonById(personId);
+    if (!person) throw new Error(`Person "${raw.personName}" not found.`);
+    if (!person.userId) {
+      throw new Error(`${person.firstName} ${person.lastName} doesn't have an account yet. They need to sign up before you can share with them.`);
+    }
+    return { endId, sharedWithUserId: person.userId };
   },
 
   async unshare_end(raw) {
     const endId = await resolveEndName(raw.endName as string);
     if (!endId) throw new Error(`End "${raw.endName}" not found.`);
-    return { endId, email: raw.email as string };
+    const personId = await resolvePersonName(raw.personName as string);
+    if (!personId) throw new Error(`Person "${raw.personName}" not found.`);
+    const person = await getPersonById(personId);
+    if (!person) throw new Error(`Person "${raw.personName}" not found.`);
+    if (!person.userId) {
+      throw new Error(`${person.firstName} ${person.lastName} doesn't have an account.`);
+    }
+    return { endId, sharedWithUserId: person.userId };
   },
 
   async list_shared_ends() {

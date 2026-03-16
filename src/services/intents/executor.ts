@@ -252,7 +252,14 @@ const executors: Record<string, ExecutorFn> = {
     // Shares
     const shares = await listMyShares();
     const endShares = shares.filter((s) => s.endId === endId);
-    const shareLines = endShares.map((s) => `    - ${s.sharedWithEmail}`);
+    const persons = await listPersons();
+    const shareLines = endShares.map((s) => {
+      const person = persons.find((p) => p.userId === s.sharedWithUserId);
+      if (person) {
+        return `    - ${person.firstName} ${person.lastName} (${s.sharedWithEmail})`;
+      }
+      return `    - ${s.sharedWithEmail}`;
+    });
 
     const parts = [
       `${end.name} (${end.id})`,
@@ -523,9 +530,9 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async share_end(p) {
-    const { endId, email } = p as { endId: string; email: string };
+    const { endId, sharedWithUserId } = p as { endId: string; sharedWithUserId: string };
     try {
-      const share = await shareEnd(endId, email);
+      const share = await shareEnd(endId, sharedWithUserId);
       return { success: true, message: `Shared "${share.endName}" with ${share.sharedWithEmail}` };
     } catch (error) {
       return { success: false, message: `Failed to share: ${(error as Error).message}` };
@@ -533,9 +540,9 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async unshare_end(p) {
-    const { endId, email } = p as { endId: string; email: string };
+    const { endId, sharedWithUserId } = p as { endId: string; sharedWithUserId: string };
     try {
-      const removed = await unshareEnd(endId, email);
+      const removed = await unshareEnd(endId, sharedWithUserId);
       if (removed) return { success: true, message: "Sharing removed successfully." };
       return { success: false, message: "Share not found." };
     } catch (error) {

@@ -785,12 +785,12 @@ program
   .command("share-end")
   .description("Share an end (aspiration) with another user")
   .requiredOption("-i, --endId <id>", "End ID to share")
-  .requiredOption("-e, --email <email>", "Email of user to share with")
+  .requiredOption("-u, --userId <id>", "User ID to share with")
   .action(async (opts) => {
     await withClient(async (client) => {
       const result = await client.callTool({
         name: "share_end",
-        arguments: { endId: opts.endId, email: opts.email },
+        arguments: { endId: opts.endId, sharedWithUserId: opts.userId },
       });
       printToolResult(result);
     });

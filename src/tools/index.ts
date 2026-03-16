@@ -1391,15 +1391,15 @@ export function registerTools(server: McpServer): void {
     {
       title: "Share End",
       description:
-        "Share an end (aspiration) with another user by their email address. The shared user will have read-only access to the end and its habits/actions.",
+        "Share an end (aspiration) with another user by their user ID. The shared user will have read-only access to the end and its habits/actions.",
       inputSchema: {
         endId: z.string().min(1).describe("ID of the end to share"),
-        email: z.string().email().describe("Email address of the user to share with"),
+        sharedWithUserId: z.string().min(1).describe("User ID of the person to share with"),
       },
     },
-    async ({ endId, email }) => {
+    async ({ endId, sharedWithUserId }) => {
       try {
-        const share = await shareEnd(endId, email);
+        const share = await shareEnd(endId, sharedWithUserId);
         return {
           content: [
             {

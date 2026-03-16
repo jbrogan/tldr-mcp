@@ -271,18 +271,18 @@ export const INTENT_CATALOG: IntentDefinition[] = [
   },
   {
     name: "share_end",
-    description: 'User wants to share an end with another user (e.g. "share fitness goal with john@example.com")',
+    description: 'User wants to share an end with another user (e.g. "share fitness goal with Jennifer", "share fitness goal with my wife")',
     rawParams: [
       { name: "endName", type: "string", required: true, description: "Name of the end to share" },
-      { name: "email", type: "string", required: true, description: "Email of user to share with" },
+      { name: "personName", type: "string", required: true, description: "Name or relationship of person to share with (e.g. 'Jennifer', 'my wife', 'Alex')" },
     ],
   },
   {
     name: "unshare_end",
-    description: 'User wants to stop sharing an end (e.g. "stop sharing fitness goal with john@example.com")',
+    description: 'User wants to stop sharing an end (e.g. "stop sharing fitness goal with Jennifer", "unshare fitness goal with my wife")',
     rawParams: [
       { name: "endName", type: "string", required: true, description: "Name of the end to unshare" },
-      { name: "email", type: "string", required: true, description: "Email of user to unshare from" },
+      { name: "personName", type: "string", required: true, description: "Name or relationship of person to unshare from" },
     ],
   },
   {

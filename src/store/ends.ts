@@ -257,7 +257,7 @@ export async function deleteEnd(id: string): Promise<EndEntity | null> {
  */
 export async function shareEnd(
   endId: string,
-  sharedWithEmail: string
+  sharedWithUserId: string
 ): Promise<EndShareInfo> {
   const supabase = getSupabase();
   const userId = getUserId();
@@ -268,7 +268,6 @@ export async function shareEnd(
     throw new Error("End not found");
   }
 
-  // Check we own this end
   const { data: owned } = await supabase
     .from("ends")
     .select("id")
@@ -280,19 +279,19 @@ export async function shareEnd(
     throw new Error("You can only share ends you own");
   }
 
-  // Find user to share with
+  if (sharedWithUserId === userId) {
+    throw new Error("Cannot share with yourself");
+  }
+
+  // Look up target profile for display info
   const { data: targetUser, error: userError } = await supabase
     .from("profiles")
     .select("id, email, display_name")
-    .eq("email", sharedWithEmail)
+    .eq("id", sharedWithUserId)
     .single();
 
   if (userError || !targetUser) {
-    throw new Error(`User not found with email: ${sharedWithEmail}`);
-  }
-
-  if (targetUser.id === userId) {
-    throw new Error("Cannot share with yourself");
+    throw new Error(`User not found with ID: ${sharedWithUserId}`);
   }
 
   // Create share
@@ -301,20 +300,18 @@ export async function shareEnd(
     .insert({
       end_id: endId,
       shared_by_user_id: userId,
-      shared_with_user_id: targetUser.id,
+      shared_with_user_id: sharedWithUserId,
     })
     .select()
     .single();
 
   if (error) {
     if (error.code === "23505") {
-      // Unique constraint violation
       throw new Error("End is already shared with this user");
     }
     throw new Error(`Failed to share end: ${error.message}`);
   }
 
-  // Get sharer info
   const { data: sharer } = await supabase
     .from("profiles")
     .select("display_name")
