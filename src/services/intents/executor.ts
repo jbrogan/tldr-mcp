@@ -351,7 +351,7 @@ const executors: Record<string, ExecutorFn> = {
           teamNames.push(team?.name ?? tId);
         }
         const parts = [
-          `${p.firstName} ${p.lastName} (${p.id})`,
+          `${p.firstName} ${p.lastName} (${p.id})${p.userId ? " [linked account]" : ""}`,
           `  Email: ${p.email}`,
           p.phone && `  Phone: ${p.phone}`,
           p.title && `  Title: ${p.title}`,
@@ -467,7 +467,7 @@ const executors: Record<string, ExecutorFn> = {
       teamNames.push(team?.name ?? tId);
     }
     const parts = [
-      `${person.firstName} ${person.lastName} (${person.id})`,
+      `${person.firstName} ${person.lastName} (${person.id})${person.userId ? " [linked account]" : ""}`,
       `  Email: ${person.email}`,
       person.phone && `  Phone: ${person.phone}`,
       person.title && `  Title: ${person.title}`,
