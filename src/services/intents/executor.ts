@@ -299,7 +299,7 @@ const executors: Record<string, ExecutorFn> = {
     };
     const habits = await listHabits({ endId, areaId, teamId, personId });
     if (habits.length === 0) return { success: true, message: "No habits found." };
-    const allEnds = await listEnds();
+    const allEnds = await listEnds({ includeShared: true });
     const lines = habits.map((h) => {
       const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
       return `  ${h.name} (${h.id}) → serves: ${endNames}`;
@@ -423,7 +423,7 @@ const executors: Record<string, ExecutorFn> = {
     };
     const actions = await listActions({ habitId, fromDate, toDate });
     if (actions.length === 0) return { success: true, message: "No actions found." };
-    const habitMap = new Map((await listHabits()).map((h) => [h.id, h.name]));
+    const habitMap = new Map((await listHabitsWithShared()).map((h) => [h.id, h.name]));
     const lines = actions.map((a) => {
       const habitName = habitMap.get(a.habitId) ?? a.habitId;
       const date = a.completedAt.slice(0, 10);
