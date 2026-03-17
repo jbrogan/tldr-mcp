@@ -6,7 +6,7 @@
  * No LLM calls — purely code-based resolution.
  */
 
-import { listHabits } from "../../store/habits.js";
+import { listHabits, listHabitsWithShared } from "../../store/habits.js";
 import { listEnds } from "../../store/ends.js";
 import { listAreas } from "../../store/areas.js";
 import { listOrganizations } from "../../store/organizations.js";
@@ -165,7 +165,7 @@ async function resolveCollectionName(name: string | undefined): Promise<string |
 
 async function resolveHabitName(name: string | undefined): Promise<string | undefined> {
   if (!name) return undefined;
-  const habits = await listHabits();
+  const habits = await listHabitsWithShared();
   return findBestMatch(habits, name, (h) => h.name)?.id;
 }
 
