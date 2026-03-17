@@ -66,7 +66,10 @@ async function tryDeterministicShortcuts(text: string): Promise<NLResult | null>
 export async function interpretAndExecute(text: string): Promise<NLResult> {
   // Stage 0: Deterministic shortcuts
   const shortcut = await tryDeterministicShortcuts(text);
-  if (shortcut) return shortcut;
+  if (shortcut) {
+    console.error(`[NL] Stage 0 — deterministic shortcut: ${shortcut.success ? "OK" : "FAIL"}: ${shortcut.message.slice(0, 100)}`);
+    return shortcut;
+  }
 
   try {
     // Stage 1: Classify intent (LLM — static prompt, no user data)
