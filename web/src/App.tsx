@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { useAuth } from "./hooks/useAuth";
 import { Login } from "./components/Login";
 import { Chat } from "./components/Chat";
+import { Sidebar } from "./components/Sidebar";
+import { DetailPanel } from "./components/DetailPanel";
 import { connect, disconnect } from "./lib/mcp";
 
 function App() {
@@ -101,10 +103,40 @@ function App() {
   }
 
   return (
-    <Chat
+    <AppLayout
       onSignOut={signOut}
       userEmail={session.user.email ?? ""}
     />
+  );
+}
+
+function AppLayout({ onSignOut, userEmail }: { onSignOut: () => void; userEmail: string }) {
+  const [selectedItem, setSelectedItem] = useState<{
+    section: string;
+    id: string;
+    name: string;
+  } | null>(null);
+
+  return (
+    <div className="flex h-screen">
+      <Sidebar
+        onSelectItem={(section, item) =>
+          setSelectedItem({ section, id: item.id, name: item.name })
+        }
+        selectedId={selectedItem?.id}
+      />
+      {selectedItem && (
+        <DetailPanel
+          section={selectedItem.section}
+          itemId={selectedItem.id}
+          itemName={selectedItem.name}
+          onClose={() => setSelectedItem(null)}
+        />
+      )}
+      <div className="flex-1 min-w-0">
+        <Chat onSignOut={onSignOut} userEmail={userEmail} />
+      </div>
+    </div>
   );
 }
 
