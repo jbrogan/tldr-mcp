@@ -229,8 +229,8 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     description:
       'User wants to see teams. For "my teams" or "what teams is [person] in?" use personName. For "teams in [org]" use organizationName.',
     rawParams: [
-      { name: "organizationName", type: "string", description: "Filter by org (only for listing org's teams)" },
-      { name: "personName", type: "string", description: 'Filter by person membership. Use "__self__" for my teams' },
+      { name: "organizationName", type: "string", description: "ONLY use when user asks for teams in an organization. A person's name is NOT an organization." },
+      { name: "personName", type: "string", description: 'The person whose teams to list. Use "__self__" for my teams. Use for "teams for Jennifer", "what teams is Alex in?", etc.' },
     ],
   },
   {
