@@ -271,6 +271,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "get_team",
+    description:
+      'User wants details about a specific team including its members (e.g. "show me the Engineering team", "who is on the Family team", "members of Leadership").',
+    rawParams: [
+      { name: "teamName", type: "string", required: true, description: "Name of the team" },
+    ],
+  },
+  {
     name: "get_person",
     description:
       'User wants details for a specific person (e.g. "show me John", "who is Sarah?"). For "what teams is X in?" use list_teams instead.',

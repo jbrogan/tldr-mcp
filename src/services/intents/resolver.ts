@@ -481,6 +481,12 @@ const resolvers: Record<string, ResolverFn> = {
     };
   },
 
+  async get_team(raw) {
+    const teamId = await resolveTeamName(raw.teamName as string);
+    if (!teamId) throw new Error(`Team "${raw.teamName}" not found.`);
+    return { teamId };
+  },
+
   async get_person(raw) {
     const personName = raw.personName as string;
     const personId = await resolvePersonName(personName);

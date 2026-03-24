@@ -8,7 +8,7 @@
 import { listHabits, listHabitsWithShared, createHabit, getHabitById } from "../../store/habits.js";
 import { listEnds, createEnd, getEndById, updateEnd, shareEnd, unshareEnd, listSharedEnds, listMyShares } from "../../store/ends.js";
 import { listAreas, getAreaById } from "../../store/areas.js";
-import { listOrganizations, createOrganization } from "../../store/organizations.js";
+import { listOrganizations, createOrganization, getOrganizationById } from "../../store/organizations.js";
 import { listTeams, createTeam, getTeamById } from "../../store/teams.js";
 import { listCollections, createCollection, getCollectionById } from "../../store/collections.js";
 import { createAction, listActions } from "../../store/actions.js";
@@ -506,6 +506,26 @@ const executors: Record<string, ExecutorFn> = {
       };
     }
     return { success: true, message: sections.join("\n\n") };
+  },
+
+  async get_team(p) {
+    const { teamId } = p as { teamId: string };
+    const team = await getTeamById(teamId);
+    if (!team) return { success: false, message: `Team not found.` };
+    const org = await getOrganizationById(team.organizationId);
+    const members = await listPersons({ teamId });
+    const memberLines = members.map((m) => {
+      const meta: string[] = [];
+      if (m.relationshipType) meta.push(m.relationshipType);
+      if (m.userId) meta.push("linked account");
+      return `  - ${m.firstName} ${m.lastName}${meta.length ? ` [${meta.join(", ")}]` : ""}`;
+    });
+    const parts = [
+      `${team.name} (${team.id})`,
+      org && `  Organization: ${org.name}`,
+      members.length > 0 ? `  Members:\n${memberLines.join("\n")}` : "  Members: (none)",
+    ].filter(Boolean);
+    return { success: true, message: parts.join("\n") };
   },
 
   async get_person(p) {

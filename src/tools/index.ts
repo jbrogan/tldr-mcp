@@ -381,6 +381,39 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "get_team",
+    {
+      title: "Get Team",
+      description:
+        "Gets a single team by ID with full details: organization, members, and their roles.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the team to fetch"),
+      },
+    },
+    async ({ id }) => {
+      const team = await getTeamById(id);
+      if (!team) {
+        return { content: [{ type: "text", text: `Team with ID ${id} not found.` }], isError: true };
+      }
+      const org = await getOrganizationById(team.organizationId);
+      const members = await listPersons({ teamId: id });
+      const memberLines = members.map((p) => {
+        const meta: string[] = [];
+        if (p.relationshipType) meta.push(p.relationshipType);
+        if (p.userId) meta.push("linked account");
+        return `    - ${p.firstName} ${p.lastName}${meta.length ? ` [${meta.join(", ")}]` : ""}`;
+      });
+      const parts = [
+        `${team.name} (${team.id})`,
+        org && `  Organization: ${org.name}`,
+        `  Created: ${team.createdAt}`,
+        members.length > 0 ? `  Members:\n${memberLines.join("\n")}` : "  Members: (none)",
+      ].filter(Boolean);
+      return { content: [{ type: "text", text: parts.join("\n") }] };
+    }
+  );
+
+  server.registerTool(
     "delete_team",
     {
       title: "Delete Team",
