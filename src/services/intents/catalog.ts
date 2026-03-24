@@ -122,6 +122,15 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "link_person",
+    description:
+      'User wants to link a person to their user account (e.g. "link Alex to his account", "connect Jennifer to her user", "link Alex to alex@example.com"). Uses the person\'s stored email or an optional override to find the matching user profile.',
+    rawParams: [
+      { name: "personName", type: "string", required: true, description: "Name of the person to link" },
+      { name: "email", type: "string", description: "Only include if the user explicitly provides an email address. Do NOT default or guess." },
+    ],
+  },
+  {
     name: "create_task",
     description:
       'User wants to add a one-off to-do (e.g. "add task call mom", "I need to get oil changed", "remind me to buy birthday gift for Alex"). PRESERVE the full description including reason/purpose.',

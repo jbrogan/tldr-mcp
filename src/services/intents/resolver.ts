@@ -485,6 +485,12 @@ const resolvers: Record<string, ResolverFn> = {
     return { personId };
   },
 
+  async link_person(raw) {
+    const personId = await resolvePersonName(raw.personName as string);
+    if (!personId) throw new Error(`Person "${raw.personName}" not found.`);
+    return { personId, email: raw.email as string | undefined };
+  },
+
   async share_end(raw) {
     const endId = await resolveEndName(raw.endName as string);
     if (!endId) throw new Error(`End "${raw.endName}" not found.`);

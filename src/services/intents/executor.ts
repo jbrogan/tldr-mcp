@@ -529,6 +529,42 @@ const executors: Record<string, ExecutorFn> = {
     return { success: true, message: parts.join("\n") };
   },
 
+  async link_person(p) {
+    const { personId, email: emailOverride } = p as { personId: string; email?: string };
+    const person = await getPersonById(personId);
+    if (!person) return { success: false, message: `Person not found.` };
+
+    if (person.userId) {
+      return { success: true, message: `${person.firstName} ${person.lastName} is already linked to an account.` };
+    }
+
+    const lookupEmail = emailOverride ?? person.email;
+    if (!lookupEmail || lookupEmail === "unknown@example.com") {
+      return { success: false, message: `${person.firstName} ${person.lastName} has no email on file. Provide an email to search for their account.` };
+    }
+
+    // If email override provided, update the person's email first
+    if (emailOverride && emailOverride !== person.email) {
+      await updatePerson(personId, { email: emailOverride });
+    }
+
+    // Look up profile by email
+    const { getSupabase } = await import("../../store/base.js");
+    const supabase = getSupabase();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("email", lookupEmail)
+      .single();
+
+    if (!profile) {
+      return { success: false, message: `No user account found for ${lookupEmail}. They may need to sign up first.` };
+    }
+
+    await updatePerson(personId, { userId: profile.id });
+    return { success: true, message: `Linked ${person.firstName} ${person.lastName} to account ${lookupEmail}.` };
+  },
+
   async share_end(p) {
     const { endId, sharedWithUserId } = p as { endId: string; sharedWithUserId: string };
     try {
