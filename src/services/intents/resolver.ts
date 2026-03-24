@@ -423,7 +423,10 @@ const resolvers: Record<string, ResolverFn> = {
       };
     }
     let personId: string | undefined;
-    if (personName) personId = await resolvePersonName(personName);
+    if (personName) {
+      personId = await resolvePersonName(personName);
+      if (!personId) throw new Error(`Person "${personName}" not found.`);
+    }
     return { personId };
   },
 
