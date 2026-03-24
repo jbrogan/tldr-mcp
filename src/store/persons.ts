@@ -102,8 +102,9 @@ export async function createPerson(data: Person): Promise<PersonEntity> {
  */
 export async function getPersonById(id: string): Promise<PersonEntity | undefined> {
   const supabase = getSupabase();
-  const userId = getUserId();
 
+  // RLS handles access control — don't filter by user_id so shared
+  // participants (via co-participant policy) are also visible
   const { data, error } = await supabase
     .from("persons")
     .select(
@@ -113,7 +114,6 @@ export async function getPersonById(id: string): Promise<PersonEntity | undefine
     `
     )
     .eq("id", id)
-    .eq("user_id", userId)
     .single();
 
   if (error) {
