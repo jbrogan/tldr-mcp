@@ -115,10 +115,11 @@ export const INTENT_CATALOG: IntentDefinition[] = [
   {
     name: "update_person",
     description:
-      'User wants to update an existing person, typically adding them to a team (e.g. "add John to the Engineering team")',
+      'User wants to update an existing person (e.g. "add John to the Engineering team", "Sarah is my sister", "change Alex\'s relationship to friend")',
     rawParams: [
       { name: "personName", type: "string", required: true, description: 'Person name. Use "__self__" for me/I/my/myself' },
       { name: "teamNamesToAdd", type: "string[]", description: "New team names to add (merges with existing)" },
+      { name: "relationshipType", type: "string", description: "self, spouse, child, parent, sibling, friend, colleague, mentor, client, other. Map: wife/husband/partner→spouse, kid/son/daughter→child, mom/dad→parent, brother/sister→sibling, coworker→colleague" },
     ],
   },
   {

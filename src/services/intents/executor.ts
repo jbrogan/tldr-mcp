@@ -156,14 +156,18 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async update_person(p) {
-    const { id, teamIdsToAdd } = p as { id: string; teamIdsToAdd?: string[] };
-    const updates: { teamIdsToAdd?: string[] } = {};
+    const { id, teamIdsToAdd, relationshipType } = p as { id: string; teamIdsToAdd?: string[]; relationshipType?: string };
+    const updates: { teamIdsToAdd?: string[]; relationshipType?: RelationshipType } = {};
     if (teamIdsToAdd?.length) updates.teamIdsToAdd = teamIdsToAdd;
+    if (relationshipType) updates.relationshipType = relationshipType as RelationshipType;
     const person = await updatePerson(id, updates);
     if (!person) return { success: false, message: `Person with ID ${id} not found.` };
+    const details: string[] = [];
+    if (teamIdsToAdd?.length) details.push(`added to teams`);
+    if (relationshipType) details.push(`relationship: ${relationshipType}`);
     return {
       success: true,
-      message: `Updated person: ${person.firstName} ${person.lastName}${teamIdsToAdd?.length ? ` - added to teams: ${teamIdsToAdd.join(", ")}` : ""}`,
+      message: `Updated person: ${person.firstName} ${person.lastName}${details.length ? ` - ${details.join(", ")}` : ""}`,
     };
   },
 

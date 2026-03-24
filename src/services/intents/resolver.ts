@@ -17,6 +17,16 @@ import { listPersons, getSelfPerson, getPersonById } from "../../store/persons.j
 
 const SELF_PLACEHOLDER = "__self__";
 
+const VALID_RELATIONSHIP_TYPES = new Set([
+  "self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other",
+]);
+
+function sanitizeRelationshipType(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const lower = value.toLowerCase();
+  return VALID_RELATIONSHIP_TYPES.has(lower) ? lower : undefined;
+}
+
 // --- Shared resolution helpers ---
 
 function findBestMatch<T>(items: T[], name: string, getName: (t: T) => string): T | undefined {
@@ -298,7 +308,7 @@ const resolvers: Record<string, ResolverFn> = {
       phone: raw.phone as string | undefined,
       title: raw.title as string | undefined,
       notes: raw.notes as string | undefined,
-      relationshipType: raw.relationshipType as string | undefined,
+      relationshipType: sanitizeRelationshipType(raw.relationshipType as string | undefined),
       teamIds: await resolveTeamNames(raw.teamNames),
     };
   },
@@ -310,6 +320,7 @@ const resolvers: Record<string, ResolverFn> = {
     return {
       id,
       teamIdsToAdd: await resolveTeamNames(raw.teamNamesToAdd),
+      relationshipType: sanitizeRelationshipType(raw.relationshipType as string | undefined),
     };
   },
 
@@ -446,7 +457,7 @@ const resolvers: Record<string, ResolverFn> = {
     return {
       organizationId,
       teamId,
-      relationshipType: raw.relationshipType as string | undefined,
+      relationshipType: sanitizeRelationshipType(raw.relationshipType as string | undefined),
     };
   },
 
