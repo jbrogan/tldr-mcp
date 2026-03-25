@@ -282,8 +282,12 @@ const resolvers: Record<string, ResolverFn> = {
   },
 
   async create_team(raw) {
-    const organizationId = await resolveOrgName(raw.organizationName as string);
-    if (!organizationId) throw new Error(`Organization "${raw.organizationName}" not found.`);
+    const orgName = raw.organizationName as string | undefined;
+    if (!orgName || orgName === "__self__") {
+      throw new Error(`Please specify which organization this team belongs to (e.g. "create Engineering team in Acme").`);
+    }
+    const organizationId = await resolveOrgName(orgName);
+    if (!organizationId) throw new Error(`Organization "${orgName}" not found.`);
     return { name: raw.name as string, organizationId };
   },
 
