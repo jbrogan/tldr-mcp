@@ -114,7 +114,8 @@ const executors: Record<string, ExecutorFn> = {
   async create_team(p) {
     const { name, organizationId } = p as { name: string; organizationId: string };
     const team = await createTeam({ name, organizationId });
-    return { success: true, message: `Created team: ${team.name} (${team.id}) in organization ${team.organizationId}` };
+    const org = await getOrganizationById(team.organizationId);
+    return { success: true, message: `Created team: ${team.name} (${team.id}) in ${org?.name ?? team.organizationId}` };
   },
 
   async create_collection(p) {
