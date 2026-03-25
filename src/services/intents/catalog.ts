@@ -202,6 +202,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "get_habit",
+    description:
+      'User wants details about a specific habit (e.g. "show me the guitar practice habit", "details on meditation", "tell me about my reading habit")',
+    rawParams: [
+      { name: "habitName", type: "string", required: true, description: "Name of the habit" },
+    ],
+  },
+  {
     name: "list_shared_habits",
     description:
       'User wants to see habits shared with them by other users (e.g. "show shared habits", "habits shared with me", "what habits are others sharing")',

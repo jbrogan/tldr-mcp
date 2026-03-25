@@ -515,6 +515,40 @@ const executors: Record<string, ExecutorFn> = {
     return { success: true, message: sections.join("\n\n") };
   },
 
+  async get_habit(p) {
+    const { habitId } = p as { habitId: string };
+    const habit = await getHabitById(habitId);
+    if (!habit) return { success: false, message: `Habit not found.` };
+    const ends = await listEnds({ includeShared: true });
+    const endNames = habit.endIds.map((eid) => ends.find((e) => e.id === eid)?.name ?? eid);
+    const personNames: string[] = [];
+    for (const pid of habit.personIds ?? []) {
+      const person = await getPersonById(pid);
+      personNames.push(person ? `${person.firstName} ${person.lastName}` : pid);
+    }
+    const area = habit.areaId ? await getAreaById(habit.areaId) : undefined;
+    const team = habit.teamId ? await getTeamById(habit.teamId) : undefined;
+    const actions = await listActions({ habitId });
+    const recentActions = actions.slice(0, 5);
+    const parts = [
+      `${habit.name} (${habit.id})`,
+      `  Ends: ${endNames.join(", ")}`,
+      area && `  Area: ${area.name}`,
+      team && `  Team: ${team.name}`,
+      personNames.length > 0 && `  Participants: ${personNames.join(", ")}`,
+      habit.frequency && `  Frequency: ${habit.frequency}`,
+      habit.durationMinutes != null && `  Duration: ${habit.durationMinutes} min`,
+    ].filter(Boolean);
+    if (recentActions.length > 0) {
+      parts.push("  Recent actions:");
+      for (const a of recentActions) {
+        const extra = a.actualDurationMinutes != null ? ` (${a.actualDurationMinutes} min)` : "";
+        parts.push(`    - ${a.completedAt.slice(0, 10)}${extra}`);
+      }
+    }
+    return { success: true, message: parts.join("\n") };
+  },
+
   async get_team(p) {
     const { teamId } = p as { teamId: string };
     const team = await getTeamById(teamId);
