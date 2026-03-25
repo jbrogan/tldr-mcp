@@ -71,6 +71,22 @@ import {
 import { listUsers } from "../store/users.js";
 import { interpretAndExecute } from "../services/naturalLanguage.js";
 
+async function resolveOwnerName(ownerType: string, ownerId: string): Promise<string> {
+  if (ownerType === "organization") {
+    const org = await getOrganizationById(ownerId);
+    return org?.name ?? ownerId;
+  }
+  if (ownerType === "team") {
+    const team = await getTeamById(ownerId);
+    return team?.name ?? ownerId;
+  }
+  if (ownerType === "person") {
+    const person = await getPersonById(ownerId);
+    return person ? `${person.firstName} ${person.lastName}` : ownerId;
+  }
+  return ownerId;
+}
+
 export function registerTools(server: McpServer): void {
   server.registerTool(
     "list_areas",
@@ -512,10 +528,10 @@ export function registerTools(server: McpServer): void {
       if (collections.length === 0) {
         return { content: [{ type: "text", text: "No collections found." }] };
       }
-      const lines = collections.map(
-        (c) =>
-          `  ${c.name} (${c.id}) - ${c.ownerType}: ${c.ownerId}${c.collectionType ? ` [${c.collectionType}]` : ""}`
-      );
+      const lines = await Promise.all(collections.map(async (c) => {
+        const ownerName = await resolveOwnerName(c.ownerType, c.ownerId);
+        return `  ${c.name} (${c.id}) - ${c.ownerType}: ${ownerName}${c.collectionType ? ` [${c.collectionType}]` : ""}`;
+      }));
       return {
         content: [
           {
@@ -524,6 +540,37 @@ export function registerTools(server: McpServer): void {
           },
         ],
       };
+    }
+  );
+
+  server.registerTool(
+    "get_collection",
+    {
+      title: "Get Collection",
+      description:
+        "Gets a single collection by ID with full details: owner, type, and the ends it contains.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the collection to fetch"),
+      },
+    },
+    async ({ id }) => {
+      const collection = await getCollectionById(id);
+      if (!collection) {
+        return { content: [{ type: "text", text: `Collection with ID ${id} not found.` }], isError: true };
+      }
+      const ownerName = await resolveOwnerName(collection.ownerType, collection.ownerId);
+      const allEnds = await listEnds();
+      const ends = allEnds.filter((e) => e.collectionId === id);
+      const endLines = ends.map((e) => `    - ${e.name} (${e.id})`);
+      const parts = [
+        `${collection.name} (${collection.id})`,
+        `  Owner: ${ownerName} (${collection.ownerType})`,
+        collection.collectionType && `  Type: ${collection.collectionType}`,
+        collection.description && `  Description: ${collection.description}`,
+        `  Created: ${collection.createdAt}`,
+        ends.length > 0 ? `  Ends:\n${endLines.join("\n")}` : "  Ends: (none)",
+      ].filter(Boolean);
+      return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
 

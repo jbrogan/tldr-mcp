@@ -250,6 +250,22 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "get_collection",
+    description:
+      'User wants details about a specific collection including its ends (e.g. "show me the Sales collection", "details on Q1 Goals")',
+    rawParams: [
+      { name: "collectionName", type: "string", required: true, description: "Name of the collection" },
+    ],
+  },
+  {
+    name: "delete_collection",
+    description:
+      'User wants to delete or remove a collection (e.g. "delete the Sales collection", "remove Q1 Goals collection")',
+    rawParams: [
+      { name: "collectionName", type: "string", required: true, description: "Name of the collection to delete" },
+    ],
+  },
+  {
     name: "delete_team",
     description:
       'User wants to delete or remove a team (e.g. "delete the Engineering team", "remove Leadership team")',

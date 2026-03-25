@@ -190,8 +190,9 @@ async function resolveOwner(
   ownerName: string | undefined
 ): Promise<string | undefined> {
   if (!ownerType || !ownerName) return undefined;
+  const normalizedOwnerType = ownerType === SELF_PLACEHOLDER ? "person" : ownerType;
   if (ownerName === SELF_PLACEHOLDER) return resolveSelf();
-  switch (ownerType) {
+  switch (normalizedOwnerType) {
     case "organization":
       return resolveOrgName(ownerName);
     case "team":
@@ -292,7 +293,8 @@ const resolvers: Record<string, ResolverFn> = {
   },
 
   async create_collection(raw) {
-    const ownerType = raw.ownerType as string;
+    const rawOwnerType = raw.ownerType as string;
+    const ownerType = rawOwnerType === SELF_PLACEHOLDER ? "person" : rawOwnerType;
     const ownerId = await resolveOwner(ownerType, raw.ownerName as string);
     if (!ownerId) throw new Error(`Could not resolve owner "${raw.ownerName}" (${ownerType}).`);
     return {
@@ -422,8 +424,21 @@ const resolvers: Record<string, ResolverFn> = {
     return { expand: raw.expand as boolean | undefined };
   },
 
+  async get_collection(raw) {
+    const collectionId = await resolveCollectionName(raw.collectionName as string);
+    if (!collectionId) throw new Error(`Collection "${raw.collectionName}" not found.`);
+    return { collectionId };
+  },
+
+  async delete_collection(raw) {
+    const collectionId = await resolveCollectionName(raw.collectionName as string);
+    if (!collectionId) throw new Error(`Collection "${raw.collectionName}" not found.`);
+    return { collectionId };
+  },
+
   async list_collections(raw) {
-    const ownerType = raw.ownerType as string | undefined;
+    const rawOwnerType = raw.ownerType as string | undefined;
+    const ownerType = rawOwnerType === SELF_PLACEHOLDER ? "person" : rawOwnerType;
     const ownerId = ownerType
       ? await resolveOwner(ownerType, raw.ownerName as string)
       : undefined;

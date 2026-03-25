@@ -10,7 +10,7 @@ import { listEnds, createEnd, getEndById, updateEnd, deleteEnd, shareEnd, unshar
 import { listAreas, getAreaById } from "../../store/areas.js";
 import { listOrganizations, createOrganization, getOrganizationById } from "../../store/organizations.js";
 import { listTeams, createTeam, getTeamById, deleteTeam } from "../../store/teams.js";
-import { listCollections, createCollection, getCollectionById } from "../../store/collections.js";
+import { listCollections, createCollection, getCollectionById, deleteCollection } from "../../store/collections.js";
 import { createAction, listActions } from "../../store/actions.js";
 import { createTask, listTasks, updateTask } from "../../store/tasks.js";
 import type { RelationshipType } from "../../schemas/person.js";
@@ -23,6 +23,22 @@ export interface ExecuteResult {
 }
 
 type ExecutorFn = (params: ResolvedParams) => Promise<ExecuteResult>;
+
+async function resolveOwnerName(ownerType: string, ownerId: string): Promise<string> {
+  if (ownerType === "organization") {
+    const org = await getOrganizationById(ownerId);
+    return org?.name ?? ownerId;
+  }
+  if (ownerType === "team") {
+    const team = await getTeamById(ownerId);
+    return team?.name ?? ownerId;
+  }
+  if (ownerType === "person") {
+    const person = await getPersonById(ownerId);
+    return person ? `${person.firstName} ${person.lastName}` : ownerId;
+  }
+  return ownerId;
+}
 
 const executors: Record<string, ExecutorFn> = {
   async create_action(p) {
@@ -133,7 +149,8 @@ const executors: Record<string, ExecutorFn> = {
       collectionType: collectionType as "goals" | "projects" | "quarterly" | "backlog" | "operations" | "other" | undefined,
       description,
     });
-    return { success: true, message: `Created collection: ${collection.name} (${collection.id}) owned by ${ownerType} ${ownerId}` };
+    const ownerLabel = await resolveOwnerName(ownerType, ownerId);
+    return { success: true, message: `Created collection: ${collection.name} (${collection.id}) owned by ${ownerLabel} (${ownerType})` };
   },
 
   async create_person(p) {
@@ -359,6 +376,32 @@ const executors: Record<string, ExecutorFn> = {
     return { success: true, message: `Organizations:\n\n${sections.join("\n\n")}` };
   },
 
+  async get_collection(p) {
+    const { collectionId } = p as { collectionId: string };
+    const collection = await getCollectionById(collectionId);
+    if (!collection) return { success: false, message: `Collection not found.` };
+    const ownerLabel = await resolveOwnerName(collection.ownerType, collection.ownerId);
+    const allEnds = await listEnds();
+    const ends = allEnds.filter((e) => e.collectionId === collectionId);
+    const endLines = ends.map((e) => `  - ${e.name} (${e.id})`);
+    const parts = [
+      `${collection.name} (${collection.id})`,
+      `  Owner: ${ownerLabel} (${collection.ownerType})`,
+      collection.collectionType && `  Type: ${collection.collectionType}`,
+      collection.description && `  Description: ${collection.description}`,
+      ends.length > 0 ? `  Ends:\n${endLines.join("\n")}` : "  Ends: (none)",
+    ].filter(Boolean);
+    return { success: true, message: parts.join("\n") };
+  },
+
+  async delete_collection(p) {
+    const { collectionId } = p as { collectionId: string };
+    const collection = await getCollectionById(collectionId);
+    if (!collection) return { success: false, message: `Collection not found.` };
+    await deleteCollection(collectionId);
+    return { success: true, message: `Deleted collection: ${collection.name}` };
+  },
+
   async list_collections(p) {
     const { ownerType, ownerId, collectionType } = p as {
       ownerType?: string;
@@ -369,9 +412,10 @@ const executors: Record<string, ExecutorFn> = {
       ownerType || ownerId || collectionType ? { ownerType, ownerId, collectionType } : undefined
     );
     if (collections.length === 0) return { success: true, message: "No collections found." };
-    const lines = collections.map(
-      (c) => `  ${c.name} (${c.id}) - ${c.ownerType}: ${c.ownerId}${c.collectionType ? ` [${c.collectionType}]` : ""}`
-    );
+    const lines = await Promise.all(collections.map(async (c) => {
+      const ownerLabel = await resolveOwnerName(c.ownerType, c.ownerId);
+      return `  ${c.name} (${c.id}) - ${c.ownerType}: ${ownerLabel}${c.collectionType ? ` [${c.collectionType}]` : ""}`;
+    }));
     return { success: true, message: `Collections:\n\n${lines.join("\n")}` };
   },
 
