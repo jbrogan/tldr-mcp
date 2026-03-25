@@ -250,6 +250,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "delete_team",
+    description:
+      'User wants to delete or remove a team (e.g. "delete the Engineering team", "remove Leadership team")',
+    rawParams: [
+      { name: "teamName", type: "string", required: true, description: "Name of the team to delete" },
+    ],
+  },
+  {
     name: "list_teams",
     description:
       'User wants to see teams. For "my teams" or "what teams is [person] in?" use personName. For "teams in [org]" use organizationName.',

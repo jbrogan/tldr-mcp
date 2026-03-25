@@ -9,7 +9,7 @@ import { listHabits, listHabitsWithShared, createHabit, getHabitById, deleteHabi
 import { listEnds, createEnd, getEndById, updateEnd, deleteEnd, shareEnd, unshareEnd, listSharedEnds, listMyShares } from "../../store/ends.js";
 import { listAreas, getAreaById } from "../../store/areas.js";
 import { listOrganizations, createOrganization, getOrganizationById } from "../../store/organizations.js";
-import { listTeams, createTeam, getTeamById } from "../../store/teams.js";
+import { listTeams, createTeam, getTeamById, deleteTeam } from "../../store/teams.js";
 import { listCollections, createCollection, getCollectionById } from "../../store/collections.js";
 import { createAction, listActions } from "../../store/actions.js";
 import { createTask, listTasks, updateTask } from "../../store/tasks.js";
@@ -561,6 +561,13 @@ const executors: Record<string, ExecutorFn> = {
       }
     }
     return { success: true, message: parts.join("\n") };
+  },
+
+  async delete_team(p) {
+    const { teamId } = p as { teamId: string };
+    const team = await deleteTeam(teamId);
+    if (!team) return { success: false, message: `Team not found.` };
+    return { success: true, message: `Deleted team: ${team.name}` };
   },
 
   async get_team(p) {
