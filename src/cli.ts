@@ -348,7 +348,7 @@ program
   .requiredOption("-e, --ends <ids>", "Comma-separated end IDs")
   .option("-a, --areaId <id>", "Area ID")
   .option("-t, --teamId <id>", "Team ID")
-  .option("-p, --personId <id>", "Person expected to perform the habit (the doer)")
+  .option("-p, --personIds <ids>", "Comma-separated person IDs who participate in the habit")
   .option("-f, --frequency <freq>", "e.g. daily, weekly, 3x/week")
   .option("-m, --durationMinutes <min>", "Estimated time in minutes")
   .action(async (opts) => {
@@ -359,7 +359,7 @@ program
       };
       if (opts.areaId) args.areaId = opts.areaId;
       if (opts.teamId) args.teamId = opts.teamId;
-      if (opts.personId) args.personId = opts.personId;
+      if (opts.personIds) args.personIds = opts.personIds.split(",").map((s: string) => s.trim());
       if (opts.frequency) args.frequency = opts.frequency;
       const mins = opts.durationMinutes != null ? parseInt(String(opts.durationMinutes), 10) : NaN;
       if (!isNaN(mins)) args.durationMinutes = mins;
@@ -774,6 +774,99 @@ program
       } else {
         console.log(JSON.stringify(result, null, 2));
       }
+    });
+  });
+
+// ============================================================================
+// SHARING COMMANDS
+// ============================================================================
+
+program
+  .command("share-end")
+  .description("Share an end (aspiration) with another user")
+  .requiredOption("-i, --endId <id>", "End ID to share")
+  .requiredOption("-u, --userId <id>", "User ID to share with")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "share_end",
+        arguments: { endId: opts.endId, sharedWithUserId: opts.userId },
+      });
+      printToolResult(result);
+    });
+  });
+
+program
+  .command("unshare-end")
+  .description("Remove sharing of an end with a user")
+  .requiredOption("-i, --endId <id>", "End ID to unshare")
+  .requiredOption("-u, --userId <id>", "User ID to remove sharing for")
+  .action(async (opts) => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "unshare_end",
+        arguments: { endId: opts.endId, userId: opts.userId },
+      });
+      printToolResult(result);
+    });
+  });
+
+program
+  .command("list-shared-ends")
+  .description("List ends shared with you by other users")
+  .action(async () => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "list_shared_ends",
+        arguments: {},
+      });
+      printToolResult(result);
+    });
+  });
+
+program
+  .command("list-my-shares")
+  .description("List ends you have shared with other users")
+  .action(async () => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "list_my_shares",
+        arguments: {},
+      });
+      printToolResult(result);
+    });
+  });
+
+// ============================================================================
+// AUTH COMMANDS
+// ============================================================================
+
+program
+  .command("login")
+  .description("Login to tldr-mcp via Supabase (saves token to ~/.tldr-mcp/auth.json)")
+  .action(async () => {
+    console.log("Login is handled via Supabase Auth.");
+    console.log("");
+    console.log("For development, set TLDR_DEV_USER_ID in your .env file.");
+    console.log("For production, integrate with your Supabase Auth flow.");
+    console.log("");
+    console.log("Steps for development:");
+    console.log("1. Create a test user in your Supabase dashboard");
+    console.log("2. Copy the user's UUID from the Authentication > Users page");
+    console.log("3. Add TLDR_DEV_USER_ID=<uuid> to your .env file");
+    console.log("4. Restart the server/CLI");
+  });
+
+program
+  .command("whoami")
+  .description("Show current user info")
+  .action(async () => {
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: "list_users",
+        arguments: {},
+      });
+      printToolResult(result);
     });
   });
 

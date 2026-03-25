@@ -1,52 +1,146 @@
-import { randomUUID } from "node:crypto";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+/**
+ * Areas Store
+ *
+ * Manages Wheel of Life areas for users.
+ * Areas are auto-seeded when a user signs up via database trigger.
+ */
+
+import { getSupabase, getUserId } from "./base.js";
 import type { AreaEntity } from "../schemas/area.js";
-import { DEFAULT_AREAS } from "../schemas/area.js";
+import type { Area as DbArea } from "../supabase/types.js";
 
-function getDataPath(): string {
-  return join(process.cwd(), "data", "areas.json");
+/**
+ * Convert database row to entity format
+ */
+function toEntity(row: DbArea): AreaEntity {
+  return {
+    id: row.id,
+    name: row.name,
+    createdAt: row.created_at,
+  };
 }
 
-async function ensureDataDir(): Promise<void> {
-  await mkdir(dirname(getDataPath()), { recursive: true });
-}
-
-async function loadAreas(): Promise<AreaEntity[]> {
-  try {
-    const data = await readFile(getDataPath(), "utf-8");
-    const parsed = JSON.parse(data);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code === "ENOENT") return [];
-    throw err;
-  }
-}
-
-async function saveAreas(areas: AreaEntity[]): Promise<void> {
-  await ensureDataDir();
-  await writeFile(getDataPath(), JSON.stringify(areas, null, 2), "utf-8");
-}
-
-async function seedIfEmpty(): Promise<AreaEntity[]> {
-  const areas = await loadAreas();
-  if (areas.length > 0) return areas;
-
-  const seeded: AreaEntity[] = DEFAULT_AREAS.map((name) => ({
-    id: randomUUID(),
-    name,
-    createdAt: new Date().toISOString(),
-  }));
-  await saveAreas(seeded);
-  return seeded;
-}
-
+/**
+ * List all areas for the current user.
+ * Areas are automatically seeded when a user profile is created.
+ */
 export async function listAreas(): Promise<AreaEntity[]> {
-  return seedIfEmpty();
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const { data, error } = await supabase
+    .from("areas")
+    .select("*")
+    .eq("user_id", userId)
+    .order("name");
+
+  if (error) {
+    throw new Error(`Failed to list areas: ${error.message}`);
+  }
+
+  return (data ?? []).map(toEntity);
 }
 
+/**
+ * Get an area by ID.
+ * Returns undefined if not found or not owned by current user.
+ */
 export async function getAreaById(id: string): Promise<AreaEntity | undefined> {
-  const areas = await seedIfEmpty();
-  return areas.find((a) => a.id === id);
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const { data, error } = await supabase
+    .from("areas")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") {
+      // No rows returned
+      return undefined;
+    }
+    throw new Error(`Failed to get area: ${error.message}`);
+  }
+
+  return data ? toEntity(data) : undefined;
+}
+
+/**
+ * Create a custom area for the current user.
+ * Note: Default areas are seeded automatically on signup.
+ */
+export async function createArea(name: string): Promise<AreaEntity> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const { data, error } = await supabase
+    .from("areas")
+    .insert({
+      user_id: userId,
+      name,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create area: ${error.message}`);
+  }
+
+  return toEntity(data);
+}
+
+/**
+ * Update an area's name.
+ */
+export async function updateArea(
+  id: string,
+  name: string
+): Promise<AreaEntity | null> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const { data, error } = await supabase
+    .from("areas")
+    .update({ name })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") {
+      return null;
+    }
+    throw new Error(`Failed to update area: ${error.message}`);
+  }
+
+  return data ? toEntity(data) : null;
+}
+
+/**
+ * Delete an area.
+ */
+export async function deleteArea(id: string): Promise<AreaEntity | null> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  // First get the area to return it
+  const existing = await getAreaById(id);
+  if (!existing) {
+    return null;
+  }
+
+  const { error } = await supabase
+    .from("areas")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw new Error(`Failed to delete area: ${error.message}`);
+  }
+
+  return existing;
 }

@@ -43,12 +43,17 @@ import {
   getEndById,
   listEnds,
   updateEnd,
+  shareEnd,
+  unshareEnd,
+  listSharedEnds,
+  listMyShares,
 } from "../store/ends.js";
 import {
   createHabit,
   deleteHabit,
   getHabitById,
   listHabits,
+  listHabitsWithShared,
 } from "../store/habits.js";
 import {
   createAction,
@@ -65,6 +70,22 @@ import {
 } from "../store/tasks.js";
 import { listUsers } from "../store/users.js";
 import { interpretAndExecute } from "../services/naturalLanguage.js";
+
+async function resolveOwnerName(ownerType: string, ownerId: string): Promise<string> {
+  if (ownerType === "organization") {
+    const org = await getOrganizationById(ownerId);
+    return org?.name ?? ownerId;
+  }
+  if (ownerType === "team") {
+    const team = await getTeamById(ownerId);
+    return team?.name ?? ownerId;
+  }
+  if (ownerType === "person") {
+    const person = await getPersonById(ownerId);
+    return person ? `${person.firstName} ${person.lastName}` : ownerId;
+  }
+  return ownerId;
+}
 
 export function registerTools(server: McpServer): void {
   server.registerTool(
@@ -363,7 +384,10 @@ export function registerTools(server: McpServer): void {
           ],
         };
       }
-      const lines = teams.map((t) => `  ${t.name} (${t.id}) - Organization: ${t.organizationId}`);
+      const lines = await Promise.all(teams.map(async (t) => {
+        const org = await getOrganizationById(t.organizationId);
+        return `  ${t.name} (${t.id}) - Organization: ${org?.name ?? t.organizationId}`;
+      }));
       return {
         content: [
           {
@@ -372,6 +396,39 @@ export function registerTools(server: McpServer): void {
           },
         ],
       };
+    }
+  );
+
+  server.registerTool(
+    "get_team",
+    {
+      title: "Get Team",
+      description:
+        "Gets a single team by ID with full details: organization, members, and their roles.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the team to fetch"),
+      },
+    },
+    async ({ id }) => {
+      const team = await getTeamById(id);
+      if (!team) {
+        return { content: [{ type: "text", text: `Team with ID ${id} not found.` }], isError: true };
+      }
+      const org = await getOrganizationById(team.organizationId);
+      const members = await listPersons({ teamId: id });
+      const memberLines = members.map((p) => {
+        const meta: string[] = [];
+        if (p.relationshipType) meta.push(p.relationshipType);
+        if (p.userId) meta.push("linked account");
+        return `    - ${p.firstName} ${p.lastName}${meta.length ? ` [${meta.join(", ")}]` : ""}`;
+      });
+      const parts = [
+        `${team.name} (${team.id})`,
+        org && `  Organization: ${org.name}`,
+        `  Created: ${team.createdAt}`,
+        members.length > 0 ? `  Members:\n${memberLines.join("\n")}` : "  Members: (none)",
+      ].filter(Boolean);
+      return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
 
@@ -471,10 +528,10 @@ export function registerTools(server: McpServer): void {
       if (collections.length === 0) {
         return { content: [{ type: "text", text: "No collections found." }] };
       }
-      const lines = collections.map(
-        (c) =>
-          `  ${c.name} (${c.id}) - ${c.ownerType}: ${c.ownerId}${c.collectionType ? ` [${c.collectionType}]` : ""}`
-      );
+      const lines = await Promise.all(collections.map(async (c) => {
+        const ownerName = await resolveOwnerName(c.ownerType, c.ownerId);
+        return `  ${c.name} (${c.id}) - ${c.ownerType}: ${ownerName}${c.collectionType ? ` [${c.collectionType}]` : ""}`;
+      }));
       return {
         content: [
           {
@@ -483,6 +540,37 @@ export function registerTools(server: McpServer): void {
           },
         ],
       };
+    }
+  );
+
+  server.registerTool(
+    "get_collection",
+    {
+      title: "Get Collection",
+      description:
+        "Gets a single collection by ID with full details: owner, type, and the ends it contains.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the collection to fetch"),
+      },
+    },
+    async ({ id }) => {
+      const collection = await getCollectionById(id);
+      if (!collection) {
+        return { content: [{ type: "text", text: `Collection with ID ${id} not found.` }], isError: true };
+      }
+      const ownerName = await resolveOwnerName(collection.ownerType, collection.ownerId);
+      const allEnds = await listEnds();
+      const ends = allEnds.filter((e) => e.collectionId === id);
+      const endLines = ends.map((e) => `    - ${e.name} (${e.id})`);
+      const parts = [
+        `${collection.name} (${collection.id})`,
+        `  Owner: ${ownerName} (${collection.ownerType})`,
+        collection.collectionType && `  Type: ${collection.collectionType}`,
+        collection.description && `  Description: ${collection.description}`,
+        `  Created: ${collection.createdAt}`,
+        ends.length > 0 ? `  Ends:\n${endLines.join("\n")}` : "  Ends: (none)",
+      ].filter(Boolean);
+      return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
 
@@ -611,6 +699,52 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "get_end",
+    {
+      title: "Get End",
+      description:
+        "Gets a single end by ID with full details: area, collection, habits (with participants), and sharing info.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the end to fetch"),
+      },
+    },
+    async ({ id }) => {
+      const end = await getEndById(id);
+      if (!end) {
+        return { content: [{ type: "text", text: `End with ID ${id} not found.` }], isError: true };
+      }
+      const area = end.areaId ? await getAreaById(end.areaId) : undefined;
+      const collections = await listCollections();
+      const collection = end.collectionId ? collections.find((c) => c.id === end.collectionId) : undefined;
+      const habits = await listHabits({ endId: id });
+      const habitLines: string[] = [];
+      for (const h of habits) {
+        const personNames: string[] = [];
+        for (const pid of h.personIds ?? []) {
+          const person = await getPersonById(pid);
+          personNames.push(person ? `${person.firstName} ${person.lastName}` : pid);
+        }
+        const meta: string[] = [];
+        if (h.frequency) meta.push(h.frequency);
+        if (personNames.length) meta.push(`participants: ${personNames.join(", ")}`);
+        habitLines.push(`    - ${h.name} (${h.id})${meta.length ? ` [${meta.join(", ")}]` : ""}`);
+      }
+      const shares = await listMyShares();
+      const endShares = shares.filter((s) => s.endId === id);
+      const shareLines = endShares.map((s) => `    - ${s.sharedWithEmail}`);
+      const parts = [
+        `${end.name} (${end.id})`,
+        area && `  Area: ${area.name}`,
+        collection && `  Collection: ${collection.name}`,
+        `  Created: ${end.createdAt}`,
+        habits.length > 0 ? `  Habits:\n${habitLines.join("\n")}` : "  Habits: (none)",
+        shareLines.length > 0 ? `  Shared with:\n${shareLines.join("\n")}` : undefined,
+      ].filter(Boolean);
+      return { content: [{ type: "text", text: parts.join("\n") }] };
+    }
+  );
+
+  server.registerTool(
     "update_end",
     {
       title: "Update End",
@@ -686,18 +820,18 @@ export function registerTools(server: McpServer): void {
         endIds: z.array(z.string()).min(1).describe("IDs of ends this habit serves"),
         areaId: z.string().optional(),
         teamId: z.string().optional(),
-        personId: z.string().optional().describe("ID of the person expected to perform the habit (the doer), not the focus/recipient"),
+        personIds: z.array(z.string()).optional().describe("IDs of people who participate in the habit"),
         frequency: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
         durationMinutes: z.number().int().positive().optional().describe("Estimated time in minutes"),
       },
     },
-    async ({ name, endIds, areaId, teamId, personId, frequency, durationMinutes }) => {
+    async ({ name, endIds, areaId, teamId, personIds, frequency, durationMinutes }) => {
       const habit = await createHabit({
         name,
         endIds,
         areaId,
         teamId,
-        personId,
+        personIds,
         frequency,
         durationMinutes,
       });
@@ -707,7 +841,7 @@ export function registerTools(server: McpServer): void {
         `Ends: ${habit.endIds.join(", ")}`,
         habit.areaId && `Area: ${habit.areaId}`,
         habit.teamId && `Team: ${habit.teamId}`,
-        habit.personId && `Performed by: ${habit.personId}`,
+        habit.personIds?.length && `Participants: ${habit.personIds.join(", ")}`,
         habit.frequency && `Frequency: ${habit.frequency}`,
         habit.durationMinutes != null && `Duration: ${habit.durationMinutes} min`,
         `Created at: ${habit.createdAt}`,
@@ -747,7 +881,7 @@ export function registerTools(server: McpServer): void {
         if (h.durationMinutes != null) meta.push(`${h.durationMinutes} min`);
         if (h.areaId) meta.push(`area: ${h.areaId}`);
         if (h.teamId) meta.push(`team: ${h.teamId}`);
-        if (h.personId) meta.push(`person: ${h.personId}`);
+        if (h.personIds?.length) meta.push(`persons: ${h.personIds.join(", ")}`);
         return `  ${h.name} (${h.id})\n    Ends: ${h.endIds.join(", ")}${meta.length ? ` | ${meta.join(", ")}` : ""}`;
       });
       return {
@@ -758,6 +892,58 @@ export function registerTools(server: McpServer): void {
           },
         ],
       };
+    }
+  );
+
+  server.registerTool(
+    "get_habit",
+    {
+      title: "Get Habit",
+      description:
+        "Gets a single habit by ID with full details: ends, area, team, participants, frequency, and recent actions.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the habit to fetch"),
+      },
+    },
+    async ({ id }) => {
+      const habit = await getHabitById(id);
+      if (!habit) {
+        return { content: [{ type: "text", text: `Habit with ID ${id} not found.` }], isError: true };
+      }
+      const ends = await listEnds({ includeShared: true });
+      const endNames = habit.endIds.map((eid) => ends.find((e) => e.id === eid)?.name ?? eid);
+      const personNames: string[] = [];
+      for (const pid of habit.personIds ?? []) {
+        const person = await getPersonById(pid);
+        personNames.push(person ? `${person.firstName} ${person.lastName}` : pid);
+      }
+      const area = habit.areaId ? await getAreaById(habit.areaId) : undefined;
+      const team = habit.teamId ? await getTeamById(habit.teamId) : undefined;
+      const actions = await listActions({ habitId: id });
+      const recentActions = actions.slice(0, 5);
+
+      const parts = [
+        `${habit.name} (${habit.id})`,
+        `  Ends: ${endNames.join(", ")}`,
+        area && `  Area: ${area.name}`,
+        team && `  Team: ${team.name}`,
+        personNames.length > 0 && `  Participants: ${personNames.join(", ")}`,
+        habit.frequency && `  Frequency: ${habit.frequency}`,
+        habit.durationMinutes != null && `  Duration: ${habit.durationMinutes} min`,
+        `  Created: ${habit.createdAt}`,
+      ].filter(Boolean);
+
+      if (recentActions.length > 0) {
+        parts.push("  Recent actions:");
+        for (const a of recentActions) {
+          const extra = a.actualDurationMinutes != null ? ` (${a.actualDurationMinutes} min)` : "";
+          parts.push(`    - ${a.completedAt.slice(0, 10)}${extra}`);
+        }
+      } else {
+        parts.push("  Recent actions: (none)");
+      }
+
+      return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
 
@@ -1000,6 +1186,36 @@ export function registerTools(server: McpServer): void {
           },
         ],
       };
+    }
+  );
+
+  server.registerTool(
+    "get_task",
+    {
+      title: "Get Task",
+      description: "Gets a single task by ID with full details.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the task to fetch"),
+      },
+    },
+    async ({ id }) => {
+      const task = await getTaskById(id);
+      if (!task) {
+        return { content: [{ type: "text", text: `Task with ID ${id} not found.` }], isError: true };
+      }
+      const area = task.areaId ? await getAreaById(task.areaId) : undefined;
+      const end = task.endId ? await getEndById(task.endId) : undefined;
+      const parts = [
+        `${task.name} (${task.id})`,
+        task.completedAt ? `  Status: completed ${task.completedAt.slice(0, 10)}` : "  Status: open",
+        end && `  End: ${end.name}`,
+        area && `  Area: ${area.name}`,
+        task.dueDate && `  Due: ${task.dueDate}`,
+        task.actualDurationMinutes != null && `  Duration: ${task.actualDurationMinutes} min`,
+        task.notes && `  Notes: ${task.notes}`,
+        `  Created: ${task.createdAt}`,
+      ].filter(Boolean);
+      return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
 
@@ -1374,6 +1590,174 @@ export function registerTools(server: McpServer): void {
       return {
         content: [{ type: "text", text: result.message }],
         isError: !result.success,
+      };
+    }
+  );
+
+  // ============================================================================
+  // SHARING TOOLS
+  // ============================================================================
+
+  server.registerTool(
+    "share_end",
+    {
+      title: "Share End",
+      description:
+        "Share an end (aspiration) with another user by their user ID. The shared user will have read-only access to the end and its habits/actions.",
+      inputSchema: {
+        endId: z.string().min(1).describe("ID of the end to share"),
+        sharedWithUserId: z.string().min(1).describe("User ID of the person to share with"),
+      },
+    },
+    async ({ endId, sharedWithUserId }) => {
+      try {
+        const share = await shareEnd(endId, sharedWithUserId);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Shared "${share.endName}" with ${share.sharedWithEmail}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to share: ${(error as Error).message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
+    "unshare_end",
+    {
+      title: "Unshare End",
+      description:
+        "Remove sharing of an end with a user. You can unshare ends you own, or remove yourself from ends shared with you.",
+      inputSchema: {
+        endId: z.string().min(1).describe("ID of the end to unshare"),
+        userId: z.string().min(1).describe("ID of the user to remove sharing for"),
+      },
+    },
+    async ({ endId, userId }) => {
+      try {
+        const removed = await unshareEnd(endId, userId);
+        if (removed) {
+          return {
+            content: [{ type: "text", text: "Sharing removed successfully." }],
+          };
+        } else {
+          return {
+            content: [{ type: "text", text: "Share not found." }],
+            isError: true,
+          };
+        }
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to unshare: ${(error as Error).message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
+    "list_shared_ends",
+    {
+      title: "List Shared Ends",
+      description:
+        "Lists ends that have been shared with you by other users. These are read-only ends you can track progress on together.",
+      inputSchema: {},
+    },
+    async () => {
+      const ends = await listSharedEnds();
+      if (ends.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No ends have been shared with you.",
+            },
+          ],
+        };
+      }
+      const lines = ends.map(
+        (e) => `  ${e.name} (${e.id}) - shared by ${e.ownerDisplayName ?? "Unknown"}`
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Ends shared with you:\n\n${lines.join("\n")}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "list_shared_habits",
+    {
+      title: "List Shared Habits",
+      description: "Lists habits shared with you through shared ends, showing the owner and linked ends.",
+      inputSchema: {},
+    },
+    async () => {
+      const habits = await listHabitsWithShared();
+      const shared = habits.filter((h) => h.isShared);
+      if (shared.length === 0) {
+        return { content: [{ type: "text", text: "No shared habits found." }] };
+      }
+      const allEnds = await listEnds({ includeShared: true });
+      const lines = shared.map((h) => {
+        const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
+        return `  ${h.name} (${h.id}) → serves: ${endNames} — shared by ${h.ownerDisplayName ?? "Unknown"}`;
+      });
+      return { content: [{ type: "text", text: `Shared habits:\n\n${lines.join("\n")}` }] };
+    }
+  );
+
+  server.registerTool(
+    "list_my_shares",
+    {
+      title: "List My Shares",
+      description: "Lists ends you have shared with other users.",
+      inputSchema: {},
+    },
+    async () => {
+      const shares = await listMyShares();
+      if (shares.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "You haven't shared any ends with others.",
+            },
+          ],
+        };
+      }
+      const lines = shares.map(
+        (s) =>
+          `  ${s.endName} (${s.endId}) — shared with ${s.sharedWithEmail}`
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Your shared ends:\n\n${lines.join("\n")}`,
+          },
+        ],
       };
     }
   );
