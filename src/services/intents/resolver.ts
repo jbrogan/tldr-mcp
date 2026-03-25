@@ -379,6 +379,12 @@ const resolvers: Record<string, ResolverFn> = {
     };
   },
 
+  async delete_end(raw) {
+    const endId = await resolveEndName(raw.endName as string);
+    if (!endId) throw new Error(`End "${raw.endName}" not found.`);
+    return { endId };
+  },
+
   async get_end(raw) {
     const endId = await resolveEndName(raw.endName as string);
     if (!endId) throw new Error(`End "${raw.endName}" not found.`);

@@ -6,7 +6,7 @@
  */
 
 import { listHabits, listHabitsWithShared, createHabit, getHabitById, deleteHabit } from "../../store/habits.js";
-import { listEnds, createEnd, getEndById, updateEnd, shareEnd, unshareEnd, listSharedEnds, listMyShares } from "../../store/ends.js";
+import { listEnds, createEnd, getEndById, updateEnd, deleteEnd, shareEnd, unshareEnd, listSharedEnds, listMyShares } from "../../store/ends.js";
 import { listAreas, getAreaById } from "../../store/areas.js";
 import { listOrganizations, createOrganization, getOrganizationById } from "../../store/organizations.js";
 import { listTeams, createTeam, getTeamById } from "../../store/teams.js";
@@ -44,6 +44,13 @@ const executors: Record<string, ExecutorFn> = {
       success: true,
       message: `Recorded: ${habit?.name ?? habitId} on ${completedAt.slice(0, 10)}${actualDurationMinutes != null ? ` (${actualDurationMinutes} min)` : ""}${extras.length ? ` ${extras.join(", ")}` : ""}`,
     };
+  },
+
+  async delete_end(p) {
+    const { endId } = p as { endId: string };
+    const end = await deleteEnd(endId);
+    if (!end) return { success: false, message: `End not found.` };
+    return { success: true, message: `Deleted end: ${end.name}` };
   },
 
   async create_end(p) {

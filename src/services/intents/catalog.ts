@@ -44,6 +44,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "delete_end",
+    description:
+      'User wants to delete or remove an end/aspiration (e.g. "delete the Learn Guitar end", "remove my fitness goal")',
+    rawParams: [
+      { name: "endName", type: "string", required: true, description: "Name of the end to delete" },
+    ],
+  },
+  {
     name: "update_end",
     description:
       'User wants to add an end to a collection, move it, or change its properties. Triggered by "add X to Y", "put X in Y", "move X to Y", or renaming/recategorizing an end.',
