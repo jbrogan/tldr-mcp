@@ -210,6 +210,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "delete_habit",
+    description:
+      'User wants to delete or remove a habit (e.g. "delete the guitar practice habit", "remove meditation habit")',
+    rawParams: [
+      { name: "habitName", type: "string", required: true, description: "Name of the habit to delete" },
+    ],
+  },
+  {
     name: "list_shared_habits",
     description:
       'User wants to see habits shared with them by other users (e.g. "show shared habits", "habits shared with me", "what habits are others sharing")',

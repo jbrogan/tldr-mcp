@@ -5,7 +5,7 @@
  * the corresponding store operations. Returns a human-readable result.
  */
 
-import { listHabits, listHabitsWithShared, createHabit, getHabitById } from "../../store/habits.js";
+import { listHabits, listHabitsWithShared, createHabit, getHabitById, deleteHabit } from "../../store/habits.js";
 import { listEnds, createEnd, getEndById, updateEnd, shareEnd, unshareEnd, listSharedEnds, listMyShares } from "../../store/ends.js";
 import { listAreas, getAreaById } from "../../store/areas.js";
 import { listOrganizations, createOrganization, getOrganizationById } from "../../store/organizations.js";
@@ -513,6 +513,13 @@ const executors: Record<string, ExecutorFn> = {
       };
     }
     return { success: true, message: sections.join("\n\n") };
+  },
+
+  async delete_habit(p) {
+    const { habitId } = p as { habitId: string };
+    const habit = await deleteHabit(habitId);
+    if (!habit) return { success: false, message: `Habit not found.` };
+    return { success: true, message: `Deleted habit: ${habit.name}` };
   },
 
   async get_habit(p) {

@@ -498,6 +498,12 @@ const resolvers: Record<string, ResolverFn> = {
     return { habitId };
   },
 
+  async delete_habit(raw) {
+    const habitId = await resolveHabitName(raw.habitName as string);
+    if (!habitId) throw new Error(`Habit "${raw.habitName}" not found.`);
+    return { habitId };
+  },
+
   async get_team(raw) {
     const teamId = await resolveTeamName(raw.teamName as string);
     if (!teamId) throw new Error(`Team "${raw.teamName}" not found.`);
