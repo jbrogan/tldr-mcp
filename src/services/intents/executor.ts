@@ -724,6 +724,12 @@ const executors: Record<string, ExecutorFn> = {
     return { success: true, message: `Ends shared with you:\n\n${lines.join("\n")}` };
   },
 
+  async help(p) {
+    const { topic } = p as { topic?: string };
+    const { getHelpText } = await import("./help.js");
+    return { success: true, message: getHelpText(topic) };
+  },
+
   async unknown() {
     return {
       success: false,

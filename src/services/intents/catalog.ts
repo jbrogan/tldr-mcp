@@ -357,6 +357,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     rawParams: [],
   },
   {
+    name: "help",
+    description:
+      'User wants to understand a concept or how the system works (e.g. "what is an end?", "how do collections work?", "explain sharing", "help")',
+    rawParams: [
+      { name: "topic", type: "string", description: "The concept to explain: areas, ends, habits, actions, tasks, collections, organizations, teams, persons, sharing, or overview" },
+    ],
+  },
+  {
     name: "unknown",
     description: "Intent is unclear or not supported",
     rawParams: [],

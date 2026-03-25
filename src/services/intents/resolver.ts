@@ -584,6 +584,10 @@ const resolvers: Record<string, ResolverFn> = {
     return {};
   },
 
+  async help(raw) {
+    return { topic: raw.topic as string | undefined };
+  },
+
   async unknown() {
     return {};
   },

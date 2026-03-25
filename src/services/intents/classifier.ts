@@ -46,6 +46,7 @@ ROUTING RULES:
 - When user says "with [names]" while recording an action -> MUST include withPersonNames
 - When user says "for [name]" while recording an action -> MUST include forPersonNames
 - Preserve full task descriptions including reason/purpose (e.g. "call Alex to discuss security deposit" NOT "call Alex")
+- "what is X?" / "how does X work?" / "explain X" / "help" -> help intent (conceptual questions about the system). NOT help when user wants their actual data — "what are my habits?" -> list_habits, "show my ends" -> list_ends
 
 Today's date: ${today}
 
