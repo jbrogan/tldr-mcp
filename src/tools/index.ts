@@ -368,7 +368,10 @@ export function registerTools(server: McpServer): void {
           ],
         };
       }
-      const lines = teams.map((t) => `  ${t.name} (${t.id}) - Organization: ${t.organizationId}`);
+      const lines = await Promise.all(teams.map(async (t) => {
+        const org = await getOrganizationById(t.organizationId);
+        return `  ${t.name} (${t.id}) - Organization: ${org?.name ?? t.organizationId}`;
+      }));
       return {
         content: [
           {
