@@ -185,6 +185,7 @@ export function Sidebar({ onSelectItem, selectedId }: SidebarProps) {
 
   const refreshSection = useCallback(
     async (section: SidebarSection) => {
+      if (!section.tool || !section.parse) return;
       setLoading((prev) => ({ ...prev, [section.key]: true }));
       try {
         const result = await callTool(section.tool, section.args ?? {});
