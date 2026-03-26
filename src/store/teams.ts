@@ -105,6 +105,37 @@ export async function listTeamsByOrganizationId(
 }
 
 /**
+ * Update a team.
+ */
+export async function updateTeam(
+  id: string,
+  updates: { name?: string }
+): Promise<TeamEntity | null> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const existing = await getTeamById(id);
+  if (!existing) return null;
+
+  const updateData: Record<string, unknown> = {};
+  if (updates.name !== undefined) updateData.name = updates.name;
+
+  if (Object.keys(updateData).length > 0) {
+    const { error } = await supabase
+      .from("teams")
+      .update(updateData)
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new Error(`Failed to update team: ${error.message}`);
+    }
+  }
+
+  return (await getTeamById(id)) ?? null;
+}
+
+/**
  * Delete a team.
  * Note: Person-team associations will be cascade deleted by database FK constraint.
  */

@@ -277,6 +277,15 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "update_team",
+    description:
+      'User wants to rename a team (e.g. "rename DLI Operations to Operations", "update Engineering team name to Platform")',
+    rawParams: [
+      { name: "teamName", type: "string", required: true, description: "Current name of the team" },
+      { name: "newName", type: "string", required: true, description: "New name for the team" },
+    ],
+  },
+  {
     name: "delete_team",
     description:
       'User wants to delete or remove a team (e.g. "delete the Engineering team", "remove Leadership team")',

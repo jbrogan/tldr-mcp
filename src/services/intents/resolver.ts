@@ -542,6 +542,12 @@ const resolvers: Record<string, ResolverFn> = {
     return { habitId };
   },
 
+  async update_team(raw) {
+    const teamId = await resolveTeamName(raw.teamName as string);
+    if (!teamId) throw new Error(`Team "${raw.teamName}" not found.`);
+    return { teamId, newName: raw.newName as string };
+  },
+
   async delete_team(raw) {
     const teamId = await resolveTeamName(raw.teamName as string);
     if (!teamId) throw new Error(`Team "${raw.teamName}" not found.`);
