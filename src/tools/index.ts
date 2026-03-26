@@ -683,10 +683,13 @@ export function registerTools(server: McpServer): void {
       if (ends.length === 0) {
         return { content: [{ type: "text", text: "No ends found." }] };
       }
-      const lines = ends.map(
-        (e) =>
-          `  ${e.name} (${e.id})${e.areaId ? ` - Area: ${e.areaId}` : ""}${e.collectionId ? ` - Collection: ${e.collectionId}` : ""}`
-      );
+      const allAreas = await listAreas();
+      const allCollections = await listCollections();
+      const lines = ends.map((e) => {
+        const area = e.areaId ? allAreas.find((a) => a.id === e.areaId) : undefined;
+        const collection = e.collectionId ? allCollections.find((c) => c.id === e.collectionId) : undefined;
+        return `  ${e.name} (${e.id})${area ? ` - Area: ${area.name}` : ""}${collection ? ` - Collection: ${collection.name}` : ""}`;
+      });
       return {
         content: [
           {
