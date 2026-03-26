@@ -1070,8 +1070,12 @@ export function registerTools(server: McpServer): void {
             `  ${habit?.name ?? a.habitId} - ${a.completedAt.slice(0, 10)} (${a.id})`,
             a.actualDurationMinutes != null ? `${a.actualDurationMinutes} min` : null,
             a.notes ? a.notes : null,
-            a.withPersonIds?.length ? `with: ${a.withPersonIds.join(", ")}` : null,
-            a.forPersonIds?.length ? `for: ${a.forPersonIds.join(", ")}` : null,
+            a.withPersonIds?.length
+              ? `with: ${(await Promise.all(a.withPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName}` : pid; }))).join(", ")}`
+              : null,
+            a.forPersonIds?.length
+              ? `for: ${(await Promise.all(a.forPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName}` : pid; }))).join(", ")}`
+              : null,
           ].filter(Boolean);
           return parts.join(" | ");
         })

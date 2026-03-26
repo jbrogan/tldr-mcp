@@ -498,20 +498,46 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async list_actions(p) {
-    const { habitId, fromDate, toDate } = p as {
+    const { habitId, fromDate, toDate, withPersonIds, forPersonIds } = p as {
       habitId?: string;
       fromDate?: string;
       toDate?: string;
+      withPersonIds?: string[];
+      forPersonIds?: string[];
     };
-    const actions = await listActions({ habitId, fromDate, toDate });
+    let actions = await listActions({ habitId, fromDate, toDate });
+    if (withPersonIds?.length) {
+      const withSet = new Set(withPersonIds);
+      actions = actions.filter((a) => a.withPersonIds?.some((pid) => withSet.has(pid)));
+    }
+    if (forPersonIds?.length) {
+      const forSet = new Set(forPersonIds);
+      actions = actions.filter((a) => a.forPersonIds?.some((pid) => forSet.has(pid)));
+    }
     if (actions.length === 0) return { success: true, message: "No actions found." };
     const habitMap = new Map((await listHabitsWithShared()).map((h) => [h.id, h.name]));
-    const lines = actions.map((a) => {
+    const lines = await Promise.all(actions.map(async (a) => {
       const habitName = habitMap.get(a.habitId) ?? a.habitId;
       const date = a.completedAt.slice(0, 10);
-      const extra = a.actualDurationMinutes != null ? ` (${a.actualDurationMinutes} min)` : "";
+      const parts: string[] = [];
+      if (a.actualDurationMinutes != null) parts.push(`${a.actualDurationMinutes} min`);
+      if (a.withPersonIds?.length) {
+        const names = await Promise.all(a.withPersonIds.map(async (pid) => {
+          const p = await getPersonById(pid);
+          return p ? `${p.firstName} ${p.lastName}` : pid;
+        }));
+        parts.push(`with ${names.join(", ")}`);
+      }
+      if (a.forPersonIds?.length) {
+        const names = await Promise.all(a.forPersonIds.map(async (pid) => {
+          const p = await getPersonById(pid);
+          return p ? `${p.firstName} ${p.lastName}` : pid;
+        }));
+        parts.push(`for ${names.join(", ")}`);
+      }
+      const extra = parts.length > 0 ? ` (${parts.join(", ")})` : "";
       return `  ${date}: ${habitName}${extra}`;
-    });
+    }));
     return { success: true, message: `Actions:\n\n${lines.join("\n")}` };
   },
 

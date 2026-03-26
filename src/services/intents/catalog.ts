@@ -311,6 +311,8 @@ export const INTENT_CATALOG: IntentDefinition[] = [
       { name: "period", type: "string", description: "today, yesterday, this_week, this_month" },
       { name: "fromDate", type: "string", description: "YYYY-MM-DD start date for custom range" },
       { name: "toDate", type: "string", description: "YYYY-MM-DD end date for custom range" },
+      { name: "withPersonNames", type: "string[]", description: 'Filter to actions done WITH these people (e.g. "with Jennifer")' },
+      { name: "forPersonNames", type: "string[]", description: 'Filter to actions done FOR these people (e.g. "for Alex")' },
     ],
   },
   {

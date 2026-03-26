@@ -510,6 +510,8 @@ const resolvers: Record<string, ResolverFn> = {
       habitId: await resolveHabitName(raw.habitName as string),
       fromDate,
       toDate,
+      withPersonIds: await resolvePersonNames(raw.withPersonNames),
+      forPersonIds: await resolvePersonNames(raw.forPersonNames),
     };
   },
 
