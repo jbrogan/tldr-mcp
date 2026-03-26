@@ -258,6 +258,17 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "update_collection",
+    description:
+      'User wants to update a collection\'s name, type, or description (e.g. "change Sales collection type to quarterly", "rename Q1 Goals to Q2 Goals")',
+    rawParams: [
+      { name: "collectionName", type: "string", required: true, description: "Name of the collection to update" },
+      { name: "newName", type: "string", description: "New name if renaming" },
+      { name: "collectionType", type: "string", description: "New type: goals, projects, quarterly, backlog, operations, other" },
+      { name: "description", type: "string", description: "New description" },
+    ],
+  },
+  {
     name: "delete_collection",
     description:
       'User wants to delete or remove a collection (e.g. "delete the Sales collection", "remove Q1 Goals collection")',

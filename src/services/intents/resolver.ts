@@ -430,6 +430,17 @@ const resolvers: Record<string, ResolverFn> = {
     return { collectionId };
   },
 
+  async update_collection(raw) {
+    const collectionId = await resolveCollectionName(raw.collectionName as string);
+    if (!collectionId) throw new Error(`Collection "${raw.collectionName}" not found.`);
+    return {
+      collectionId,
+      name: raw.newName as string | undefined,
+      collectionType: raw.collectionType as string | undefined,
+      description: raw.description as string | undefined,
+    };
+  },
+
   async delete_collection(raw) {
     const collectionId = await resolveCollectionName(raw.collectionName as string);
     if (!collectionId) throw new Error(`Collection "${raw.collectionName}" not found.`);

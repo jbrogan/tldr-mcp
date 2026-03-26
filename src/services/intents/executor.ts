@@ -10,7 +10,7 @@ import { listEnds, createEnd, getEndById, updateEnd, deleteEnd, shareEnd, unshar
 import { listAreas, getAreaById } from "../../store/areas.js";
 import { listOrganizations, createOrganization, getOrganizationById } from "../../store/organizations.js";
 import { listTeams, createTeam, getTeamById, deleteTeam } from "../../store/teams.js";
-import { listCollections, createCollection, getCollectionById, deleteCollection } from "../../store/collections.js";
+import { listCollections, createCollection, getCollectionById, updateCollection, deleteCollection } from "../../store/collections.js";
 import { createAction, listActions } from "../../store/actions.js";
 import { createTask, listTasks, updateTask } from "../../store/tasks.js";
 import type { RelationshipType } from "../../schemas/person.js";
@@ -392,6 +392,29 @@ const executors: Record<string, ExecutorFn> = {
       ends.length > 0 ? `  Ends:\n${endLines.join("\n")}` : "  Ends: (none)",
     ].filter(Boolean);
     return { success: true, message: parts.join("\n") };
+  },
+
+  async update_collection(p) {
+    const { collectionId, name, collectionType, description } = p as {
+      collectionId: string;
+      name?: string;
+      collectionType?: string;
+      description?: string;
+    };
+    const updates: Record<string, unknown> = {};
+    if (name) updates.name = name;
+    if (collectionType) updates.collectionType = collectionType;
+    if (description) updates.description = description;
+    if (Object.keys(updates).length === 0) {
+      return { success: false, message: "No updates provided." };
+    }
+    const collection = await updateCollection(collectionId, updates);
+    if (!collection) return { success: false, message: `Collection not found.` };
+    const details: string[] = [];
+    if (name) details.push(`renamed to "${name}"`);
+    if (collectionType) details.push(`type: ${collectionType}`);
+    if (description) details.push(`description updated`);
+    return { success: true, message: `Updated collection: ${collection.name} - ${details.join(", ")}` };
   },
 
   async delete_collection(p) {
