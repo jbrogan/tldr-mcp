@@ -260,8 +260,20 @@ const resolvers: Record<string, ResolverFn> = {
   },
 
   async create_habit(raw) {
-    const endIds = await resolveEndNames(raw.endNames);
-    if (!endIds?.length) throw new Error(`Could not find end(s): ${JSON.stringify(raw.endNames)}`);
+    let endIds = await resolveEndNames(raw.endNames);
+    let areaId = await resolveAreaName(raw.areaName as string);
+
+    // Fallback: if endNames didn't resolve but areaName did, check if areaName is actually an end
+    if (!endIds?.length && raw.areaName) {
+      const endId = await resolveEndName(raw.areaName as string);
+      if (endId) {
+        endIds = [endId];
+        areaId = undefined; // it was an end, not an area
+      }
+    }
+
+    if (!endIds?.length) throw new Error(`Could not find end(s): ${JSON.stringify(raw.endNames ?? raw.areaName)}`);
+
     let personIds = await resolvePersonNames(raw.personNames);
     if (!personIds?.length) {
       // Default to self when no persons specified
@@ -271,8 +283,8 @@ const resolvers: Record<string, ResolverFn> = {
       name: raw.name as string,
       endIds,
       frequency: raw.frequency as string | undefined,
-      durationMinutes: raw.durationMinutes as number | undefined,
-      areaId: await resolveAreaName(raw.areaName as string),
+      durationMinutes: typeof raw.durationMinutes === "number" ? raw.durationMinutes : undefined,
+      areaId,
       teamId: await resolveTeamName(raw.teamName as string),
       personIds,
     };
