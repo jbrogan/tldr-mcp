@@ -326,7 +326,22 @@ const executors: Record<string, ExecutorFn> = {
       teamId?: string;
       personId?: string;
     };
-    const habits = await listHabits({ endId, areaId, teamId, personId });
+    let habits = await listHabits({ endId, areaId, teamId, personId });
+
+    // Also include habits linked to ends in this area (habit → end → area)
+    if (areaId && !endId) {
+      const allEnds = await listEnds({ includeShared: true });
+      const endIdsInArea = new Set(allEnds.filter((e) => e.areaId === areaId).map((e) => e.id));
+      const allHabits = await listHabits({ personId });
+      const habitIds = new Set(habits.map((h) => h.id));
+      for (const h of allHabits) {
+        if (!habitIds.has(h.id) && h.endIds.some((eid) => endIdsInArea.has(eid))) {
+          habits.push(h);
+          habitIds.add(h.id);
+        }
+      }
+    }
+
     if (habits.length === 0) return { success: true, message: "No habits found." };
     const allEnds = await listEnds({ includeShared: true });
     const lines = habits.map((h) => {

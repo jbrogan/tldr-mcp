@@ -869,24 +869,47 @@ export function registerTools(server: McpServer): void {
       },
     },
     async ({ endId, areaId, teamId, personId }) => {
-      const habits = await listHabits({
+      let habits = await listHabits({
         endId,
         areaId,
         teamId,
         personId,
       });
+
+      // Also include habits linked to ends in this area
+      if (areaId && !endId) {
+        const allEnds = await listEnds();
+        const endIdsInArea = new Set(allEnds.filter((e) => e.areaId === areaId).map((e) => e.id));
+        const allHabits = await listHabits({ personId });
+        const habitIds = new Set(habits.map((h) => h.id));
+        for (const h of allHabits) {
+          if (!habitIds.has(h.id) && h.endIds.some((eid) => endIdsInArea.has(eid))) {
+            habits.push(h);
+            habitIds.add(h.id);
+          }
+        }
+      }
+
       if (habits.length === 0) {
         return { content: [{ type: "text", text: "No habits found." }] };
       }
-      const lines = habits.map((h) => {
+      const allEnds = await listEnds({ includeShared: true });
+      const allAreas = await listAreas();
+      const lines = await Promise.all(habits.map(async (h) => {
+        const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
         const meta: string[] = [];
         if (h.frequency) meta.push(h.frequency);
         if (h.durationMinutes != null) meta.push(`${h.durationMinutes} min`);
-        if (h.areaId) meta.push(`area: ${h.areaId}`);
-        if (h.teamId) meta.push(`team: ${h.teamId}`);
-        if (h.personIds?.length) meta.push(`persons: ${h.personIds.join(", ")}`);
-        return `  ${h.name} (${h.id})\n    Ends: ${h.endIds.join(", ")}${meta.length ? ` | ${meta.join(", ")}` : ""}`;
-      });
+        if (h.areaId) {
+          const area = allAreas.find((a) => a.id === h.areaId);
+          meta.push(`area: ${area?.name ?? h.areaId}`);
+        }
+        if (h.teamId) {
+          const team = await getTeamById(h.teamId);
+          meta.push(`team: ${team?.name ?? h.teamId}`);
+        }
+        return `  ${h.name} (${h.id})\n    Ends: ${endNames}${meta.length ? ` | ${meta.join(", ")}` : ""}`;
+      }));
       return {
         content: [
           {
