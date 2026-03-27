@@ -8,13 +8,13 @@
 import { listHabits, listHabitsWithShared, createHabit, getHabitById, deleteHabit } from "../../store/habits.js";
 import { listEnds, createEnd, getEndById, updateEnd, deleteEnd, shareEnd, unshareEnd, listSharedEnds, listMyShares } from "../../store/ends.js";
 import { listAreas, getAreaById } from "../../store/areas.js";
-import { listOrganizations, createOrganization, getOrganizationById } from "../../store/organizations.js";
+import { listOrganizations, createOrganization, getOrganizationById, deleteOrganization } from "../../store/organizations.js";
 import { listTeams, createTeam, getTeamById, updateTeam, deleteTeam } from "../../store/teams.js";
 import { listCollections, createCollection, getCollectionById, updateCollection, deleteCollection } from "../../store/collections.js";
 import { createAction, listActions } from "../../store/actions.js";
-import { createTask, listTasks, updateTask } from "../../store/tasks.js";
+import { createTask, listTasks, updateTask, deleteTask } from "../../store/tasks.js";
 import type { RelationshipType } from "../../schemas/person.js";
-import { createPerson, listPersons, updatePerson, getPersonById } from "../../store/persons.js";
+import { createPerson, listPersons, updatePerson, getPersonById, deletePerson } from "../../store/persons.js";
 import type { ResolvedParams } from "./resolver.js";
 
 export interface ExecuteResult {
@@ -677,6 +677,27 @@ const executors: Record<string, ExecutorFn> = {
     const team = await updateTeam(teamId, { name: newName });
     if (!team) return { success: false, message: `Team not found.` };
     return { success: true, message: `Renamed team to: ${team.name}` };
+  },
+
+  async delete_task(p) {
+    const { taskId } = p as { taskId: string };
+    const task = await deleteTask(taskId);
+    if (!task) return { success: false, message: `Task not found.` };
+    return { success: true, message: `Deleted task: ${task.name}` };
+  },
+
+  async delete_person(p) {
+    const { personId } = p as { personId: string };
+    const person = await deletePerson(personId);
+    if (!person) return { success: false, message: `Person not found.` };
+    return { success: true, message: `Deleted person: ${person.firstName} ${person.lastName}` };
+  },
+
+  async delete_organization(p) {
+    const { organizationId } = p as { organizationId: string };
+    const org = await deleteOrganization(organizationId);
+    if (!org) return { success: false, message: `Organization not found.` };
+    return { success: true, message: `Deleted organization: ${org.name}` };
   },
 
   async delete_team(p) {

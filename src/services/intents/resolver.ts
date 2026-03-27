@@ -560,6 +560,24 @@ const resolvers: Record<string, ResolverFn> = {
     return { teamId, newName: raw.newName as string };
   },
 
+  async delete_task(raw) {
+    const taskId = await resolveTaskName(raw.taskName as string);
+    if (!taskId) throw new Error(`Task "${raw.taskName}" not found.`);
+    return { taskId };
+  },
+
+  async delete_person(raw) {
+    const personId = await resolvePersonName(raw.personName as string);
+    if (!personId) throw new Error(`Person "${raw.personName}" not found.`);
+    return { personId };
+  },
+
+  async delete_organization(raw) {
+    const organizationId = await resolveOrgName(raw.organizationName as string);
+    if (!organizationId) throw new Error(`Organization "${raw.organizationName}" not found.`);
+    return { organizationId };
+  },
+
   async delete_team(raw) {
     const teamId = await resolveTeamName(raw.teamName as string);
     if (!teamId) throw new Error(`Team "${raw.teamName}" not found.`);

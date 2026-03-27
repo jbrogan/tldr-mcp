@@ -277,6 +277,30 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "delete_task",
+    description:
+      'User wants to delete or remove a task (e.g. "delete the call mom task", "remove the oil change task")',
+    rawParams: [
+      { name: "taskName", type: "string", required: true, description: "Name of the task to delete" },
+    ],
+  },
+  {
+    name: "delete_person",
+    description:
+      'User wants to delete or remove a person (e.g. "delete John Smith", "remove Sarah from people")',
+    rawParams: [
+      { name: "personName", type: "string", required: true, description: "Name of the person to delete" },
+    ],
+  },
+  {
+    name: "delete_organization",
+    description:
+      'User wants to delete or remove an organization (e.g. "delete Acme Corp", "remove the old org")',
+    rawParams: [
+      { name: "organizationName", type: "string", required: true, description: "Name of the organization to delete" },
+    ],
+  },
+  {
     name: "update_team",
     description:
       'User wants to rename a team (e.g. "rename DLI Operations to Operations", "update Engineering team name to Platform")',
