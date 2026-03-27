@@ -42,6 +42,7 @@ ROUTING RULES:
 - "Add X to Y collection" / "Put X in Y" / "Move X to Y" -> update_end (NOT create_collection or create_end)
 - "What teams is NAME in?" / "NAME's teams" / "teams for NAME" -> list_teams with personName (NOT organizationName, NOT get_person or list_people)
 - When user says "me", "I", "my", "myself" for a person reference -> use the literal string "__self__"
+- "__self__" is ONLY valid for personName/personNames/ownerName fields. NEVER put "__self__" in endName, endNames, habitName, teamName, areaName, organizationName, or collectionName.
 - Only include "__self__" or personName when the user EXPLICITLY mentions a person by name or says "me"/"my"/"I". Do NOT infer personName from context. "list habits for [end]", "list teams in [org]" should NOT include personName.
 - When user says "with [names]" while recording an action -> MUST include withPersonNames
 - When user says "for [name]" while recording an action -> MUST include forPersonNames
