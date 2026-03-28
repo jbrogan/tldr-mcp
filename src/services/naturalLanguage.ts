@@ -9,6 +9,7 @@ import { listCollections } from "../store/collections.js";
 import { classify } from "./intents/classifier.js";
 import { resolve } from "./intents/resolver.js";
 import { execute, type ExecuteResult } from "./intents/executor.js";
+import { hasActiveFlow, handleFlowInput, startFlow } from "./intents/flow.js";
 
 export interface NLResult {
   success: boolean;
@@ -64,6 +65,16 @@ async function tryDeterministicShortcuts(text: string): Promise<NLResult | null>
 // --- Main orchestrator ---
 
 export async function interpretAndExecute(text: string): Promise<NLResult> {
+  // Stage -1: Active flow check
+  if (hasActiveFlow()) {
+    const flowResult = await handleFlowInput(text);
+    if (flowResult) {
+      console.error(`[NL] Flow — ${flowResult.success ? "OK" : "FAIL"}: ${flowResult.message.slice(0, 100)}`);
+      return flowResult;
+    }
+    // Flow returned null — input looks like a new command, fall through to normal pipeline
+  }
+
   // Stage 0: Deterministic shortcuts
   const shortcut = await tryDeterministicShortcuts(text);
   if (shortcut) {
@@ -77,7 +88,34 @@ export async function interpretAndExecute(text: string): Promise<NLResult> {
     console.error(`[NL] Stage 1 — intent: ${intent}, rawParams: ${JSON.stringify(rawParams)}`);
 
     // Stage 2: Resolve raw params to IDs (deterministic, queries user data)
-    const resolvedParams = await resolve(intent, rawParams);
+    let resolvedParams;
+    try {
+      resolvedParams = await resolve(intent, rawParams);
+    } catch (resolveErr) {
+      // If create_action failed because habit not found, start guided flow
+      const msg = resolveErr instanceof Error ? resolveErr.message : String(resolveErr);
+      if (intent === "create_action" && msg.includes("not found")) {
+        const habitName = rawParams.habitName as string;
+        const completedDate = rawParams.completedDate as string;
+        const durationMinutes = rawParams.durationMinutes as number | undefined;
+        const notes = rawParams.notes as string | undefined;
+
+        startFlow("confirm_create_habit", {
+          habitName,
+          completedDate,
+          durationMinutes: typeof durationMinutes === "number" ? durationMinutes : undefined,
+          notes,
+          originalText: text,
+        });
+
+        console.error(`[NL] Flow started — no habit "${habitName}", asking to create`);
+        return {
+          success: true,
+          message: `I don't have a habit called "${habitName}". Would you like me to create it? (yes/no)`,
+        };
+      }
+      throw resolveErr;
+    }
     console.error(`[NL] Stage 2 — resolved: ${JSON.stringify(resolvedParams)}`);
 
     // Stage 3: Execute (store operations, format response)
