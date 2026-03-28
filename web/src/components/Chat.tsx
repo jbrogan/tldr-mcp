@@ -70,9 +70,14 @@ export function Chat({ onSignOut, userEmail }: ChatProps) {
         <div className="mx-auto max-w-2xl space-y-4">
           {messages.length === 0 && (
             <div className="text-center text-gray-400 mt-32">
-              <p className="text-lg">What would you like to do?</p>
+              <p className="text-lg">Welcome! Just tell me what you've been doing.</p>
               <p className="text-sm mt-2">
-                Try "list my areas" or "create an end called Learn Spanish in Career"
+                For example: "I went to the gym for 30 minutes" or "I practiced guitar today"
+              </p>
+              <p className="text-sm mt-3 text-gray-350">
+                Type <span className="font-medium text-gray-500">help</span> for an overview of the system, or{" "}
+                <span className="font-medium text-gray-500">help [topic]</span> to learn about a specific concept
+                (e.g. "help beliefs", "help habits").
               </p>
             </div>
           )}
@@ -113,7 +118,7 @@ export function Chat({ onSignOut, userEmail }: ChatProps) {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type a command..."
+            placeholder="Tell me what you did today..."
             disabled={loading}
             className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none disabled:opacity-50"
           />
