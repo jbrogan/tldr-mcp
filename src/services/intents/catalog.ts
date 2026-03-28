@@ -443,6 +443,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "suggest_belief_links",
+    description:
+      'User wants the system to suggest which ends align with a belief (e.g. "suggest links for family comes first", "what ends match my health belief")',
+    rawParams: [
+      { name: "beliefName", type: "string", required: true, description: "Name of the belief to find matching ends for" },
+    ],
+  },
+  {
     name: "link_end_to_belief",
     description:
       'User wants to connect an end to a belief (e.g. "link Be a Great Father to family comes first", "connect fitness goal to health belief")',

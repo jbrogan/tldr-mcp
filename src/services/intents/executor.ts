@@ -873,6 +873,66 @@ const executors: Record<string, ExecutorFn> = {
     return { success: true, message: `Deleted belief: ${belief.name}` };
   },
 
+  async suggest_belief_links(p) {
+    const { beliefId } = p as { beliefId: string };
+    const { getBeliefById } = await import("../../store/beliefs.js");
+    const belief = await getBeliefById(beliefId);
+    if (!belief) return { success: false, message: `Belief not found.` };
+
+    const allEnds = await listEnds({ includeShared: true });
+    const alreadyLinked = new Set(belief.endIds);
+    const unlinkedEnds = allEnds.filter((e) => !alreadyLinked.has(e.id));
+
+    if (unlinkedEnds.length === 0) {
+      return { success: true, message: `All ends are already linked to "${belief.name}".` };
+    }
+
+    // Ask LLM to suggest which ends align with this belief
+    const { createLLMProvider } = await import("../../llm/index.js");
+    const provider = createLLMProvider();
+
+    const endsList = unlinkedEnds.map((e) => `- "${e.name}" (${e.id})`).join("\n");
+    const prompt = `Given this core belief: "${belief.name}"${belief.description ? ` — ${belief.description}` : ""}
+
+Which of these ends (aspirations/goals) align with or are motivated by this belief? Only include ends that have a meaningful connection.
+
+Available ends:
+${endsList}
+
+Respond with ONLY a JSON array of end IDs that align. Example: ["id1", "id2"]
+If none align, respond with: []`;
+
+    const raw = await provider.complete(prompt);
+    let jsonStr = raw.trim();
+    const codeBlock = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlock) jsonStr = codeBlock[1].trim();
+
+    let suggestedIds: string[];
+    try {
+      suggestedIds = JSON.parse(jsonStr);
+    } catch {
+      return { success: false, message: `Could not parse suggestions. LLM response: ${raw.slice(0, 200)}` };
+    }
+
+    if (!Array.isArray(suggestedIds) || suggestedIds.length === 0) {
+      return { success: true, message: `No ends seem to align with "${belief.name}".` };
+    }
+
+    const suggestions = suggestedIds
+      .map((id) => unlinkedEnds.find((e) => e.id === id))
+      .filter(Boolean);
+
+    if (suggestions.length === 0) {
+      return { success: true, message: `No ends seem to align with "${belief.name}".` };
+    }
+
+    const lines = suggestions.map((e) => `  - ${e!.name}`);
+    return {
+      success: true,
+      message: `Suggested ends for "${belief.name}":\n\n${lines.join("\n")}\n\nTo link, say: "link [end name] to ${belief.name}"`,
+    };
+  },
+
   async link_end_to_belief(p) {
     const { endId, beliefId } = p as { endId: string; beliefId: string };
     const { linkEndToBelief, getBeliefById } = await import("../../store/beliefs.js");

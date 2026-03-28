@@ -673,6 +673,12 @@ const resolvers: Record<string, ResolverFn> = {
     return { beliefId };
   },
 
+  async suggest_belief_links(raw) {
+    const beliefId = await resolveBeliefName(raw.beliefName as string);
+    if (!beliefId) throw new Error(`Belief "${raw.beliefName}" not found.`);
+    return { beliefId };
+  },
+
   async link_end_to_belief(raw) {
     const endId = await resolveEndName(raw.endName as string);
     if (!endId) throw new Error(`End "${raw.endName}" not found.`);
