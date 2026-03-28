@@ -171,6 +171,30 @@ Respond with ONLY a JSON array of strings. Example: ["Learn Guitar", "Develop Mu
   }
 }
 
+/**
+ * Use LLM to suggest belief names based on an end name.
+ */
+async function suggestBeliefNames(endName: string, existingBeliefNames: string[]): Promise<string[]> {
+  try {
+    const provider = createLLMProvider();
+    const existingList = existingBeliefNames.length > 0
+      ? `\nExisting beliefs (do NOT repeat these): ${existingBeliefNames.join(", ")}`
+      : "";
+    const prompt = `Given an aspiration/end called "${endName}", suggest 2-3 concise core belief statements that could motivate this aspiration. A belief is a fundamental value like "Family comes first" or "Health is the foundation for everything".${existingList}
+
+Respond with ONLY a JSON array of strings. Example: ["Family comes first", "Being present matters"]`;
+
+    const raw = await provider.complete(prompt);
+    let jsonStr = raw.trim();
+    const codeBlock = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlock) jsonStr = codeBlock[1].trim();
+    const suggestions = JSON.parse(jsonStr);
+    return Array.isArray(suggestions) ? suggestions.slice(0, 3) : [];
+  } catch {
+    return [];
+  }
+}
+
 const flowHandlers: Record<string, FlowHandler> = {
   async confirm_create_habit(input, flow) {
     const lower = input.toLowerCase().trim();
@@ -287,18 +311,24 @@ const flowHandlers: Record<string, FlowHandler> = {
     // Ask about beliefs: existing end without beliefs, or new end
     advanceFlow("ask_belief", { endId, endName });
 
+    const existingBeliefNames = beliefs.map((b) => b.name);
+    const beliefSuggestions = await suggestBeliefNames(endName, existingBeliefNames);
+    const suggestLines = beliefSuggestions.length > 0
+      ? `\nSuggested beliefs:\n${beliefSuggestions.map((s) => `  - ${s}`).join("\n")}\n`
+      : "";
+
     if (beliefs.length > 0) {
-      const beliefNames = beliefs.map((b) => `  - ${b.name}`).join("\n");
+      const beliefNameLines = beliefs.map((b) => `  - ${b.name}`).join("\n");
       return {
         success: true,
-        message: `${linkedMsg}\n\nDoes this end connect to any of your beliefs?\n\n${beliefNames}\n\nType a belief name to link, or describe a new belief to create. "skip" to finish.`,
+        message: `${linkedMsg}\n\nDoes this end connect to any of your beliefs?\n\nExisting beliefs:\n${beliefNameLines}${suggestLines}\nType a name to link or create. "skip" to finish.`,
       };
     }
 
     // No beliefs exist — prompt to create one
     return {
       success: true,
-      message: `${linkedMsg}\n\nYou don't have any core beliefs yet. A belief is a core value that motivates your ends (e.g. "Family comes first", "Health is the foundation").\n\nDescribe a belief to create, or "skip" to finish.`,
+      message: `${linkedMsg}\n\nYou don't have any core beliefs yet. A belief is a core value that motivates your ends.${suggestLines}\nType a belief to create, or "skip" to finish.`,
     };
   },
 
