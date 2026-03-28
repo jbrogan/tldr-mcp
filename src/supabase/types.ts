@@ -60,6 +60,41 @@ export type Database = {
           },
         ];
       };
+      beliefs: {
+        Row: BeliefRow;
+        Insert: BeliefInsert;
+        Update: Partial<BeliefInsert>;
+        Relationships: [
+          {
+            foreignKeyName: "beliefs_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      belief_ends: {
+        Row: BeliefEndRow;
+        Insert: BeliefEndInsert;
+        Update: Partial<BeliefEndInsert>;
+        Relationships: [
+          {
+            foreignKeyName: "belief_ends_belief_id_fkey";
+            columns: ["belief_id"];
+            isOneToOne: false;
+            referencedRelation: "beliefs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "belief_ends_end_id_fkey";
+            columns: ["end_id"];
+            isOneToOne: false;
+            referencedRelation: "ends";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       collections: {
         Row: CollectionRow;
         Insert: CollectionInsert;
@@ -282,6 +317,21 @@ export type PersonTeamRow = {
   created_at: string;
 };
 
+export type BeliefRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+};
+
+export type BeliefEndRow = {
+  id: string;
+  belief_id: string;
+  end_id: string;
+  created_at: string;
+};
+
 export type CollectionRow = {
   id: string;
   user_id: string;
@@ -422,6 +472,21 @@ export type PersonTeamInsert = {
   created_at?: string;
 };
 
+export type BeliefInsert = {
+  id?: string;
+  user_id: string;
+  name: string;
+  description?: string | null;
+  created_at?: string;
+};
+
+export type BeliefEndInsert = {
+  id?: string;
+  belief_id: string;
+  end_id: string;
+  created_at?: string;
+};
+
 export type CollectionInsert = {
   id?: string;
   user_id: string;
@@ -531,6 +596,8 @@ export type Organization = OrganizationRow;
 export type Team = TeamRow;
 export type Person = PersonRow;
 export type PersonTeam = PersonTeamRow;
+export type Belief = BeliefRow;
+export type BeliefEnd = BeliefEndRow;
 export type Collection = CollectionRow;
 export type End = EndRow;
 export type EndShare = EndShareRow;

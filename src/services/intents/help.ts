@@ -9,6 +9,7 @@ const topics: Record<string, string> = {
   overview: `The Wheel of Life system helps you track what matters across all areas of your life.
 
 Here's how the pieces fit together:
+  - Beliefs: Core values that motivate everything (e.g. "Family comes first")
   - Areas: 10 life domains (Career, Family, Health, etc.)
   - Ends: Ongoing aspirations within an area (e.g. "Be a great father")
   - Habits: Recurring behaviors that serve your ends (e.g. "Family dinner weekly")
@@ -22,6 +23,17 @@ Two ways to slice your data:
   - By Area: "How am I doing in Family?" (life domain lens)
   - By Organization: "How is the business doing?" (structural lens)
   Collections bridge these two views.`,
+
+  beliefs: `Beliefs are your core values and convictions — the foundational principles that explain why your ends matter.
+
+Examples: "Family comes first", "Health is the foundation for everything", "Financial independence enables freedom"
+
+Key properties:
+  - Beliefs sit above ends in the hierarchy: beliefs → ends → habits → actions
+  - A belief can motivate multiple ends across different areas
+  - An end can serve multiple beliefs
+  - Beliefs provide the "why" for reflection — connecting daily actions to deeper purpose
+  - Use "link [end] to [belief]" to connect them`,
 
   areas: `Areas are the 10 Wheel of Life categories that represent the broad domains of your life:
   Career, Family, Health, Finance, Social, Romance, Personal Growth, Fun & Recreation, Physical Environment, Contribution.
@@ -132,6 +144,13 @@ The owner has full control over the end. Shared users get read-only access.`,
 
 const TOPIC_ALIASES: Record<string, string> = {
   area: "areas",
+  belief: "beliefs",
+  value: "beliefs",
+  values: "beliefs",
+  "core belief": "beliefs",
+  "core beliefs": "beliefs",
+  "core value": "beliefs",
+  "core values": "beliefs",
   end: "ends",
   aspiration: "ends",
   aspirations: "ends",

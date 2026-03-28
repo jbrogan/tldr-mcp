@@ -88,6 +88,60 @@ async function resolveOwnerName(ownerType: string, ownerId: string): Promise<str
 }
 
 export function registerTools(server: McpServer): void {
+  // --- Beliefs ---
+
+  server.registerTool(
+    "list_beliefs",
+    {
+      title: "List Beliefs",
+      description: "Lists core beliefs with their linked ends.",
+      inputSchema: {},
+    },
+    async () => {
+      const { listBeliefs } = await import("../store/beliefs.js");
+      const beliefs = await listBeliefs();
+      if (beliefs.length === 0) {
+        return { content: [{ type: "text", text: "No beliefs found." }] };
+      }
+      const allEnds = await listEnds();
+      const lines = beliefs.map((b) => {
+        const endNames = b.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid);
+        const endsPart = endNames.length > 0 ? `\n    Linked ends: ${endNames.join(", ")}` : "";
+        return `  ${b.name} (${b.id})${endsPart}`;
+      });
+      return { content: [{ type: "text", text: `Beliefs:\n\n${lines.join("\n")}` }] };
+    }
+  );
+
+  server.registerTool(
+    "get_belief",
+    {
+      title: "Get Belief",
+      description: "Gets a single belief by ID with full details and linked ends.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the belief to fetch"),
+      },
+    },
+    async ({ id }) => {
+      const { getBeliefById } = await import("../store/beliefs.js");
+      const belief = await getBeliefById(id);
+      if (!belief) {
+        return { content: [{ type: "text", text: `Belief with ID ${id} not found.` }], isError: true };
+      }
+      const allEnds = await listEnds();
+      const endNames = belief.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid);
+      const parts = [
+        `${belief.name} (${belief.id})`,
+        belief.description && `  Description: ${belief.description}`,
+        `  Created: ${belief.createdAt}`,
+        endNames.length > 0 ? `  Linked ends:\n${endNames.map((n) => `    - ${n}`).join("\n")}` : "  Linked ends: (none)",
+      ].filter(Boolean);
+      return { content: [{ type: "text", text: parts.join("\n") }] };
+    }
+  );
+
+  // --- Areas ---
+
   server.registerTool(
     "list_areas",
     {

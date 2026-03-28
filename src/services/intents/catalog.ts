@@ -403,6 +403,64 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     rawParams: [],
   },
   {
+    name: "create_belief",
+    description:
+      'User wants to define a core belief or value (e.g. "I believe family comes first", "my core belief is health is the foundation for everything")',
+    rawParams: [
+      { name: "name", type: "string", required: true, description: "The belief statement" },
+      { name: "description", type: "string", description: "Additional context about the belief" },
+    ],
+  },
+  {
+    name: "list_beliefs",
+    description: 'User wants to see their core beliefs (e.g. "show my beliefs", "list beliefs", "what are my core values")',
+    rawParams: [],
+  },
+  {
+    name: "get_belief",
+    description:
+      'User wants details about a specific belief including linked ends (e.g. "show me the family comes first belief")',
+    rawParams: [
+      { name: "beliefName", type: "string", required: true, description: "Name of the belief" },
+    ],
+  },
+  {
+    name: "update_belief",
+    description:
+      'User wants to update a belief\'s name or description (e.g. "rename my health belief to wellness is non-negotiable")',
+    rawParams: [
+      { name: "beliefName", type: "string", required: true, description: "Current name of the belief" },
+      { name: "newName", type: "string", description: "New name if renaming" },
+      { name: "description", type: "string", description: "New description" },
+    ],
+  },
+  {
+    name: "delete_belief",
+    description:
+      'User wants to delete a core belief (e.g. "delete the health belief", "remove my old belief")',
+    rawParams: [
+      { name: "beliefName", type: "string", required: true, description: "Name of the belief to delete" },
+    ],
+  },
+  {
+    name: "link_end_to_belief",
+    description:
+      'User wants to connect an end to a belief (e.g. "link Be a Great Father to family comes first", "connect fitness goal to health belief")',
+    rawParams: [
+      { name: "endName", type: "string", required: true, description: "Name of the end" },
+      { name: "beliefName", type: "string", required: true, description: "Name of the belief" },
+    ],
+  },
+  {
+    name: "unlink_end_from_belief",
+    description:
+      'User wants to disconnect an end from a belief (e.g. "unlink fitness goal from health belief")',
+    rawParams: [
+      { name: "endName", type: "string", required: true, description: "Name of the end" },
+      { name: "beliefName", type: "string", required: true, description: "Name of the belief" },
+    ],
+  },
+  {
     name: "help",
     description:
       'User wants to understand a concept or how the system works (e.g. "what is an end?", "how do collections work?", "explain sharing", "help")',

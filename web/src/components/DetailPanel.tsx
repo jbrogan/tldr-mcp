@@ -30,6 +30,8 @@ function getDetailConfig(section: string, itemId: string, _itemName: string) {
       };
       return { tool: "list_actions", args: ranges[itemId] ?? {} };
     }
+    case "beliefs":
+      return { tool: "get_belief", args: { id: itemId } };
     case "areas":
       return { tool: "list_ends", args: { areaId: itemId } };
     case "ends":

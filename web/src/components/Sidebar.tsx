@@ -80,6 +80,12 @@ const sections: SidebarSection[] = [
     parse: parseNameIdLines,
   },
   {
+    key: "beliefs",
+    label: "Beliefs",
+    tool: "list_beliefs",
+    parse: parseNameIdLines,
+  },
+  {
     key: "ends",
     label: "Ends",
     tool: "list_ends",

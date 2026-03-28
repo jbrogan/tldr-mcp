@@ -13,6 +13,7 @@ import { listOrganizations } from "../../store/organizations.js";
 import { listTeams } from "../../store/teams.js";
 import { listCollections } from "../../store/collections.js";
 import { listTasks } from "../../store/tasks.js";
+import { listBeliefs } from "../../store/beliefs.js";
 import { listPersons, getSelfPerson, getPersonById } from "../../store/persons.js";
 
 const SELF_PLACEHOLDER = "__self__";
@@ -183,6 +184,12 @@ async function resolveTaskName(name: string | undefined): Promise<string | undef
   if (!name) return undefined;
   const tasks = await listTasks();
   return findBestMatch(tasks, name, (t) => t.name)?.id;
+}
+
+async function resolveBeliefName(name: string | undefined): Promise<string | undefined> {
+  if (!name) return undefined;
+  const beliefs = await listBeliefs();
+  return findBestMatch(beliefs, name, (b) => b.name)?.id;
 }
 
 async function resolveOwner(
@@ -631,6 +638,55 @@ const resolvers: Record<string, ResolverFn> = {
 
   async list_shared_ends() {
     return {};
+  },
+
+  async create_belief(raw) {
+    return {
+      name: raw.name as string,
+      description: raw.description as string | undefined,
+    };
+  },
+
+  async list_beliefs() {
+    return {};
+  },
+
+  async get_belief(raw) {
+    const beliefId = await resolveBeliefName(raw.beliefName as string);
+    if (!beliefId) throw new Error(`Belief "${raw.beliefName}" not found.`);
+    return { beliefId };
+  },
+
+  async update_belief(raw) {
+    const beliefId = await resolveBeliefName(raw.beliefName as string);
+    if (!beliefId) throw new Error(`Belief "${raw.beliefName}" not found.`);
+    return {
+      beliefId,
+      newName: raw.newName as string | undefined,
+      description: raw.description as string | undefined,
+    };
+  },
+
+  async delete_belief(raw) {
+    const beliefId = await resolveBeliefName(raw.beliefName as string);
+    if (!beliefId) throw new Error(`Belief "${raw.beliefName}" not found.`);
+    return { beliefId };
+  },
+
+  async link_end_to_belief(raw) {
+    const endId = await resolveEndName(raw.endName as string);
+    if (!endId) throw new Error(`End "${raw.endName}" not found.`);
+    const beliefId = await resolveBeliefName(raw.beliefName as string);
+    if (!beliefId) throw new Error(`Belief "${raw.beliefName}" not found.`);
+    return { endId, beliefId };
+  },
+
+  async unlink_end_from_belief(raw) {
+    const endId = await resolveEndName(raw.endName as string);
+    if (!endId) throw new Error(`End "${raw.endName}" not found.`);
+    const beliefId = await resolveBeliefName(raw.beliefName as string);
+    if (!beliefId) throw new Error(`Belief "${raw.beliefName}" not found.`);
+    return { endId, beliefId };
   },
 
   async help(raw) {

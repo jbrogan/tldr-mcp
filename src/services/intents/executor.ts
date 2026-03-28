@@ -816,6 +816,81 @@ const executors: Record<string, ExecutorFn> = {
     return { success: true, message: `Ends shared with you:\n\n${lines.join("\n")}` };
   },
 
+  async create_belief(p) {
+    const { name, description } = p as { name: string; description?: string };
+    const { createBelief } = await import("../../store/beliefs.js");
+    const belief = await createBelief({ name, description });
+    return { success: true, message: `Created belief: ${belief.name} (${belief.id})` };
+  },
+
+  async list_beliefs() {
+    const { listBeliefs } = await import("../../store/beliefs.js");
+    const beliefs = await listBeliefs();
+    if (beliefs.length === 0) return { success: true, message: "No beliefs found." };
+    const allEnds = await listEnds({ includeShared: true });
+    const lines = beliefs.map((b) => {
+      const endNames = b.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid);
+      const endsPart = endNames.length > 0 ? ` → ${endNames.join(", ")}` : "";
+      return `  ${b.name} (${b.id})${endsPart}`;
+    });
+    return { success: true, message: `Beliefs:\n\n${lines.join("\n")}` };
+  },
+
+  async get_belief(p) {
+    const { beliefId } = p as { beliefId: string };
+    const { getBeliefById } = await import("../../store/beliefs.js");
+    const belief = await getBeliefById(beliefId);
+    if (!belief) return { success: false, message: `Belief not found.` };
+    const allEnds = await listEnds({ includeShared: true });
+    const endNames = belief.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid);
+    const parts = [
+      `${belief.name} (${belief.id})`,
+      belief.description && `  Description: ${belief.description}`,
+      endNames.length > 0 ? `  Linked ends:\n${endNames.map((n) => `    - ${n}`).join("\n")}` : "  Linked ends: (none)",
+    ].filter(Boolean);
+    return { success: true, message: parts.join("\n") };
+  },
+
+  async update_belief(p) {
+    const { beliefId, newName, description } = p as { beliefId: string; newName?: string; description?: string };
+    const { updateBelief } = await import("../../store/beliefs.js");
+    const updates: { name?: string; description?: string } = {};
+    if (newName) updates.name = newName;
+    if (description) updates.description = description;
+    if (Object.keys(updates).length === 0) {
+      return { success: false, message: "No updates provided." };
+    }
+    const belief = await updateBelief(beliefId, updates);
+    if (!belief) return { success: false, message: `Belief not found.` };
+    return { success: true, message: `Updated belief: ${belief.name}` };
+  },
+
+  async delete_belief(p) {
+    const { beliefId } = p as { beliefId: string };
+    const { deleteBelief } = await import("../../store/beliefs.js");
+    const belief = await deleteBelief(beliefId);
+    if (!belief) return { success: false, message: `Belief not found.` };
+    return { success: true, message: `Deleted belief: ${belief.name}` };
+  },
+
+  async link_end_to_belief(p) {
+    const { endId, beliefId } = p as { endId: string; beliefId: string };
+    const { linkEndToBelief, getBeliefById } = await import("../../store/beliefs.js");
+    await linkEndToBelief(beliefId, endId);
+    const belief = await getBeliefById(beliefId);
+    const end = await getEndById(endId);
+    return { success: true, message: `Linked "${end?.name}" to belief "${belief?.name}"` };
+  },
+
+  async unlink_end_from_belief(p) {
+    const { endId, beliefId } = p as { endId: string; beliefId: string };
+    const { unlinkEndFromBelief, getBeliefById } = await import("../../store/beliefs.js");
+    await unlinkEndFromBelief(beliefId, endId);
+    const belief = await getBeliefById(beliefId);
+    const end = await getEndById(endId);
+    return { success: true, message: `Unlinked "${end?.name}" from belief "${belief?.name}"` };
+  },
+
   async help(p) {
     const { topic } = p as { topic?: string };
     const { getHelpText } = await import("./help.js");
