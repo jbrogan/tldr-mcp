@@ -9,6 +9,7 @@
  */
 
 import { getUserId } from "../../store/base.js";
+import { createLLMProvider } from "../../llm/index.js";
 import type { ExecuteResult } from "./executor.js";
 
 export interface FlowStep {
@@ -146,6 +147,30 @@ export async function handleFlowInput(text: string): Promise<ExecuteResult | nul
 
 type FlowHandler = (input: string, flow: FlowState) => Promise<ExecuteResult | null>;
 
+/**
+ * Use LLM to suggest end names based on a habit name.
+ */
+async function suggestEndNames(habitName: string, existingEndNames: string[]): Promise<string[]> {
+  try {
+    const provider = createLLMProvider();
+    const existingList = existingEndNames.length > 0
+      ? `\nExisting ends (do NOT repeat these): ${existingEndNames.join(", ")}`
+      : "";
+    const prompt = `Given a habit called "${habitName}", suggest 2-3 concise end/aspiration names that this habit could serve. An end is an ongoing aspiration like "Be a great father" or "Stay physically fit".${existingList}
+
+Respond with ONLY a JSON array of strings. Example: ["Learn Guitar", "Develop Musical Skills"]`;
+
+    const raw = await provider.complete(prompt);
+    let jsonStr = raw.trim();
+    const codeBlock = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlock) jsonStr = codeBlock[1].trim();
+    const suggestions = JSON.parse(jsonStr);
+    return Array.isArray(suggestions) ? suggestions.slice(0, 3) : [];
+  } catch {
+    return []; // Fail silently — suggestions are optional
+  }
+}
+
 const flowHandlers: Record<string, FlowHandler> = {
   async confirm_create_habit(input, flow) {
     const lower = input.toLowerCase().trim();
@@ -185,18 +210,24 @@ const flowHandlers: Record<string, FlowHandler> = {
       advanceFlow("ask_end", { habitId: habit.id, habitName: habit.name });
 
       const ends = await listEnds();
+      const existingEndNames = ends.map((e) => e.name);
+      const suggestions = await suggestEndNames(habit.name, existingEndNames);
+      const suggestLines = suggestions.length > 0
+        ? `\nSuggested new ends:\n${suggestions.map((s) => `  - ${s}`).join("\n")}\n`
+        : "";
+
       if (ends.length === 0) {
         advanceFlow("ask_create_end", { habitId: habit.id });
         return {
           success: true,
-          message: `Created habit: ${habit.name}\n\nWhat end (aspiration) does this habit serve? Describe it and I'll create it.`,
+          message: `Created habit: ${habit.name} and recorded action.\n\nWhat end (aspiration) does this habit serve?${suggestLines}\nType a name to create it.`,
         };
       }
 
-      const endNames = ends.map((e) => `  - ${e.name}`).join("\n");
+      const endNameLines = ends.map((e) => `  - ${e.name}`).join("\n");
       return {
         success: true,
-        message: `Created habit: ${habit.name}\n\nWhich end does this habit serve?\n\n${endNames}\n\nType a name to link it, or describe a new end to create.`,
+        message: `Created habit: ${habit.name} and recorded action.\n\nWhich end does this habit serve?\n\nExisting ends:\n${endNameLines}${suggestLines}\nType a name to link or create.`,
       };
     }
 
