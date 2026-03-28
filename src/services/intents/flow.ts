@@ -225,43 +225,54 @@ const flowHandlers: Record<string, FlowHandler> = {
     let endId: string;
     let endName: string;
 
+    const supabase = (await import("../../store/base.js")).getSupabase();
+    let isNewEnd = false;
+
     if (match) {
       endId = match.id;
       endName = match.name;
-
-      // Existing end — link and finish
-      const supabase = (await import("../../store/base.js")).getSupabase();
-      await supabase.from("habit_ends").insert({ habit_id: habitId, end_id: endId });
-      endFlow();
-      return { success: true, message: `Linked habit to "${endName}". Done!` };
+    } else {
+      // Create new end
+      const newEnd = await createEnd({ name: input.trim() });
+      endId = newEnd.id;
+      endName = newEnd.name;
+      isNewEnd = true;
     }
 
-    // Create new end
-    const newEnd = await createEnd({ name: input.trim() });
-    endId = newEnd.id;
-    endName = newEnd.name;
-
     // Link habit to end
-    const supabase = (await import("../../store/base.js")).getSupabase();
     await supabase.from("habit_ends").insert({ habit_id: habitId, end_id: endId });
+    const linkedMsg = isNewEnd ? `Created end: ${endName} and linked to habit.` : `Linked habit to "${endName}".`;
 
-    // Only ask about beliefs for newly created ends
+    // Check if this end has any belief links
     const beliefs = await listBeliefs();
+    const endHasBeliefs = beliefs.some((b) => b.endIds.includes(endId));
+
+    if (!isNewEnd && endHasBeliefs) {
+      // Existing end already linked to beliefs — done
+      endFlow();
+      return { success: true, message: `${linkedMsg} Done!` };
+    }
+
+    // Ask about beliefs: existing end without beliefs, or new end
+    advanceFlow("ask_belief", { endId, endName });
+
     if (beliefs.length > 0) {
-      advanceFlow("ask_belief", { endId, endName });
       const beliefNames = beliefs.map((b) => `  - ${b.name}`).join("\n");
       return {
         success: true,
-        message: `Created end: ${endName} and linked to habit.\n\nDoes this end connect to any of your beliefs?\n\n${beliefNames}\n\nType a belief name to link, or "skip" to finish.`,
+        message: `${linkedMsg}\n\nDoes this end connect to any of your beliefs?\n\n${beliefNames}\n\nType a belief name to link, or describe a new belief to create. "skip" to finish.`,
       };
     }
 
-    endFlow();
-    return { success: true, message: `Created end: ${endName} and linked to habit. Done!` };
+    // No beliefs exist — prompt to create one
+    return {
+      success: true,
+      message: `${linkedMsg}\n\nYou don't have any core beliefs yet. A belief is a core value that motivates your ends (e.g. "Family comes first", "Health is the foundation").\n\nDescribe a belief to create, or "skip" to finish.`,
+    };
   },
 
   async ask_belief(input, _flow) {
-    const { listBeliefs, linkEndToBelief } = await import("../../store/beliefs.js");
+    const { listBeliefs, linkEndToBelief, createBelief } = await import("../../store/beliefs.js");
 
     const lower = input.toLowerCase().trim();
 
@@ -275,7 +286,7 @@ const flowHandlers: Record<string, FlowHandler> = {
     const endId = data.endId as string;
     const endName = data.endName as string;
 
-    // Match belief
+    // Try to match an existing belief
     const beliefs = await listBeliefs();
     const match = beliefs.find(
       (b) => b.name.toLowerCase() === lower ||
@@ -283,18 +294,22 @@ const flowHandlers: Record<string, FlowHandler> = {
         lower.includes(b.name.toLowerCase())
     );
 
-    if (!match) {
+    if (match) {
+      await linkEndToBelief(match.id, endId);
+      endFlow();
       return {
-        success: false,
-        message: `Couldn't find a belief matching "${input}". Try again, or "skip" to finish.`,
+        success: true,
+        message: `Linked "${endName}" to belief "${match.name}". Done!`,
       };
     }
 
-    await linkEndToBelief(match.id, endId);
+    // No match — create a new belief and link it
+    const newBelief = await createBelief({ name: input.trim() });
+    await linkEndToBelief(newBelief.id, endId);
     endFlow();
     return {
       success: true,
-      message: `Linked "${endName}" to belief "${match.name}". Done!`,
+      message: `Created belief: "${newBelief.name}" and linked to "${endName}". Done!`,
     };
   },
 
