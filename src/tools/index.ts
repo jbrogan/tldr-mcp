@@ -786,6 +786,10 @@ export function registerTools(server: McpServer): void {
         if (personNames.length) meta.push(`participants: ${personNames.join(", ")}`);
         habitLines.push(`    - ${h.name} (${h.id})${meta.length ? ` [${meta.join(", ")}]` : ""}`);
       }
+      const { listBeliefs } = await import("../store/beliefs.js");
+      const allBeliefs = await listBeliefs();
+      const linkedBeliefs = allBeliefs.filter((b) => b.endIds.includes(id));
+      const beliefLines = linkedBeliefs.map((b) => `    - ${b.name}`);
       const shares = await listMyShares();
       const endShares = shares.filter((s) => s.endId === id);
       const shareLines = endShares.map((s) => `    - ${s.sharedWithEmail}`);
@@ -794,6 +798,7 @@ export function registerTools(server: McpServer): void {
         area && `  Area: ${area.name}`,
         collection && `  Collection: ${collection.name}`,
         `  Created: ${end.createdAt}`,
+        linkedBeliefs.length > 0 ? `  Beliefs:\n${beliefLines.join("\n")}` : undefined,
         habits.length > 0 ? `  Habits:\n${habitLines.join("\n")}` : "  Habits: (none)",
         shareLines.length > 0 ? `  Shared with:\n${shareLines.join("\n")}` : undefined,
       ].filter(Boolean);

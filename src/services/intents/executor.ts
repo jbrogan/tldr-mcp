@@ -278,6 +278,12 @@ const executors: Record<string, ExecutorFn> = {
       habitLines.push(`    - ${h.name}${meta.length ? ` (${meta.join(", ")})` : ""}`);
     }
 
+    // Beliefs
+    const { listBeliefs: listAllBeliefs } = await import("../../store/beliefs.js");
+    const allBeliefs = await listAllBeliefs();
+    const linkedBeliefs = allBeliefs.filter((b) => b.endIds.includes(endId));
+    const beliefLines = linkedBeliefs.map((b) => `    - ${b.name}`);
+
     // Shares
     const shares = await listMyShares();
     const endShares = shares.filter((s) => s.endId === endId);
@@ -295,6 +301,7 @@ const executors: Record<string, ExecutorFn> = {
       area && `  Area: ${area.name}`,
       collection && `  Collection: ${collection.name}`,
       `  Created: ${end.createdAt}`,
+      linkedBeliefs.length > 0 ? `  Beliefs:\n${beliefLines.join("\n")}` : undefined,
       habits.length > 0 ? `  Habits:\n${habitLines.join("\n")}` : "  Habits: (none)",
       shareLines.length > 0 ? `  Shared with:\n${shareLines.join("\n")}` : undefined,
     ].filter(Boolean);
