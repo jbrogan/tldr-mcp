@@ -526,6 +526,7 @@ const resolvers: Record<string, ResolverFn> = {
       toDate = resolved.toDate;
     }
     return {
+      endId: await resolveEndName(raw.endName as string),
       habitId: await resolveHabitName(raw.habitName as string),
       fromDate,
       toDate,

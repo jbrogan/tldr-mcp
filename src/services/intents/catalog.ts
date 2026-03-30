@@ -338,8 +338,9 @@ export const INTENT_CATALOG: IntentDefinition[] = [
   },
   {
     name: "list_actions",
-    description: 'User wants to see tracked actions (e.g. "what did I do today", "actions this week")',
+    description: 'User wants to see tracked actions (e.g. "what did I do today", "actions this week", "actions for Be a Great Father")',
     rawParams: [
+      { name: "endName", type: "string", description: "Filter by end/aspiration name — shows actions across all habits linked to that end" },
       { name: "habitName", type: "string", description: "Filter by habit name" },
       { name: "period", type: "string", description: "today, yesterday, this_week, this_month" },
       { name: "fromDate", type: "string", description: "YYYY-MM-DD start date for custom range" },

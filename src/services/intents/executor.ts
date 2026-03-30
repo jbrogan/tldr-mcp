@@ -520,7 +520,8 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async list_actions(p) {
-    const { habitId, fromDate, toDate, withPersonIds, forPersonIds } = p as {
+    const { endId, habitId, fromDate, toDate, withPersonIds, forPersonIds } = p as {
+      endId?: string;
       habitId?: string;
       fromDate?: string;
       toDate?: string;
@@ -528,6 +529,15 @@ const executors: Record<string, ExecutorFn> = {
       forPersonIds?: string[];
     };
     let actions = await listActions({ habitId, fromDate, toDate });
+
+    // Filter to actions for habits linked to the specified end
+    if (endId && !habitId) {
+      const habits = await listHabitsWithShared();
+      const habitIdsForEnd = new Set(
+        habits.filter((h) => h.endIds.includes(endId)).map((h) => h.id)
+      );
+      actions = actions.filter((a) => habitIdsForEnd.has(a.habitId));
+    }
     if (withPersonIds?.length) {
       const withSet = new Set(withPersonIds);
       actions = actions.filter((a) => a.withPersonIds?.some((pid) => withSet.has(pid)));
