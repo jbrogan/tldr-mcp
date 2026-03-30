@@ -128,13 +128,13 @@ async function resolveAreaName(name: string | undefined): Promise<string | undef
 
 async function resolveEndName(name: string | undefined): Promise<string | undefined> {
   if (!name) return undefined;
-  const ends = await listEnds();
+  const ends = await listEnds({ includeShared: true });
   return findBestMatch(ends, name, (e) => e.name)?.id;
 }
 
 async function resolveEndNames(names: unknown): Promise<string[] | undefined> {
   if (!Array.isArray(names) || names.length === 0) return undefined;
-  const ends = await listEnds();
+  const ends = await listEnds({ includeShared: true });
   const ids: string[] = [];
   for (const name of names) {
     if (typeof name !== "string") continue;

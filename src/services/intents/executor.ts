@@ -11,7 +11,7 @@ import { listAreas, getAreaById } from "../../store/areas.js";
 import { listOrganizations, createOrganization, getOrganizationById, deleteOrganization } from "../../store/organizations.js";
 import { listTeams, createTeam, getTeamById, updateTeam, deleteTeam } from "../../store/teams.js";
 import { listCollections, createCollection, getCollectionById, updateCollection, deleteCollection } from "../../store/collections.js";
-import { createAction, listActions } from "../../store/actions.js";
+import { createAction, listActions, listActionsWithShared } from "../../store/actions.js";
 import { createTask, listTasks, updateTask, deleteTask } from "../../store/tasks.js";
 import type { RelationshipType } from "../../schemas/person.js";
 import { createPerson, listPersons, updatePerson, getPersonById, deletePerson } from "../../store/persons.js";
@@ -528,7 +528,16 @@ const executors: Record<string, ExecutorFn> = {
       withPersonIds?: string[];
       forPersonIds?: string[];
     };
-    let actions = await listActions({ habitId, fromDate, toDate });
+    // Use shared-aware query when filtering by end (includes other users' actions on shared ends)
+    const useShared = !!endId;
+    let actions: Array<{ id: string; habitId: string; completedAt: string; actualDurationMinutes?: number; notes?: string; withPersonIds?: string[]; forPersonIds?: string[]; createdAt: string; ownerDisplayName?: string }>;
+
+    if (useShared) {
+      const sharedActions = await listActionsWithShared({ habitId, fromDate, toDate });
+      actions = sharedActions.map((a) => ({ ...a, ownerDisplayName: a.ownerDisplayName }));
+    } else {
+      actions = await listActions({ habitId, fromDate, toDate });
+    }
 
     // Filter to actions for habits linked to the specified end
     if (endId && !habitId) {
@@ -567,6 +576,7 @@ const executors: Record<string, ExecutorFn> = {
         }));
         parts.push(`for ${names.join(", ")}`);
       }
+      if (a.ownerDisplayName) parts.push(`by ${a.ownerDisplayName}`);
       const extra = parts.length > 0 ? ` (${parts.join(", ")})` : "";
       return `  ${date}: ${habitName}${extra}`;
     }));
