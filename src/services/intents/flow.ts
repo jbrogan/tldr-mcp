@@ -388,21 +388,27 @@ const flowHandlers: Record<string, FlowHandler> = {
     const supabase = (await import("../../store/base.js")).getSupabase();
     await supabase.from("habit_ends").insert({ habit_id: habitId, end_id: newEnd.id });
 
-    // Check beliefs
+    // Ask about beliefs for newly created end
     const beliefs = await listBeliefs();
+    advanceFlow("ask_belief", { endId: newEnd.id, endName: newEnd.name });
+
+    const existingBeliefNames = beliefs.map((b) => b.name);
+    const beliefSuggestions = await suggestBeliefNames(newEnd.name, existingBeliefNames);
+    const suggestLines = beliefSuggestions.length > 0
+      ? `\nSuggested beliefs:\n${beliefSuggestions.map((s) => `  - ${s}`).join("\n")}\n`
+      : "";
+
     if (beliefs.length > 0) {
-      advanceFlow("ask_belief", { endId: newEnd.id, endName: newEnd.name });
-      const beliefNames = beliefs.map((b) => `  - ${b.name}`).join("\n");
+      const beliefNameLines = beliefs.map((b) => `  - ${b.name}`).join("\n");
       return {
         success: true,
-        message: `Created end: ${newEnd.name} and linked to habit.\n\nDoes this connect to any of your beliefs?\n\n${beliefNames}\n\nType a belief name to link, or "skip" to finish.`,
+        message: `Created end: ${newEnd.name} and linked to habit.\n\nDoes this end connect to any of your beliefs?\n\nExisting beliefs:\n${beliefNameLines}${suggestLines}\nType a name to link or create. "skip" to finish.`,
       };
     }
 
-    endFlow();
     return {
       success: true,
-      message: `Created end: ${newEnd.name} and linked to habit. Done!`,
+      message: `Created end: ${newEnd.name} and linked to habit.\n\nYou don't have any core beliefs yet. A belief is a core value that motivates your ends.${suggestLines}\nType a belief to create, or "skip" to finish.`,
     };
   },
 };
