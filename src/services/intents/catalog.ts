@@ -377,7 +377,7 @@ export const INTENT_CATALOG: IntentDefinition[] = [
   {
     name: "get_person",
     description:
-      'User wants details for a specific person (e.g. "show me John", "who is Sarah?"). For "what teams is X in?" use list_teams instead.',
+      'User wants details for a specific person (e.g. "show me John", "who is Sarah?", "who am I?"). For "what teams is X in?" use list_teams instead.',
     rawParams: [
       { name: "personName", type: "string", required: true, description: 'Person name. Use "__self__" for me/my details' },
     ],
