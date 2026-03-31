@@ -773,9 +773,11 @@ export function registerTools(server: McpServer): void {
       const area = end.areaId ? await getAreaById(end.areaId) : undefined;
       const collections = await listCollections();
       const collection = end.collectionId ? collections.find((c) => c.id === end.collectionId) : undefined;
-      const habits = await listHabits({ endId: id });
-      const habitLines: string[] = [];
-      for (const h of habits) {
+      const allHabits = await listHabitsWithShared({ endId: id });
+      const myHabits = allHabits.filter((h) => !h.isShared);
+      const sharedHabits = allHabits.filter((h) => h.isShared);
+
+      async function formatHabitLine(h: typeof allHabits[0]): Promise<string> {
         const personNames: string[] = [];
         for (const pid of h.personIds ?? []) {
           const person = await getPersonById(pid);
@@ -784,8 +786,12 @@ export function registerTools(server: McpServer): void {
         const meta: string[] = [];
         if (h.frequency) meta.push(h.frequency);
         if (personNames.length) meta.push(`participants: ${personNames.join(", ")}`);
-        habitLines.push(`    - ${h.name} (${h.id})${meta.length ? ` [${meta.join(", ")}]` : ""}`);
+        if (h.isShared && h.ownerDisplayName) meta.push(`by ${h.ownerDisplayName}`);
+        return `    - ${h.name} (${h.id})${meta.length ? ` [${meta.join(", ")}]` : ""}`;
       }
+
+      const myHabitLines = await Promise.all(myHabits.map(formatHabitLine));
+      const sharedHabitLines = await Promise.all(sharedHabits.map(formatHabitLine));
       const { listBeliefs } = await import("../store/beliefs.js");
       const allBeliefs = await listBeliefs();
       const linkedBeliefs = allBeliefs.filter((b) => b.endIds.includes(id));
@@ -799,7 +805,8 @@ export function registerTools(server: McpServer): void {
         collection && `  Collection: ${collection.name}`,
         `  Created: ${end.createdAt}`,
         linkedBeliefs.length > 0 ? `  Beliefs:\n${beliefLines.join("\n")}` : undefined,
-        habits.length > 0 ? `  Habits:\n${habitLines.join("\n")}` : "  Habits: (none)",
+        myHabitLines.length > 0 ? `  Your habits:\n${myHabitLines.join("\n")}` : "  Your habits: (none)",
+        sharedHabitLines.length > 0 ? `  Shared habits:\n${sharedHabitLines.join("\n")}` : undefined,
         shareLines.length > 0 ? `  Shared with:\n${shareLines.join("\n")}` : undefined,
       ].filter(Boolean);
       return { content: [{ type: "text", text: parts.join("\n") }] };

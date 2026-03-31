@@ -263,10 +263,12 @@ const executors: Record<string, ExecutorFn> = {
     const collections = await listCollections();
     const collection = end.collectionId ? collections.find((c) => c.id === end.collectionId) : undefined;
 
-    // Habits
-    const habits = await listHabits({ endId });
-    const habitLines: string[] = [];
-    for (const h of habits) {
+    // Habits — split into own vs shared
+    const allHabits = await listHabitsWithShared({ endId });
+    const myHabits = allHabits.filter((h) => !h.isShared);
+    const sharedHabits = allHabits.filter((h) => h.isShared);
+
+    async function formatHabitLine(h: typeof allHabits[0]): Promise<string> {
       const personNames: string[] = [];
       for (const pid of h.personIds ?? []) {
         const person = await getPersonById(pid);
@@ -275,8 +277,12 @@ const executors: Record<string, ExecutorFn> = {
       const meta: string[] = [];
       if (h.frequency) meta.push(h.frequency);
       if (personNames.length) meta.push(`participants: ${personNames.join(", ")}`);
-      habitLines.push(`    - ${h.name}${meta.length ? ` (${meta.join(", ")})` : ""}`);
+      if (h.isShared && h.ownerDisplayName) meta.push(`by ${h.ownerDisplayName}`);
+      return `    - ${h.name}${meta.length ? ` (${meta.join(", ")})` : ""}`;
     }
+
+    const myHabitLines = await Promise.all(myHabits.map(formatHabitLine));
+    const sharedHabitLines = await Promise.all(sharedHabits.map(formatHabitLine));
 
     // Beliefs
     const { listBeliefs: listAllBeliefs } = await import("../../store/beliefs.js");
@@ -302,7 +308,8 @@ const executors: Record<string, ExecutorFn> = {
       collection && `  Collection: ${collection.name}`,
       `  Created: ${end.createdAt}`,
       linkedBeliefs.length > 0 ? `  Beliefs:\n${beliefLines.join("\n")}` : undefined,
-      habits.length > 0 ? `  Habits:\n${habitLines.join("\n")}` : "  Habits: (none)",
+      myHabitLines.length > 0 ? `  Your habits:\n${myHabitLines.join("\n")}` : "  Your habits: (none)",
+      sharedHabitLines.length > 0 ? `  Shared habits:\n${sharedHabitLines.join("\n")}` : undefined,
       shareLines.length > 0 ? `  Shared with:\n${shareLines.join("\n")}` : undefined,
     ].filter(Boolean);
 
