@@ -281,10 +281,11 @@ const resolvers: Record<string, ResolverFn> = {
 
     if (!endIds?.length) throw new Error(`Could not find end(s): ${JSON.stringify(raw.endNames ?? raw.areaName)}`);
 
-    let personIds = await resolvePersonNames(raw.personNames);
-    if (!personIds?.length) {
-      // Default to self when no persons specified
-      personIds = [await resolveSelf()];
+    let personIds = await resolvePersonNames(raw.personNames) ?? [];
+    // Always include self as a participant
+    const selfId = await resolveSelf();
+    if (!personIds.includes(selfId)) {
+      personIds = [selfId, ...personIds];
     }
     return {
       name: raw.name as string,
