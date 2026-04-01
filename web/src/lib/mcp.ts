@@ -7,17 +7,21 @@ const MCP_URL = import.meta.env.VITE_MCP_URL || "http://localhost:3000/mcp";
 let client: Client | null = null;
 let transport: StreamableHTTPClientTransport | null = null;
 
-export async function connect(accessToken: string): Promise<void> {
+export async function connect(getAccessToken: () => Promise<string>): Promise<void> {
   if (client) {
     await disconnect();
   }
 
+  // Custom fetch that always uses a fresh token
+  const authFetch: typeof globalThis.fetch = async (input, init) => {
+    const token = await getAccessToken();
+    const headers = new Headers(init?.headers);
+    headers.set("Authorization", `Bearer ${token}`);
+    return globalThis.fetch(input, { ...init, headers });
+  };
+
   transport = new StreamableHTTPClientTransport(new URL(MCP_URL), {
-    requestInit: {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    },
+    fetch: authFetch,
   });
 
   client = new Client(

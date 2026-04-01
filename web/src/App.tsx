@@ -5,6 +5,7 @@ import { Chat } from "./components/Chat";
 import { Sidebar } from "./components/Sidebar";
 import { DetailPanel } from "./components/DetailPanel";
 import { connect, disconnect } from "./lib/mcp";
+import { supabase } from "./lib/supabase";
 
 function App() {
   const { session, loading, signIn, signUp, signOut, signInWithGoogle } = useAuth();
@@ -27,7 +28,10 @@ function App() {
       connectingRef.current = true;
 
       try {
-        await connect(session!.access_token);
+        await connect(async () => {
+          const { data } = await supabase.auth.getSession();
+          return data.session?.access_token ?? session!.access_token;
+        });
         if (!cancelled) {
           setMcpReady(true);
           setMcpError(null);
@@ -77,7 +81,10 @@ function App() {
             onClick={async () => {
               setMcpError(null);
               try {
-                await connect(session.access_token);
+                await connect(async () => {
+                  const { data } = await supabase.auth.getSession();
+                  return data.session?.access_token ?? session.access_token;
+                });
                 setMcpReady(true);
               } catch (err) {
                 setMcpError(
