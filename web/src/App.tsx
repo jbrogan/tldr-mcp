@@ -96,6 +96,12 @@ function App() {
           >
             Retry
           </button>
+          <button
+            onClick={signOut}
+            className="text-sm text-gray-500 hover:text-gray-700 block mx-auto"
+          >
+            Sign Out
+          </button>
         </div>
       </div>
     );
