@@ -277,7 +277,18 @@ const executors: Record<string, ExecutorFn> = {
       const meta: string[] = [];
       if (h.frequency) meta.push(h.frequency);
       if (personNames.length) meta.push(`participants: ${personNames.join(", ")}`);
-      if (h.isShared && h.ownerDisplayName) meta.push(`by ${h.ownerDisplayName}`);
+      if (h.isShared && h.ownerId) {
+        // Resolve owner to person name via RLS co-participant visibility
+        const { getSupabase } = await import("../../store/base.js");
+        const supabase = getSupabase();
+        const { data: ownerPerson } = await supabase
+          .from("persons")
+          .select("first_name, last_name")
+          .eq("linked_user_id", h.ownerId)
+          .eq("relationship_type", "self")
+          .single();
+        meta.push(`by ${ownerPerson ? `${ownerPerson.first_name} ${ownerPerson.last_name}` : h.ownerDisplayName ?? "unknown"}`);
+      }
       return `    - ${h.name}${meta.length ? ` (${meta.join(", ")})` : ""}`;
     }
 
@@ -290,17 +301,33 @@ const executors: Record<string, ExecutorFn> = {
     const linkedBeliefs = allBeliefs.filter((b) => b.endIds.includes(endId));
     const beliefLines = linkedBeliefs.map((b) => `    - ${b.name}`);
 
-    // Shares
+    // Sharing context — determine if owner or shared recipient
+    const { getUserId: currentUserId } = await import("../../store/base.js");
     const shares = await listMyShares();
     const endShares = shares.filter((s) => s.endId === endId);
     const persons = await listPersons();
-    const shareLines = endShares.map((s) => {
-      const person = persons.find((p) => p.userId === s.sharedWithUserId);
-      if (person) {
-        return `    - ${person.firstName} ${person.lastName} (${s.sharedWithEmail})`;
+
+    // If we have shares for this end, we're the owner
+    const isOwner = endShares.length > 0;
+    let sharingLine: string | undefined;
+
+    if (isOwner) {
+      // Owner sees "Shared with: ..."
+      const sharedWithLines = endShares.map((s) => {
+        const person = persons.find((p) => p.userId === s.sharedWithUserId);
+        return person ? `    - ${person.firstName} ${person.lastName}` : `    - ${s.sharedWithEmail}`;
+      });
+      if (sharedWithLines.length > 0) {
+        sharingLine = `  Shared with:\n${sharedWithLines.join("\n")}`;
       }
-      return `    - ${s.sharedWithEmail}`;
-    });
+    } else {
+      // Check if this is a shared end (not owned by us)
+      const sharedEnds = await listSharedEnds();
+      const sharedEnd = sharedEnds.find((e) => e.id === endId);
+      if (sharedEnd?.ownerDisplayName) {
+        sharingLine = `  Shared by: ${sharedEnd.ownerDisplayName}`;
+      }
+    }
 
     const parts = [
       `${end.name} (${end.id})`,
@@ -310,7 +337,7 @@ const executors: Record<string, ExecutorFn> = {
       linkedBeliefs.length > 0 ? `  Beliefs:\n${beliefLines.join("\n")}` : undefined,
       myHabitLines.length > 0 ? `  Your habits:\n${myHabitLines.join("\n")}` : "  Your habits: (none)",
       sharedHabitLines.length > 0 ? `  Shared habits:\n${sharedHabitLines.join("\n")}` : undefined,
-      shareLines.length > 0 ? `  Shared with:\n${shareLines.join("\n")}` : undefined,
+      sharingLine,
     ].filter(Boolean);
 
     return { success: true, message: parts.join("\n") };

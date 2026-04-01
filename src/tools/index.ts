@@ -8,6 +8,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RelationshipType } from "../schemas/person.js";
+import { getSupabase } from "../store/base.js";
 import {
   createPerson,
   deletePerson,
@@ -786,7 +787,15 @@ export function registerTools(server: McpServer): void {
         const meta: string[] = [];
         if (h.frequency) meta.push(h.frequency);
         if (personNames.length) meta.push(`participants: ${personNames.join(", ")}`);
-        if (h.isShared && h.ownerDisplayName) meta.push(`by ${h.ownerDisplayName}`);
+        if (h.isShared && h.ownerId) {
+          const { data: ownerPerson } = await getSupabase()
+            .from("persons")
+            .select("first_name, last_name")
+            .eq("linked_user_id", h.ownerId)
+            .eq("relationship_type", "self")
+            .single();
+          meta.push(`by ${ownerPerson ? `${ownerPerson.first_name} ${ownerPerson.last_name}` : h.ownerDisplayName ?? "unknown"}`);
+        }
         return `    - ${h.name} (${h.id})${meta.length ? ` [${meta.join(", ")}]` : ""}`;
       }
 
@@ -796,9 +805,25 @@ export function registerTools(server: McpServer): void {
       const allBeliefs = await listBeliefs();
       const linkedBeliefs = allBeliefs.filter((b) => b.endIds.includes(id));
       const beliefLines = linkedBeliefs.map((b) => `    - ${b.name}`);
+
+      // Contextual sharing info
       const shares = await listMyShares();
       const endShares = shares.filter((s) => s.endId === id);
-      const shareLines = endShares.map((s) => `    - ${s.sharedWithEmail}`);
+      const isOwner = endShares.length > 0;
+      let sharingLine: string | undefined;
+
+      if (isOwner) {
+        const sharedWithLines = endShares.map((s) => `    - ${s.sharedWithEmail}`);
+        if (sharedWithLines.length > 0) {
+          sharingLine = `  Shared with:\n${sharedWithLines.join("\n")}`;
+        }
+      } else {
+        const sharedEnds = await listSharedEnds();
+        const sharedEnd = sharedEnds.find((e) => e.id === id);
+        if (sharedEnd?.ownerDisplayName) {
+          sharingLine = `  Shared by: ${sharedEnd.ownerDisplayName}`;
+        }
+      }
       const parts = [
         `${end.name} (${end.id})`,
         area && `  Area: ${area.name}`,
@@ -807,7 +832,7 @@ export function registerTools(server: McpServer): void {
         linkedBeliefs.length > 0 ? `  Beliefs:\n${beliefLines.join("\n")}` : undefined,
         myHabitLines.length > 0 ? `  Your habits:\n${myHabitLines.join("\n")}` : "  Your habits: (none)",
         sharedHabitLines.length > 0 ? `  Shared habits:\n${sharedHabitLines.join("\n")}` : undefined,
-        shareLines.length > 0 ? `  Shared with:\n${shareLines.join("\n")}` : undefined,
+        sharingLine,
       ].filter(Boolean);
       return { content: [{ type: "text", text: parts.join("\n") }] };
     }
