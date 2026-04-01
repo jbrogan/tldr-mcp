@@ -287,7 +287,10 @@ const executors: Record<string, ExecutorFn> = {
           .eq("linked_user_id", h.ownerId)
           .eq("relationship_type", "self")
           .single();
-        meta.push(`by ${ownerPerson ? `${ownerPerson.first_name} ${ownerPerson.last_name}` : h.ownerDisplayName ?? "unknown"}`);
+        const ownerName = ownerPerson ? `${ownerPerson.first_name} ${ownerPerson.last_name}` : h.ownerDisplayName ?? "unknown";
+        if (!personNames.includes(ownerName)) {
+          meta.push(`by ${ownerName}`);
+        }
       }
       return `    - ${h.name}${meta.length ? ` (${meta.join(", ")})` : ""}`;
     }

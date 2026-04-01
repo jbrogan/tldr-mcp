@@ -794,7 +794,11 @@ export function registerTools(server: McpServer): void {
             .eq("linked_user_id", h.ownerId)
             .eq("relationship_type", "self")
             .single();
-          meta.push(`by ${ownerPerson ? `${ownerPerson.first_name} ${ownerPerson.last_name}` : h.ownerDisplayName ?? "unknown"}`);
+          const ownerName = ownerPerson ? `${ownerPerson.first_name} ${ownerPerson.last_name}` : h.ownerDisplayName ?? "unknown";
+          // Only show "by" if owner isn't already in the participants list
+          if (!personNames.includes(ownerName)) {
+            meta.push(`by ${ownerName}`);
+          }
         }
         return `    - ${h.name} (${h.id})${meta.length ? ` [${meta.join(", ")}]` : ""}`;
       }
@@ -813,7 +817,15 @@ export function registerTools(server: McpServer): void {
       let sharingLine: string | undefined;
 
       if (isOwner) {
-        const sharedWithLines = endShares.map((s) => `    - ${s.sharedWithEmail}`);
+        const sharedWithLines = await Promise.all(endShares.map(async (s) => {
+          const { data: person } = await getSupabase()
+            .from("persons")
+            .select("first_name, last_name")
+            .eq("linked_user_id", s.sharedWithUserId)
+            .eq("relationship_type", "self")
+            .single();
+          return person ? `    - ${person.first_name} ${person.last_name}` : `    - ${s.sharedWithEmail}`;
+        }));
         if (sharedWithLines.length > 0) {
           sharingLine = `  Shared with:\n${sharedWithLines.join("\n")}`;
         }
