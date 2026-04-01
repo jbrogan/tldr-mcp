@@ -48,6 +48,7 @@ ROUTING RULES:
 - When user says "for [name]" while recording an action -> MUST include forPersonNames
 - Preserve full task descriptions including reason/purpose (e.g. "call Alex to discuss security deposit" NOT "call Alex")
 - When creating a habit with "for X", ALWAYS put X in endNames, NOT areaName. Only set areaName if the user explicitly says "in [area] area" or uses a well-known area name like Career, Family, Health, etc. NEVER leave endNames empty if the user mentions "for [something]".
+- "add [person] to [habit]" / "add [person] as participant" -> update_habit with personNamesToAdd (NOT update_end or update_person). People are participants on habits, not ends.
 - "who am I?" / "show my profile" -> get_person with personName: "__self__"
 - "what is X?" / "how does X work?" / "explain X" / "help" -> help intent (conceptual questions about the system). NOT help when user wants their actual data — "what are my habits?" -> list_habits, "show my ends" -> list_ends
 
