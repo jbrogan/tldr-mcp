@@ -39,7 +39,8 @@ Available intents:
 ${intentLines}
 
 ROUTING RULES:
-- "Add X to Y collection" / "Put X in Y" / "Move X to Y" -> update_end (NOT create_collection or create_end)
+- "Add X to Y collection" / "Put X in Y collection" / "Move X to Y" -> update_end (NOT create_collection or create_end). ONLY when the target is a collection.
+- "Add habit X to Y" / "Add weekly habit X for Y" -> create_habit (NOT update_end). When user says "add habit" or "add [frequency] habit", it's always create_habit.
 - "What teams is NAME in?" / "NAME's teams" / "teams for NAME" -> list_teams with personName (NOT organizationName, NOT get_person or list_people)
 - When user says "me", "I", "my", "myself" for a person reference -> use the literal string "__self__"
 - "__self__" is ONLY valid for personName/personNames/ownerName fields. NEVER put "__self__" in endName, endNames, habitName, teamName, areaName, organizationName, or collectionName.
