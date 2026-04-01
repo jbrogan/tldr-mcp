@@ -665,6 +665,49 @@ const executors: Record<string, ExecutorFn> = {
     return { success: true, message: sections.join("\n\n") };
   },
 
+  async update_habit(p) {
+    const { habitId, personIdsToAdd, newName, frequency, durationMinutes } = p as {
+      habitId: string;
+      personIdsToAdd?: string[];
+      newName?: string;
+      frequency?: string;
+      durationMinutes?: number;
+    };
+    const { updateHabit, addHabitPersons, getHabitById: getHabit } = await import("../../store/habits.js");
+
+    const details: string[] = [];
+
+    // Update basic fields
+    const fieldUpdates: { name?: string; frequency?: string; durationMinutes?: number } = {};
+    if (newName) fieldUpdates.name = newName;
+    if (frequency) fieldUpdates.frequency = frequency;
+    if (durationMinutes != null) fieldUpdates.durationMinutes = durationMinutes;
+
+    if (Object.keys(fieldUpdates).length > 0) {
+      await updateHabit(habitId, fieldUpdates);
+      if (newName) details.push(`renamed to "${newName}"`);
+      if (frequency) details.push(`frequency: ${frequency}`);
+      if (durationMinutes != null) details.push(`duration: ${durationMinutes} min`);
+    }
+
+    // Add participants
+    if (personIdsToAdd?.length) {
+      await addHabitPersons(habitId, personIdsToAdd);
+      const names = await Promise.all(personIdsToAdd.map(async (pid) => {
+        const person = await getPersonById(pid);
+        return person ? `${person.firstName} ${person.lastName}` : pid;
+      }));
+      details.push(`added participants: ${names.join(", ")}`);
+    }
+
+    if (details.length === 0) {
+      return { success: false, message: "No updates provided." };
+    }
+
+    const habit = await getHabit(habitId);
+    return { success: true, message: `Updated habit: ${habit?.name ?? habitId} — ${details.join(", ")}` };
+  },
+
   async delete_habit(p) {
     const { habitId } = p as { habitId: string };
     const habit = await deleteHabit(habitId);

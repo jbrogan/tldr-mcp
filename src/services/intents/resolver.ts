@@ -556,6 +556,18 @@ const resolvers: Record<string, ResolverFn> = {
     return { habitId };
   },
 
+  async update_habit(raw) {
+    const habitId = await resolveHabitName(raw.habitName as string);
+    if (!habitId) throw new Error(`Habit "${raw.habitName}" not found.`);
+    return {
+      habitId,
+      personIdsToAdd: await resolvePersonNames(raw.personNamesToAdd),
+      newName: raw.newName as string | undefined,
+      frequency: raw.frequency as string | undefined,
+      durationMinutes: typeof raw.durationMinutes === "number" ? raw.durationMinutes : undefined,
+    };
+  },
+
   async delete_habit(raw) {
     const habitId = await resolveHabitName(raw.habitName as string);
     if (!habitId) throw new Error(`Habit "${raw.habitName}" not found.`);

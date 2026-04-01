@@ -273,6 +273,84 @@ export async function deleteHabit(id: string): Promise<HabitEntity | null> {
 }
 
 /**
+ * Update a habit's basic fields.
+ */
+export async function updateHabit(
+  id: string,
+  updates: { name?: string; frequency?: string; durationMinutes?: number }
+): Promise<HabitEntity | null> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const existing = await getHabitById(id);
+  if (!existing) return null;
+
+  const updateData: Record<string, unknown> = {};
+  if (updates.name !== undefined) updateData.name = updates.name;
+  if (updates.frequency !== undefined) updateData.frequency = updates.frequency;
+  if (updates.durationMinutes !== undefined) updateData.duration_minutes = updates.durationMinutes;
+
+  if (Object.keys(updateData).length > 0) {
+    const { error } = await supabase
+      .from("habits")
+      .update(updateData)
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new Error(`Failed to update habit: ${error.message}`);
+    }
+  }
+
+  return (await getHabitById(id)) ?? null;
+}
+
+/**
+ * Add persons to a habit (merges with existing).
+ */
+export async function addHabitPersons(
+  habitId: string,
+  personIds: string[]
+): Promise<void> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  // Verify ownership
+  const { data: habit } = await supabase
+    .from("habits")
+    .select("id")
+    .eq("id", habitId)
+    .eq("user_id", userId)
+    .single();
+
+  if (!habit) {
+    throw new Error("Habit not found or not owned by you");
+  }
+
+  // Get existing person IDs to avoid duplicates
+  const { data: existing } = await supabase
+    .from("habit_persons")
+    .select("person_id")
+    .eq("habit_id", habitId);
+
+  const existingIds = new Set((existing ?? []).map((r) => r.person_id));
+  const toAdd = personIds.filter((pid) => !existingIds.has(pid));
+
+  if (toAdd.length > 0) {
+    const { error } = await supabase.from("habit_persons").insert(
+      toAdd.map((personId) => ({
+        habit_id: habitId,
+        person_id: personId,
+      }))
+    );
+
+    if (error) {
+      throw new Error(`Failed to add persons to habit: ${error.message}`);
+    }
+  }
+}
+
+/**
  * Update habit end relationships.
  */
 export async function updateHabitEnds(
