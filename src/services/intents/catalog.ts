@@ -220,10 +220,11 @@ export const INTENT_CATALOG: IntentDefinition[] = [
   {
     name: "update_habit",
     description:
-      'User wants to update a habit — add participants, change frequency, rename, etc. (e.g. "add Alex to the Weekly Check-in habit", "change gym frequency to daily", "rename meditation to morning meditation")',
+      'User wants to update a habit — add/remove participants, change frequency, rename, etc. (e.g. "add Alex to the Weekly Check-in habit", "remove Jennifer from Weekly Check-in", "change gym frequency to daily")',
     rawParams: [
       { name: "habitName", type: "string", required: true, description: "Name of the habit to update" },
       { name: "personNamesToAdd", type: "string[]", description: "People to add as participants" },
+      { name: "personNamesToRemove", type: "string[]", description: "People to remove as participants" },
       { name: "newName", type: "string", description: "New name if renaming" },
       { name: "frequency", type: "string", description: "New frequency (daily, weekly, etc.)" },
       { name: "durationMinutes", type: "number", description: "New expected duration in minutes" },

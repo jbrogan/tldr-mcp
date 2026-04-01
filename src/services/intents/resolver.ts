@@ -562,6 +562,7 @@ const resolvers: Record<string, ResolverFn> = {
     return {
       habitId,
       personIdsToAdd: await resolvePersonNames(raw.personNamesToAdd),
+      personIdsToRemove: await resolvePersonNames(raw.personNamesToRemove),
       newName: raw.newName as string | undefined,
       frequency: raw.frequency as string | undefined,
       durationMinutes: typeof raw.durationMinutes === "number" ? raw.durationMinutes : undefined,

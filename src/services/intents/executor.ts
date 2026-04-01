@@ -666,14 +666,15 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async update_habit(p) {
-    const { habitId, personIdsToAdd, newName, frequency, durationMinutes } = p as {
+    const { habitId, personIdsToAdd, personIdsToRemove, newName, frequency, durationMinutes } = p as {
       habitId: string;
       personIdsToAdd?: string[];
+      personIdsToRemove?: string[];
       newName?: string;
       frequency?: string;
       durationMinutes?: number;
     };
-    const { updateHabit, addHabitPersons, getHabitById: getHabit } = await import("../../store/habits.js");
+    const { updateHabit, addHabitPersons, removeHabitPersons, getHabitById: getHabit } = await import("../../store/habits.js");
 
     const details: string[] = [];
 
@@ -698,6 +699,16 @@ const executors: Record<string, ExecutorFn> = {
         return person ? `${person.firstName} ${person.lastName}` : pid;
       }));
       details.push(`added participants: ${names.join(", ")}`);
+    }
+
+    // Remove participants
+    if (personIdsToRemove?.length) {
+      await removeHabitPersons(habitId, personIdsToRemove);
+      const names = await Promise.all(personIdsToRemove.map(async (pid) => {
+        const person = await getPersonById(pid);
+        return person ? `${person.firstName} ${person.lastName}` : pid;
+      }));
+      details.push(`removed participants: ${names.join(", ")}`);
     }
 
     if (details.length === 0) {

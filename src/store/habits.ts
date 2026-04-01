@@ -351,6 +351,41 @@ export async function addHabitPersons(
 }
 
 /**
+ * Remove persons from a habit.
+ */
+export async function removeHabitPersons(
+  habitId: string,
+  personIds: string[]
+): Promise<void> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  // Verify ownership
+  const { data: habit } = await supabase
+    .from("habits")
+    .select("id")
+    .eq("id", habitId)
+    .eq("user_id", userId)
+    .single();
+
+  if (!habit) {
+    throw new Error("Habit not found or not owned by you");
+  }
+
+  for (const personId of personIds) {
+    const { error } = await supabase
+      .from("habit_persons")
+      .delete()
+      .eq("habit_id", habitId)
+      .eq("person_id", personId);
+
+    if (error) {
+      throw new Error(`Failed to remove person from habit: ${error.message}`);
+    }
+  }
+}
+
+/**
  * Update habit end relationships.
  */
 export async function updateHabitEnds(
