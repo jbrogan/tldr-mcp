@@ -50,6 +50,7 @@ ROUTING RULES:
 - When extracting habitName for create_action, normalize to base/present tense (e.g. "cleaned the kitchen" → "clean the kitchen", "went to the gym" → "go to the gym", "practiced guitar" → "practice guitar")
 - Preserve full task descriptions including reason/purpose (e.g. "call Alex to discuss security deposit" NOT "call Alex")
 - When creating a habit with "for X", ALWAYS put X in endNames, NOT areaName. Only set areaName if the user explicitly says "in [area] area" or uses a well-known area name like Career, Family, Health, etc. NEVER leave endNames empty if the user mentions "for [something]".
+- "add [person] to [team] team" -> update_person with personName and teamNamesToAdd (NOT update_team). Adding a person to a team is update_person, not renaming a team.
 - "add [person] to [habit]" / "add [person] as participant" -> update_habit with personNamesToAdd (NOT update_end, update_person, or delete_habit). People are participants on habits, not ends.
 - "remove [person] from [habit]" -> update_habit with personNamesToRemove (NOT delete_habit). Only use delete_habit when user wants to delete the entire habit.
 - "who am I?" / "show my profile" -> get_person with personName: "__self__"
