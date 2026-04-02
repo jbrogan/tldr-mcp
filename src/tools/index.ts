@@ -1448,7 +1448,7 @@ export function registerTools(server: McpServer): void {
           .optional()
           .describe("IDs of teams this person belongs to"),
         relationshipType: z
-          .enum(["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
+          .enum(["self", "spouse", "child", "parent", "sibling", "in-law", "friend", "colleague", "mentor", "client", "other"])
           .optional()
           .describe("Type of relationship (e.g. spouse, child, friend, colleague)"),
         userId: z.string().optional().describe("Link to User when this Person has an account"),
@@ -1540,7 +1540,7 @@ export function registerTools(server: McpServer): void {
         organizationId: z.string().optional().describe("Filter by organization ID"),
         teamId: z.string().optional().describe("Filter by team ID"),
         relationshipType: z
-          .enum(["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
+          .enum(["self", "spouse", "child", "parent", "sibling", "in-law", "friend", "colleague", "mentor", "client", "other"])
           .optional()
           .describe("Filter by relationship type"),
       },
@@ -1630,7 +1630,7 @@ export function registerTools(server: McpServer): void {
         teamIds: z.array(z.string()).optional().describe("Team IDs (replaces entire list)"),
         teamIdsToAdd: z.array(z.string()).optional().describe("Team IDs to add (merges with existing; use when adding person to new teams)"),
         relationshipType: z
-          .enum(["self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other"])
+          .enum(["self", "spouse", "child", "parent", "sibling", "in-law", "friend", "colleague", "mentor", "client", "other"])
           .optional()
           .describe("Relationship type"),
         userId: z.string().optional().describe("Link to User when this Person has an account"),

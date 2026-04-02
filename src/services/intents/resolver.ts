@@ -19,7 +19,7 @@ import { listPersons, getSelfPerson, getPersonById } from "../../store/persons.j
 const SELF_PLACEHOLDER = "__self__";
 
 const VALID_RELATIONSHIP_TYPES = new Set([
-  "self", "spouse", "child", "parent", "sibling", "friend", "colleague", "mentor", "client", "other",
+  "self", "spouse", "child", "parent", "sibling", "in-law", "friend", "colleague", "mentor", "client", "other",
 ]);
 
 function sanitizeRelationshipType(value: string | undefined): string | undefined {
@@ -214,7 +214,7 @@ async function resolveOwner(
 /** Infer Family area when task involves family members */
 async function inferFamilyArea(personIds: string[] | undefined): Promise<string | undefined> {
   if (!personIds?.length) return undefined;
-  const familyTypes = new Set(["spouse", "child", "parent", "sibling"]);
+  const familyTypes = new Set(["spouse", "child", "parent", "sibling", "in-law"]);
   for (const pid of personIds) {
     const person = await getPersonById(pid);
     if (person?.relationshipType && familyTypes.has(person.relationshipType)) {

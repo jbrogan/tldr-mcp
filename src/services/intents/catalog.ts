@@ -116,7 +116,7 @@ export const INTENT_CATALOG: IntentDefinition[] = [
       { name: "phone", type: "string" },
       { name: "title", type: "string" },
       { name: "notes", type: "string" },
-      { name: "relationshipType", type: "string", description: "self, spouse, child, parent, sibling, friend, colleague, mentor, client, other. Map: wife/husband/partner→spouse, kid/son/daughter→child, mom/dad→parent, brother/sister→sibling, coworker→colleague" },
+      { name: "relationshipType", type: "string", description: "self, spouse, child, parent, sibling, in-law, friend, colleague, mentor, client, other. Map: wife/husband/partner→spouse, kid/son/daughter→child, mom/dad→parent, brother/sister→sibling, coworker→colleague, brother-in-law/sister-in-law/father-in-law/mother-in-law/any in-law→in-law" },
       { name: "teamNames", type: "string[]", description: "Team names to add person to" },
     ],
   },
@@ -127,7 +127,7 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     rawParams: [
       { name: "personName", type: "string", required: true, description: 'Person name. Use "__self__" for me/I/my/myself' },
       { name: "teamNamesToAdd", type: "string[]", description: "New team names to add (merges with existing)" },
-      { name: "relationshipType", type: "string", description: "self, spouse, child, parent, sibling, friend, colleague, mentor, client, other. Map: wife/husband/partner→spouse, kid/son/daughter→child, mom/dad→parent, brother/sister→sibling, coworker→colleague" },
+      { name: "relationshipType", type: "string", description: "self, spouse, child, parent, sibling, in-law, friend, colleague, mentor, client, other. Map: wife/husband/partner→spouse, kid/son/daughter→child, mom/dad→parent, brother/sister→sibling, coworker→colleague, brother-in-law/sister-in-law/father-in-law/mother-in-law/any in-law→in-law" },
     ],
   },
   {

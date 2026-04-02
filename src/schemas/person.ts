@@ -6,6 +6,7 @@ export const RelationshipTypeSchema = z.enum([
   "child",
   "parent",
   "sibling",
+  "in-law",
   "friend",
   "colleague",
   "mentor",
