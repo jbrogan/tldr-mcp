@@ -1048,7 +1048,8 @@ export function registerTools(server: McpServer): void {
       }
       const area = habit.areaId ? await getAreaById(habit.areaId) : undefined;
       const team = habit.teamId ? await getTeamById(habit.teamId) : undefined;
-      const actions = await listActions({ habitId: id });
+      const { listActionsWithShared } = await import("../store/actions.js");
+      const actions = await listActionsWithShared({ habitId: id });
       const recentActions = actions.slice(0, 5);
 
       const parts = [
@@ -1066,7 +1067,8 @@ export function registerTools(server: McpServer): void {
         parts.push("  Recent actions:");
         for (const a of recentActions) {
           const extra = a.actualDurationMinutes != null ? ` (${a.actualDurationMinutes} min)` : "";
-          parts.push(`    - ${a.completedAt.slice(0, 10)}${extra}`);
+          const byLine = a.isShared && a.ownerDisplayName ? ` — by ${a.ownerDisplayName}` : "";
+          parts.push(`    - ${a.completedAt.slice(0, 10)}${extra}${byLine}`);
         }
       } else {
         parts.push("  Recent actions: (none)");
