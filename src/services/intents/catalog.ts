@@ -494,6 +494,17 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "reflect",
+    description:
+      'User wants to review how they\'re doing — what they committed to vs. what they did (e.g. "reflect on this week", "how am I doing?", "reflect on Family", "weekly review", "reflect on Be a Great Father", "how is the Sales collection doing?", "reflect on Operations collection")',
+    rawParams: [
+      { name: "period", type: "string", description: "this_week, this_month, today. Default to this_week if not specified." },
+      { name: "areaName", type: "string", description: "Optional area to focus on" },
+      { name: "endName", type: "string", description: "Optional specific end to reflect on" },
+      { name: "collectionName", type: "string", description: "Optional collection to focus on — gives organizational view instead of area view" },
+    ],
+  },
+  {
     name: "help",
     description:
       'User wants to understand a concept or how the system works (e.g. "what is an end?", "how do collections work?", "explain sharing", "help")',

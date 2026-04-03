@@ -1141,17 +1141,19 @@ If none align, respond with: []`;
   },
 
   async reflect(p) {
-    const { fromDate, toDate, period, areaId, endId } = p as {
+    const { fromDate, toDate, period, areaId, endId, collectionId } = p as {
       fromDate: string;
       toDate: string;
       period: string;
       areaId?: string;
       endId?: string;
+      collectionId?: string;
     };
 
     const areas = await listAreas();
     const allEnds = await listEnds({ includeShared: true });
     const allHabits = await listHabitsWithShared();
+    const allCollections = await listCollections();
     // Use own actions only for personal reflection
     const actions = await listActions({ fromDate, toDate });
 
@@ -1179,78 +1181,77 @@ If none align, respond with: []`;
       return undefined;
     }
 
-    // Filter ends/areas if specified
-    let filteredEnds = allEnds;
-    let filteredAreas = areas;
-    if (endId) {
-      filteredEnds = allEnds.filter((e) => e.id === endId);
-      filteredAreas = areas.filter((a) => filteredEnds.some((e) => e.areaId === a.id));
-    } else if (areaId) {
-      filteredAreas = areas.filter((a) => a.id === areaId);
-      filteredEnds = allEnds.filter((e) => e.areaId === areaId);
+    // Format a habit line
+    function formatHabit(habit: typeof allHabits[0]): string {
+      const stats = actionsByHabit.get(habit.id);
+      const actual = stats?.count ?? 0;
+      const expected = expectedCount(habit.frequency);
+      const avgMin = actual > 0 && stats ? Math.round(stats.totalMinutes / actual) : undefined;
+      const check = actual > 0 ? "✓" : "✗";
+      let line = `    ${check} ${habit.name}: ${actual}`;
+      if (expected !== undefined) line += `/${expected}`;
+      if (habit.frequency) line += ` (${habit.frequency})`;
+      if (avgMin) line += ` — ${avgMin} min avg`;
+      return line;
+    }
+
+    // Format ends with their habits
+    function formatEnds(ends: typeof allEnds): string[] {
+      const lines: string[] = [];
+      for (const end of ends) {
+        const endHabits = allHabits.filter((h) => h.endIds.includes(end.id));
+        if (endHabits.length === 0) {
+          lines.push(`  ${end.name} (no habits)`);
+          continue;
+        }
+        lines.push(`  ${end.name}`);
+        for (const habit of endHabits) {
+          lines.push(formatHabit(habit));
+        }
+      }
+      return lines;
     }
 
     const periodLabel = period === "this_week" ? "This Week" : period === "this_month" ? "This Month" : period === "today" ? "Today" : `${fromDate} to ${toDate}`;
     const sections: string[] = [`Reflection — ${periodLabel} (${fromDate} to ${toDate})\n`];
 
-    for (const area of filteredAreas) {
-      const areaEnds = filteredEnds.filter((e) => e.areaId === area.id);
-      if (areaEnds.length === 0 && !areaId) continue; // Skip empty areas unless specifically requested
-
-      const areaLines: string[] = [];
-
-      for (const end of areaEnds) {
-        const endHabits = allHabits.filter((h) => h.endIds.includes(end.id));
-
-        if (endHabits.length === 0) {
-          areaLines.push(`  ${end.name} (no habits)`);
-          continue;
-        }
-
-        areaLines.push(`  ${end.name}`);
-        for (const habit of endHabits) {
-          const stats = actionsByHabit.get(habit.id);
-          const actual = stats?.count ?? 0;
-          const expected = expectedCount(habit.frequency);
-          const avgMin = actual > 0 && stats ? Math.round(stats.totalMinutes / actual) : undefined;
-
-          const check = actual > 0 ? "✓" : "✗";
-          let line = `    ${check} ${habit.name}: ${actual}`;
-          if (expected !== undefined) {
-            line += `/${expected}`;
-          }
-          if (habit.frequency) {
-            line += ` (${habit.frequency})`;
-          }
-          if (avgMin) {
-            line += ` — ${avgMin} min avg`;
-          }
-          areaLines.push(line);
-        }
+    if (collectionId) {
+      // Collection-based view
+      const collection = allCollections.find((c) => c.id === collectionId);
+      const collectionEnds = allEnds.filter((e) => e.collectionId === collectionId);
+      const endLines = formatEnds(collectionEnds);
+      if (endLines.length > 0) {
+        sections.push(`${collection?.name ?? "Collection"}:\n${endLines.join("\n")}`);
+      }
+    } else {
+      // Area-based view (default)
+      let filteredEnds = allEnds;
+      let filteredAreas = areas;
+      if (endId) {
+        filteredEnds = allEnds.filter((e) => e.id === endId);
+        filteredAreas = areas.filter((a) => filteredEnds.some((e) => e.areaId === a.id));
+      } else if (areaId) {
+        filteredAreas = areas.filter((a) => a.id === areaId);
+        filteredEnds = allEnds.filter((e) => e.areaId === areaId);
       }
 
-      if (areaLines.length > 0) {
-        sections.push(`${area.name}:\n${areaLines.join("\n")}`);
+      for (const area of filteredAreas) {
+        const areaEnds = filteredEnds.filter((e) => e.areaId === area.id);
+        if (areaEnds.length === 0 && !areaId) continue;
+        const endLines = formatEnds(areaEnds);
+        if (endLines.length > 0) {
+          sections.push(`${area.name}:\n${endLines.join("\n")}`);
+        }
       }
     }
 
-    // Habits without ends
-    const habitsWithoutEnds = allHabits.filter((h) => h.endIds.length === 0 && !h.isShared);
-    if (habitsWithoutEnds.length > 0 && !endId) {
-      const lines: string[] = [];
-      for (const habit of habitsWithoutEnds) {
-        const stats = actionsByHabit.get(habit.id);
-        const actual = stats?.count ?? 0;
-        const expected = expectedCount(habit.frequency);
-        const avgMin = actual > 0 && stats ? Math.round(stats.totalMinutes / actual) : undefined;
-        const check = actual > 0 ? "✓" : "✗";
-        let line = `  ${check} ${habit.name}: ${actual}`;
-        if (expected !== undefined) line += `/${expected}`;
-        if (habit.frequency) line += ` (${habit.frequency})`;
-        if (avgMin) line += ` — ${avgMin} min avg`;
-        lines.push(line);
+    // Habits without ends (skip if filtering by end or collection)
+    if (!endId && !collectionId) {
+      const habitsWithoutEnds = allHabits.filter((h) => h.endIds.length === 0 && !h.isShared);
+      if (habitsWithoutEnds.length > 0) {
+        const lines = habitsWithoutEnds.map(formatHabit);
+        sections.push(`Unlinked Habits (no end):\n${lines.join("\n")}`);
       }
-      sections.push(`Unlinked Habits (no end):\n${lines.join("\n")}`);
     }
 
     if (sections.length === 1) {

@@ -738,6 +738,19 @@ const resolvers: Record<string, ResolverFn> = {
     return { endId, beliefId };
   },
 
+  async reflect(raw) {
+    const period = (raw.period as string) || "this_week";
+    const { fromDate, toDate } = resolvePeriod(period);
+    return {
+      fromDate,
+      toDate,
+      period,
+      areaId: await resolveAreaName(raw.areaName as string),
+      endId: await resolveEndName(raw.endName as string),
+      collectionId: await resolveCollectionName(raw.collectionName as string),
+    };
+  },
+
   async help(raw) {
     return { topic: raw.topic as string | undefined };
   },
