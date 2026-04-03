@@ -1300,19 +1300,35 @@ export function registerTools(server: McpServer): void {
       if (tasks.length === 0) {
         return { content: [{ type: "text", text: "No tasks found." }] };
       }
-      const lines = tasks.map((t) => {
+      const allAreas = await listAreas();
+      const allEnds = await listEnds();
+      const lines = await Promise.all(tasks.map(async (t) => {
         const status = t.completedAt ? `✓ ${t.completedAt.slice(0, 10)}` : "open";
+        const end = t.endId ? allEnds.find((e) => e.id === t.endId) : undefined;
+        const area = t.areaId ? allAreas.find((a) => a.id === t.areaId) : undefined;
+        const withNames = t.withPersonIds?.length
+          ? await Promise.all(t.withPersonIds.map(async (pid) => {
+              const p = await getPersonById(pid);
+              return p ? `${p.firstName} ${p.lastName}` : pid;
+            }))
+          : undefined;
+        const forNames = t.forPersonIds?.length
+          ? await Promise.all(t.forPersonIds.map(async (pid) => {
+              const p = await getPersonById(pid);
+              return p ? `${p.firstName} ${p.lastName}` : pid;
+            }))
+          : undefined;
         const parts = [
           `  ${t.name} (${t.id}) [${status}]`,
-          t.endId ? `end:${t.endId}` : null,
-          t.areaId ? `area:${t.areaId}` : null,
-          t.dueDate ? `due:${t.dueDate}` : null,
+          end ? `end: ${end.name}` : null,
+          area ? `area: ${area.name}` : null,
+          t.dueDate ? `due: ${t.dueDate}` : null,
           t.actualDurationMinutes != null ? `${t.actualDurationMinutes} min` : null,
-          t.withPersonIds?.length ? `with: ${t.withPersonIds.join(", ")}` : null,
-          t.forPersonIds?.length ? `for: ${t.forPersonIds.join(", ")}` : null,
+          withNames?.length ? `with: ${withNames.join(", ")}` : null,
+          forNames?.length ? `for: ${forNames.join(", ")}` : null,
         ].filter(Boolean);
         return parts.join(" | ");
-      });
+      }));
       return {
         content: [
           {
