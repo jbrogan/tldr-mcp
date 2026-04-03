@@ -395,7 +395,9 @@ const resolvers: Record<string, ResolverFn> = {
     return {
       id,
       completedAt: resolveDate(raw.completedDate as string),
-      actualDurationMinutes: raw.durationMinutes as number | undefined,
+      reopen: raw.reopen === true,
+      dueDate: resolveDate(raw.dueDate as string),
+      actualDurationMinutes: typeof raw.durationMinutes === "number" ? raw.durationMinutes : undefined,
       name: raw.name as string | undefined,
       endId: await resolveEndName(raw.endName as string),
       areaId: await resolveAreaName(raw.areaName as string),
@@ -553,6 +555,12 @@ const resolvers: Record<string, ResolverFn> = {
       withPersonIds: await resolvePersonNames(raw.withPersonNames),
       forPersonIds: await resolvePersonNames(raw.forPersonNames),
     };
+  },
+
+  async get_task(raw) {
+    const taskId = await resolveTaskName(raw.taskName as string);
+    if (!taskId) throw new Error(`Task "${raw.taskName}" not found.`);
+    return { taskId };
   },
 
   async list_tasks(raw) {

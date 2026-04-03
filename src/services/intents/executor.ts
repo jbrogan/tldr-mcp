@@ -214,9 +214,11 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async update_task(p) {
-    const { id, completedAt, actualDurationMinutes, name, endId, areaId, withPersonIds, forPersonIds, notes } = p as {
+    const { id, completedAt, reopen, dueDate, actualDurationMinutes, name, endId, areaId, withPersonIds, forPersonIds, notes } = p as {
       id: string;
       completedAt?: string;
+      reopen?: boolean;
+      dueDate?: string;
       actualDurationMinutes?: number;
       name?: string;
       endId?: string;
@@ -232,12 +234,19 @@ const executors: Record<string, ExecutorFn> = {
     if (withPersonIds !== undefined) updates.withPersonIds = withPersonIds;
     if (forPersonIds !== undefined) updates.forPersonIds = forPersonIds;
     if (actualDurationMinutes !== undefined) updates.actualDurationMinutes = actualDurationMinutes;
-    if (completedAt !== undefined) {
+    if (dueDate !== undefined) updates.dueDate = dueDate;
+    if (reopen) {
+      updates.completedAt = null;
+      updates.actualDurationMinutes = null;
+    } else if (completedAt !== undefined) {
       updates.completedAt = completedAt.length === 10 ? `${completedAt}T12:00:00.000Z` : completedAt;
     }
     if (notes !== undefined) updates.notes = notes;
     const task = await updateTask(id, updates as Parameters<typeof updateTask>[1]);
     if (!task) return { success: false, message: `Task with ID ${id} not found.` };
+    if (reopen) {
+      return { success: true, message: `Reopened task: ${task.name}` };
+    }
     return {
       success: true,
       message: task.completedAt ? `Completed task: ${task.name}` : `Updated task: ${task.name}`,
@@ -618,6 +627,36 @@ const executors: Record<string, ExecutorFn> = {
       return `  ${date}: ${habitName}${extra}`;
     }));
     return { success: true, message: `Actions:\n\n${lines.join("\n")}` };
+  },
+
+  async get_task(p) {
+    const { taskId } = p as { taskId: string };
+    const { getTaskById } = await import("../../store/tasks.js");
+    const task = await getTaskById(taskId);
+    if (!task) return { success: false, message: `Task not found.` };
+    const area = task.areaId ? await getAreaById(task.areaId) : undefined;
+    const end = task.endId ? await getEndById(task.endId) : undefined;
+    const withNames = await Promise.all((task.withPersonIds ?? []).map(async (pid) => {
+      const person = await getPersonById(pid);
+      return person ? `${person.firstName} ${person.lastName}` : pid;
+    }));
+    const forNames = await Promise.all((task.forPersonIds ?? []).map(async (pid) => {
+      const person = await getPersonById(pid);
+      return person ? `${person.firstName} ${person.lastName}` : pid;
+    }));
+    const parts = [
+      `${task.name} (${task.id})`,
+      task.completedAt ? `  Status: completed ${task.completedAt.slice(0, 10)}` : "  Status: open",
+      end && `  End: ${end.name}`,
+      area && `  Area: ${area.name}`,
+      task.dueDate && `  Due: ${task.dueDate}`,
+      task.actualDurationMinutes != null && `  Duration: ${task.actualDurationMinutes} min`,
+      withNames.length > 0 && `  With: ${withNames.join(", ")}`,
+      forNames.length > 0 && `  For: ${forNames.join(", ")}`,
+      task.notes && `  Notes: ${task.notes}`,
+      `  Created: ${task.createdAt}`,
+    ].filter(Boolean);
+    return { success: true, message: parts.join("\n") };
   },
 
   async list_tasks(p) {

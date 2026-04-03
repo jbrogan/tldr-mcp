@@ -156,10 +156,12 @@ export const INTENT_CATALOG: IntentDefinition[] = [
   {
     name: "update_task",
     description:
-      'User wants to complete or update a task (e.g. "I finished call mom", "mark task X done")',
+      'User wants to complete, update, or reopen a task (e.g. "I finished call mom", "mark task X done", "set due date on oil change to Friday", "add a note to call mom", "reopen the oil change task")',
     rawParams: [
       { name: "taskName", type: "string", required: true, description: "Name of the task to update" },
       { name: "completedDate", type: "string", description: '"today", "yesterday", or YYYY-MM-DD. Use today if user says "done" or "completed"' },
+      { name: "reopen", type: "boolean", description: "Set to true when user wants to reopen/uncomplete a task" },
+      { name: "dueDate", type: "string", description: '"today", "tomorrow", "next Monday", or YYYY-MM-DD' },
       { name: "durationMinutes", type: "number" },
       { name: "name", type: "string", description: "New name if renaming" },
       { name: "endName", type: "string" },
@@ -369,6 +371,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
       { name: "endName", type: "string" },
       { name: "areaName", type: "string" },
       { name: "completed", type: "boolean", description: "true=completed only, false=open only" },
+    ],
+  },
+  {
+    name: "get_task",
+    description:
+      'User wants details about a specific task (e.g. "show me the call mom task", "details on oil change task")',
+    rawParams: [
+      { name: "taskName", type: "string", required: true, description: "Name of the task" },
     ],
   },
   {
