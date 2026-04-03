@@ -34,9 +34,28 @@ function findBestMatch<T>(items: T[], name: string, getName: (t: T) => string): 
   const lower = name.toLowerCase();
   const exact = items.find((i) => getName(i).toLowerCase() === lower);
   if (exact) return exact;
-  return items.find(
+  // Substring match
+  const substring = items.find(
     (i) => getName(i).toLowerCase().includes(lower) || lower.includes(getName(i).toLowerCase())
   );
+  if (substring) return substring;
+  // Stem-aware match — strip common suffixes for comparison
+  const stemmed = stemWords(lower);
+  return items.find((i) => {
+    const itemStemmed = stemWords(getName(i).toLowerCase());
+    return itemStemmed.includes(stemmed) || stemmed.includes(itemStemmed);
+  });
+}
+
+/** Simple suffix stripping for fuzzy tense matching */
+function stemWords(text: string): string {
+  return text.split(/\s+/).map((w) => {
+    if (w.endsWith("ied")) return w.slice(0, -3) + "y";  // studied → study
+    if (w.endsWith("ed") && w.length > 4) return w.slice(0, -2);  // cleaned → clean
+    if (w.endsWith("ing") && w.length > 5) return w.slice(0, -3);  // running → runn (close enough for substring)
+    if (w.endsWith("s") && !w.endsWith("ss") && w.length > 3) return w.slice(0, -1);  // runs → run
+    return w;
+  }).join(" ");
 }
 
 function resolveDate(expr: string | undefined): string | undefined {

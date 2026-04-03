@@ -47,7 +47,7 @@ ROUTING RULES:
 - Only include "__self__" or personName when the user EXPLICITLY mentions a person by name or says "me"/"my"/"I". Do NOT infer personName from context. "list habits for [end]", "list teams in [org]" should NOT include personName.
 - When user says "with [names]" while recording an action -> MUST include withPersonNames
 - When user says "for [name]" while recording an action -> MUST include forPersonNames
-- When extracting habitName for create_action, normalize to base/present tense (e.g. "cleaned the kitchen" → "clean the kitchen", "went to the gym" → "go to the gym", "practiced guitar" → "practice guitar")
+- When extracting habitName for create_action, use the user's exact words as closely as possible. Do NOT rephrase, restructure, or convert between noun/verb forms. "Badge fabrication" stays "Badge fabrication". "I cleaned the kitchen" → habitName: "cleaned the kitchen" is fine — the resolver handles tense matching.
 - Preserve full task descriptions including reason/purpose (e.g. "call Alex to discuss security deposit" NOT "call Alex")
 - When creating a habit with "for X", ALWAYS put X in endNames, NOT areaName. Only set areaName if the user explicitly says "in [area] area" or uses a well-known area name like Career, Family, Health, etc. NEVER leave endNames empty if the user mentions "for [something]".
 - "add [person] to [team] team" -> update_person with personName and teamNamesToAdd (NOT update_team). Adding a person to a team is update_person, not renaming a team.
