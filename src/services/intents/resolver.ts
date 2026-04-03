@@ -741,14 +741,24 @@ const resolvers: Record<string, ResolverFn> = {
   async reflect(raw) {
     const period = (raw.period as string) || "this_week";
     const { fromDate, toDate } = resolvePeriod(period);
-    return {
-      fromDate,
-      toDate,
-      period,
-      areaId: await resolveAreaName(raw.areaName as string),
-      endId: await resolveEndName(raw.endName as string),
-      collectionId: await resolveCollectionName(raw.collectionName as string),
-    };
+
+    let areaId = await resolveAreaName(raw.areaName as string);
+    let endId = await resolveEndName(raw.endName as string);
+    let collectionId = await resolveCollectionName(raw.collectionName as string);
+
+    // If no explicit type but scope is provided, try matching against all types
+    const scope = raw.scope as string | undefined;
+    if (scope && !areaId && !endId && !collectionId) {
+      areaId = await resolveAreaName(scope);
+      if (!areaId) {
+        endId = await resolveEndName(scope);
+        if (!endId) {
+          collectionId = await resolveCollectionName(scope);
+        }
+      }
+    }
+
+    return { fromDate, toDate, period, areaId, endId, collectionId };
   },
 
   async help(raw) {
