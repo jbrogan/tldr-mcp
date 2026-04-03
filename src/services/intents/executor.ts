@@ -660,8 +660,39 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async list_tasks(p) {
-    const { endId, areaId, completed } = p as { endId?: string; areaId?: string; completed?: boolean };
-    const tasks = await listTasks({ endId, areaId, completed });
+    const { endId, areaId, completed, duePeriod } = p as {
+      endId?: string;
+      areaId?: string;
+      completed?: boolean;
+      duePeriod?: string;
+    };
+    let tasks = await listTasks({ endId, areaId, completed });
+
+    // Filter by due date period
+    if (duePeriod) {
+      const now = new Date();
+      const today = now.toISOString().slice(0, 10);
+      const tomorrow = new Date(now.getTime() + 86400000).toISOString().slice(0, 10);
+      const day = now.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + mondayOffset);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      const weekEnd = sunday.toISOString().slice(0, 10);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+      tasks = tasks.filter((t) => {
+        if (!t.dueDate) return duePeriod === "overdue" ? false : false;
+        if (duePeriod === "today") return t.dueDate === today;
+        if (duePeriod === "tomorrow") return t.dueDate === tomorrow;
+        if (duePeriod === "this_week") return t.dueDate >= today && t.dueDate <= weekEnd;
+        if (duePeriod === "this_month") return t.dueDate >= today && t.dueDate <= monthEnd;
+        if (duePeriod === "overdue") return t.dueDate < today && !t.completedAt;
+        return true;
+      });
+    }
+
     if (tasks.length === 0) return { success: true, message: "No tasks found." };
     const lines = tasks.map((t) => {
       const status = t.completedAt ? `✓ ${t.completedAt.slice(0, 10)}` : "open";

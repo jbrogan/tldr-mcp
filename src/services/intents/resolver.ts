@@ -568,6 +568,7 @@ const resolvers: Record<string, ResolverFn> = {
       endId: await resolveEndName(raw.endName as string),
       areaId: await resolveAreaName(raw.areaName as string),
       completed: raw.completed as boolean | undefined,
+      duePeriod: raw.duePeriod as string | undefined,
     };
   },
 

@@ -366,11 +366,12 @@ export const INTENT_CATALOG: IntentDefinition[] = [
   },
   {
     name: "list_tasks",
-    description: 'User wants to see tasks (e.g. "show my tasks", "open tasks", "completed tasks")',
+    description: 'User wants to see tasks (e.g. "show my tasks", "open tasks", "completed tasks", "tasks due this week", "what\'s due tomorrow")',
     rawParams: [
       { name: "endName", type: "string" },
       { name: "areaName", type: "string" },
       { name: "completed", type: "boolean", description: "true=completed only, false=open only" },
+      { name: "duePeriod", type: "string", description: "today, tomorrow, this_week, this_month, overdue" },
     ],
   },
   {
