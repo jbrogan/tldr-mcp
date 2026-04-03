@@ -1140,6 +1140,126 @@ If none align, respond with: []`;
     return { success: true, message: `Unlinked "${end?.name}" from belief "${belief?.name}"` };
   },
 
+  async reflect(p) {
+    const { fromDate, toDate, period, areaId, endId } = p as {
+      fromDate: string;
+      toDate: string;
+      period: string;
+      areaId?: string;
+      endId?: string;
+    };
+
+    const areas = await listAreas();
+    const allEnds = await listEnds({ includeShared: true });
+    const allHabits = await listHabitsWithShared();
+    // Use own actions only for personal reflection
+    const actions = await listActions({ fromDate, toDate });
+
+    // Build action count map: habitId → count and total duration
+    const actionsByHabit = new Map<string, { count: number; totalMinutes: number }>();
+    for (const a of actions) {
+      const existing = actionsByHabit.get(a.habitId) ?? { count: 0, totalMinutes: 0 };
+      existing.count++;
+      existing.totalMinutes += a.actualDurationMinutes ?? 0;
+      actionsByHabit.set(a.habitId, existing);
+    }
+
+    // Calculate expected count based on frequency and date range
+    const dayCount = Math.max(1, Math.round((new Date(toDate).getTime() - new Date(fromDate).getTime()) / 86400000) + 1);
+    function expectedCount(frequency?: string): number | undefined {
+      if (!frequency) return undefined;
+      const f = frequency.toLowerCase();
+      if (f === "daily") return dayCount;
+      if (f === "weekly") return Math.max(1, Math.round(dayCount / 7));
+      if (f === "monthly") return Math.max(1, Math.round(dayCount / 30));
+      if (f.match(/^\d+x?\s*(per\s*)?week/i)) {
+        const n = parseInt(f);
+        return Math.max(1, Math.round((dayCount / 7) * n));
+      }
+      return undefined;
+    }
+
+    // Filter ends/areas if specified
+    let filteredEnds = allEnds;
+    let filteredAreas = areas;
+    if (endId) {
+      filteredEnds = allEnds.filter((e) => e.id === endId);
+      filteredAreas = areas.filter((a) => filteredEnds.some((e) => e.areaId === a.id));
+    } else if (areaId) {
+      filteredAreas = areas.filter((a) => a.id === areaId);
+      filteredEnds = allEnds.filter((e) => e.areaId === areaId);
+    }
+
+    const periodLabel = period === "this_week" ? "This Week" : period === "this_month" ? "This Month" : period === "today" ? "Today" : `${fromDate} to ${toDate}`;
+    const sections: string[] = [`Reflection — ${periodLabel} (${fromDate} to ${toDate})\n`];
+
+    for (const area of filteredAreas) {
+      const areaEnds = filteredEnds.filter((e) => e.areaId === area.id);
+      if (areaEnds.length === 0 && !areaId) continue; // Skip empty areas unless specifically requested
+
+      const areaLines: string[] = [];
+
+      for (const end of areaEnds) {
+        const endHabits = allHabits.filter((h) => h.endIds.includes(end.id));
+
+        if (endHabits.length === 0) {
+          areaLines.push(`  ${end.name} (no habits)`);
+          continue;
+        }
+
+        areaLines.push(`  ${end.name}`);
+        for (const habit of endHabits) {
+          const stats = actionsByHabit.get(habit.id);
+          const actual = stats?.count ?? 0;
+          const expected = expectedCount(habit.frequency);
+          const avgMin = actual > 0 && stats ? Math.round(stats.totalMinutes / actual) : undefined;
+
+          const check = actual > 0 ? "✓" : "✗";
+          let line = `    ${check} ${habit.name}: ${actual}`;
+          if (expected !== undefined) {
+            line += `/${expected}`;
+          }
+          if (habit.frequency) {
+            line += ` (${habit.frequency})`;
+          }
+          if (avgMin) {
+            line += ` — ${avgMin} min avg`;
+          }
+          areaLines.push(line);
+        }
+      }
+
+      if (areaLines.length > 0) {
+        sections.push(`${area.name}:\n${areaLines.join("\n")}`);
+      }
+    }
+
+    // Habits without ends
+    const habitsWithoutEnds = allHabits.filter((h) => h.endIds.length === 0 && !h.isShared);
+    if (habitsWithoutEnds.length > 0 && !endId) {
+      const lines: string[] = [];
+      for (const habit of habitsWithoutEnds) {
+        const stats = actionsByHabit.get(habit.id);
+        const actual = stats?.count ?? 0;
+        const expected = expectedCount(habit.frequency);
+        const avgMin = actual > 0 && stats ? Math.round(stats.totalMinutes / actual) : undefined;
+        const check = actual > 0 ? "✓" : "✗";
+        let line = `  ${check} ${habit.name}: ${actual}`;
+        if (expected !== undefined) line += `/${expected}`;
+        if (habit.frequency) line += ` (${habit.frequency})`;
+        if (avgMin) line += ` — ${avgMin} min avg`;
+        lines.push(line);
+      }
+      sections.push(`Unlinked Habits (no end):\n${lines.join("\n")}`);
+    }
+
+    if (sections.length === 1) {
+      return { success: true, message: `${sections[0]}No activity found for this period.` };
+    }
+
+    return { success: true, message: sections.join("\n\n") };
+  },
+
   async help(p) {
     const { topic } = p as { topic?: string };
     const { getHelpText } = await import("./help.js");
