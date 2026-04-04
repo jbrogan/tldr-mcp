@@ -836,10 +836,13 @@ export function registerTools(server: McpServer): void {
           sharingLine = `  Shared by: ${sharedEnd.ownerDisplayName}`;
         }
       }
-      const tasks = await listTasks({ endId: id, completed: false });
+      const { listTasksForEnd } = await import("../store/tasks.js");
+      const tasks = await listTasksForEnd(id, { completed: false });
+      const isSharedEnd = sharingLine !== undefined;
       const taskLines = tasks.map((t) => {
         const meta: string[] = [];
         if (t.dueDate) meta.push(`due: ${t.dueDate}`);
+        if (isSharedEnd && t.ownerDisplayName) meta.push(`by ${t.ownerDisplayName}`);
         return `    - ${t.name} (${t.id})${meta.length ? ` [${meta.join(", ")}]` : ""}`;
       });
       const parts = [

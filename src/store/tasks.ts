@@ -300,6 +300,50 @@ export async function listTasks(options?: {
 }
 
 /**
+ * List tasks for a shared end — includes all users' tasks visible via RLS.
+ */
+export async function listTasksForEnd(endId: string, options?: {
+  completed?: boolean;
+}): Promise<(TaskEntity & { isShared?: boolean; ownerDisplayName?: string })[]> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  let query = supabase
+    .from("tasks")
+    .select(`
+      *,
+      task_persons (*),
+      profiles!tasks_user_id_fkey (display_name)
+    `)
+    .eq("end_id", endId)
+    .order("created_at", { ascending: false });
+
+  if (options?.completed !== undefined) {
+    if (options.completed) {
+      query = query.not("completed_at", "is", null);
+    } else {
+      query = query.is("completed_at", null);
+    }
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to list tasks for end: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => {
+    const task = row as TaskWithPersons & { profiles?: { display_name: string } };
+    const isOwned = task.user_id === userId;
+    return {
+      ...toEntity(task),
+      isShared: !isOwned,
+      ownerDisplayName: task.profiles?.display_name,
+    };
+  });
+}
+
+/**
  * Delete a task.
  */
 export async function deleteTask(id: string): Promise<TaskEntity | null> {

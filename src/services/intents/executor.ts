@@ -341,11 +341,14 @@ const executors: Record<string, ExecutorFn> = {
       }
     }
 
-    // Open tasks
-    const tasks = await listTasks({ endId, completed: false });
+    // Open tasks (includes shared users' tasks)
+    const { listTasksForEnd } = await import("../../store/tasks.js");
+    const tasks = await listTasksForEnd(endId, { completed: false });
+    const isSharedEnd = sharingLine !== undefined;
     const taskLines = tasks.map((t) => {
       const meta: string[] = [];
       if (t.dueDate) meta.push(`due: ${t.dueDate}`);
+      if (isSharedEnd && t.ownerDisplayName) meta.push(`by ${t.ownerDisplayName}`);
       return `    - ${t.name}${meta.length ? ` (${meta.join(", ")})` : ""}`;
     });
 
