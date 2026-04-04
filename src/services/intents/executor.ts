@@ -1162,9 +1162,22 @@ If none align, respond with: []`;
       portfolioId?: string;
     };
 
-    const areas = await listAreas();
+    const myAreas = await listAreas();
     const allEnds = await listEnds({ includeShared: true });
     const allPortfolios = await listPortfolios();
+
+    // For shared ends, resolve their area IDs to names and merge with user's areas
+    // (shared ends reference the owner's area ID, which differs from the current user's)
+    const areas = [...myAreas];
+    const myAreaIds = new Set(myAreas.map((a) => a.id));
+    for (const end of allEnds) {
+      if (end.areaId && !myAreaIds.has(end.areaId)) {
+        const sharedArea = await getAreaById(end.areaId);
+        if (sharedArea && !areas.some((a) => a.id === sharedArea.id)) {
+          areas.push(sharedArea);
+        }
+      }
+    }
 
     // Get all habits but filter to ones the user owns or participates in
     const rawHabits = await listHabitsWithShared();
