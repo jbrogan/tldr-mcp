@@ -95,10 +95,10 @@ export type Database = {
           },
         ];
       };
-      collections: {
-        Row: CollectionRow;
-        Insert: CollectionInsert;
-        Update: Partial<CollectionInsert>;
+      portfolios: {
+        Row: PortfolioRow;
+        Insert: PortfolioInsert;
+        Update: Partial<PortfolioInsert>;
         Relationships: [];
       };
       ends: {
@@ -332,14 +332,14 @@ export type BeliefEndRow = {
   created_at: string;
 };
 
-export type CollectionRow = {
+export type PortfolioRow = {
   id: string;
   user_id: string;
   name: string;
   description: string | null;
   owner_type: string;
   owner_id: string;
-  collection_type: string | null;
+  portfolio_type: string | null;
   created_at: string;
 };
 
@@ -348,7 +348,7 @@ export type EndRow = {
   user_id: string;
   name: string;
   area_id: string | null;
-  collection_id: string | null;
+  portfolio_id: string | null;
   created_at: string;
 };
 
@@ -487,14 +487,14 @@ export type BeliefEndInsert = {
   created_at?: string;
 };
 
-export type CollectionInsert = {
+export type PortfolioInsert = {
   id?: string;
   user_id: string;
   name: string;
   description?: string | null;
   owner_type: string;
   owner_id: string;
-  collection_type?: string | null;
+  portfolio_type?: string | null;
   created_at?: string;
 };
 
@@ -503,7 +503,7 @@ export type EndInsert = {
   user_id: string;
   name: string;
   area_id?: string | null;
-  collection_id?: string | null;
+  portfolio_id?: string | null;
   created_at?: string;
 };
 
@@ -598,7 +598,7 @@ export type Person = PersonRow;
 export type PersonTeam = PersonTeamRow;
 export type Belief = BeliefRow;
 export type BeliefEnd = BeliefEndRow;
-export type Collection = CollectionRow;
+export type Portfolio = PortfolioRow;
 export type End = EndRow;
 export type EndShare = EndShareRow;
 export type Habit = HabitRow;

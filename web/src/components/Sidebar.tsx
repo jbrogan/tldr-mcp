@@ -143,9 +143,9 @@ const sections: SidebarSection[] = [
     parse: parsePeople,
   },
   {
-    key: "collections",
-    label: "Collections",
-    tool: "list_collections",
+    key: "portfolios",
+    label: "Portfolios",
+    tool: "list_portfolios",
     parse: parseNameIdLines,
   },
   {

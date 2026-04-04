@@ -48,8 +48,8 @@ function getDetailConfig(section: string, itemId: string, _itemName: string) {
       return { tool: "list_tasks", args: { completed: true } };
     case "teams":
       return { tool: "list_people", args: { teamId: itemId } };
-    case "collections":
-      return { tool: "list_ends", args: { collectionId: itemId } };
+    case "portfolios":
+      return { tool: "list_ends", args: { portfolioId: itemId } };
     case "my_shares":
       return { tool: "get_end", args: { id: itemId } };
     case "shared_ends":

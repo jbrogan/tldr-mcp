@@ -84,14 +84,14 @@ program
 
 program
   .command("list-ends-and-habits")
-  .description("List ends and habits. Use -a for area or -c for collection (mutually exclusive). Omit both for all areas.")
+  .description("List ends and habits. Use -a for area or -c for portfolio (mutually exclusive). Omit both for all areas.")
   .option("-a, --areaId <id>", "Filter to a specific area")
-  .option("-c, --collectionId <id>", "Filter to a specific collection")
+  .option("-c, --portfolioId <id>", "Filter to a specific portfolio")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = {};
       if (opts.areaId) args.areaId = opts.areaId;
-      if (opts.collectionId) args.collectionId = opts.collectionId;
+      if (opts.portfolioId) args.portfolioId = opts.portfolioId;
       const result = await client.callTool({
         name: "list_ends_and_habits",
         arguments: args,
@@ -190,12 +190,12 @@ program
   });
 
 program
-  .command("create-collection")
-  .description("Create a collection (grouping of ends under org, team, or person)")
-  .requiredOption("-n, --name <name>", "Collection name")
+  .command("create-portfolio")
+  .description("Create a portfolio (grouping of ends under org, team, or person)")
+  .requiredOption("-n, --name <name>", "Portfolio name")
   .requiredOption("-o, --ownerType <type>", "Owner type: organization, team, or person")
   .requiredOption("-i, --ownerId <id>", "Owner ID (org, team, or person)")
-  .option("-t, --collectionType <type>", "Collection type: goals, projects, quarterly, backlog, operations, other")
+  .option("-t, --portfolioType <type>", "Portfolio type: goals, projects, quarterly, backlog, operations, other")
   .option("-d, --description <desc>", "Optional description")
   .action(async (opts) => {
     await withClient(async (client) => {
@@ -204,10 +204,10 @@ program
         ownerType: opts.ownerType,
         ownerId: opts.ownerId,
       };
-      if (opts.collectionType) args.collectionType = opts.collectionType;
+      if (opts.portfolioType) args.portfolioType = opts.portfolioType;
       if (opts.description) args.description = opts.description;
       const result = await client.callTool({
-        name: "create_collection",
+        name: "create_portfolio",
         arguments: args,
       });
       printToolResult(result);
@@ -215,19 +215,19 @@ program
   });
 
 program
-  .command("list-collections")
-  .description("List collections, optionally by owner or type")
+  .command("list-portfolios")
+  .description("List portfolios, optionally by owner or type")
   .option("-o, --ownerType <type>", "Filter by owner type: organization, team, person")
   .option("-i, --ownerId <id>", "Filter by owner ID")
-  .option("-t, --collectionType <type>", "Filter by collection type")
+  .option("-t, --portfolioType <type>", "Filter by portfolio type")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = {};
       if (opts.ownerType) args.ownerType = opts.ownerType;
       if (opts.ownerId) args.ownerId = opts.ownerId;
-      if (opts.collectionType) args.collectionType = opts.collectionType;
+      if (opts.portfolioType) args.portfolioType = opts.portfolioType;
       const result = await client.callTool({
-        name: "list_collections",
+        name: "list_portfolios",
         arguments: args,
       });
       printToolResult(result);
@@ -235,20 +235,20 @@ program
   });
 
 program
-  .command("update-collection")
-  .description("Update a collection by ID")
-  .requiredOption("-i, --id <id>", "Collection ID")
-  .option("-n, --name <name>", "Collection name")
-  .option("-t, --collectionType <type>", "Collection type")
+  .command("update-portfolio")
+  .description("Update a portfolio by ID")
+  .requiredOption("-i, --id <id>", "Portfolio ID")
+  .option("-n, --name <name>", "Portfolio name")
+  .option("-t, --portfolioType <type>", "Portfolio type")
   .option("-d, --description <desc>", "Description")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = { id: opts.id };
       if (opts.name) args.name = opts.name;
-      if (opts.collectionType) args.collectionType = opts.collectionType;
+      if (opts.portfolioType) args.portfolioType = opts.portfolioType;
       if (opts.description !== undefined) args.description = opts.description;
       const result = await client.callTool({
-        name: "update_collection",
+        name: "update_portfolio",
         arguments: args,
       });
       printToolResult(result);
@@ -256,13 +256,13 @@ program
   });
 
 program
-  .command("delete-collection")
-  .description("Delete a collection by ID")
-  .requiredOption("-i, --id <id>", "Collection ID")
+  .command("delete-portfolio")
+  .description("Delete a portfolio by ID")
+  .requiredOption("-i, --id <id>", "Portfolio ID")
   .action(async (opts) => {
     await withClient(async (client) => {
       const result = await client.callTool({
-        name: "delete_collection",
+        name: "delete_portfolio",
         arguments: { id: opts.id },
       });
       printToolResult(result);
@@ -274,12 +274,12 @@ program
   .description("Create an end (ongoing aspiration)")
   .requiredOption("-n, --name <name>", "End name")
   .option("-a, --areaId <id>", "Area ID")
-  .option("-c, --collectionId <id>", "Collection ID")
+  .option("-c, --portfolioId <id>", "Portfolio ID")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = { name: opts.name };
       if (opts.areaId) args.areaId = opts.areaId;
-      if (opts.collectionId) args.collectionId = opts.collectionId;
+      if (opts.portfolioId) args.portfolioId = opts.portfolioId;
       const result = await client.callTool({
         name: "create_end",
         arguments: args,
@@ -290,17 +290,17 @@ program
 
 program
   .command("update-end")
-  .description("Update an end by ID (add to collection, change area, rename)")
+  .description("Update an end by ID (add to portfolio, change area, rename)")
   .requiredOption("-i, --id <id>", "End ID to update")
   .option("-n, --name <name>", "End name")
   .option("-a, --areaId <id>", "Area ID")
-  .option("-c, --collectionId <id>", "Collection ID")
+  .option("-c, --portfolioId <id>", "Portfolio ID")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = { id: opts.id };
       if (opts.name) args.name = opts.name;
       if (opts.areaId !== undefined) args.areaId = opts.areaId;
-      if (opts.collectionId !== undefined) args.collectionId = opts.collectionId;
+      if (opts.portfolioId !== undefined) args.portfolioId = opts.portfolioId;
       const result = await client.callTool({
         name: "update_end",
         arguments: args,
@@ -311,14 +311,14 @@ program
 
 program
   .command("list-ends")
-  .description("List ends, optionally by area or collection")
+  .description("List ends, optionally by area or portfolio")
   .option("-a, --areaId <id>", "Filter by area ID")
-  .option("-c, --collectionId <id>", "Filter by collection ID")
+  .option("-c, --portfolioId <id>", "Filter by portfolio ID")
   .action(async (opts) => {
     await withClient(async (client) => {
       const args: Record<string, unknown> = {};
       if (opts.areaId) args.areaId = opts.areaId;
-      if (opts.collectionId) args.collectionId = opts.collectionId;
+      if (opts.portfolioId) args.portfolioId = opts.portfolioId;
       const result = await client.callTool({
         name: "list_ends",
         arguments: args,

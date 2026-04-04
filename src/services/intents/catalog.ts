@@ -40,7 +40,7 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     rawParams: [
       { name: "name", type: "string", required: true, description: "The aspiration/goal name" },
       { name: "areaName", type: "string", description: "Life area if mentioned (e.g. Career, Family, Health)" },
-      { name: "collectionName", type: "string", description: "Collection name if mentioned" },
+      { name: "portfolioName", type: "string", description: "Portfolio name if mentioned" },
     ],
   },
   {
@@ -54,12 +54,12 @@ export const INTENT_CATALOG: IntentDefinition[] = [
   {
     name: "update_end",
     description:
-      'User wants to add an end to a collection, move it, or change its properties. Triggered by "add X to Y", "put X in Y", "move X to Y", or renaming/recategorizing an end.',
+      'User wants to add an end to a portfolio, move it, or change its properties. Triggered by "add X to Y", "put X in Y", "move X to Y", or renaming/recategorizing an end.',
     rawParams: [
       { name: "endName", type: "string", required: true, description: "Name of the end to update" },
       { name: "newName", type: "string", description: "New name if renaming" },
       { name: "areaName", type: "string", description: "New area name if changing area" },
-      { name: "collectionName", type: "string", description: "Collection name if adding to collection" },
+      { name: "portfolioName", type: "string", description: "Portfolio name if adding to portfolio" },
     ],
   },
   {
@@ -94,14 +94,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
-    name: "create_collection",
+    name: "create_portfolio",
     description:
-      'User explicitly wants to CREATE a new collection (e.g. "create collection Q1 Goals for Acme"). Do NOT use for "add end to collection" — that is update_end.',
+      'User explicitly wants to CREATE a new portfolio (e.g. "create portfolio Q1 Goals for Acme"). Do NOT use for "add end to portfolio" — that is update_end.',
     rawParams: [
-      { name: "name", type: "string", required: true, description: "Collection name" },
+      { name: "name", type: "string", required: true, description: "Portfolio name" },
       { name: "ownerType", type: "string", required: true, description: '"organization", "team", or "person"' },
-      { name: "ownerName", type: "string", required: true, description: 'Owner name. Use "__self__" for "my collection"' },
-      { name: "collectionType", type: "string", description: "goals, projects, quarterly, backlog, operations, or other" },
+      { name: "ownerName", type: "string", required: true, description: 'Owner name. Use "__self__" for "my portfolio"' },
+      { name: "portfolioType", type: "string", description: "goals, projects, quarterly, backlog, operations, or other" },
       { name: "description", type: "string", description: "Optional description" },
     ],
   },
@@ -198,7 +198,7 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     description: 'User wants to see ends/aspirations (e.g. "show my ends", "list aspirations", "ends in Career")',
     rawParams: [
       { name: "areaName", type: "string", description: "Filter by area name" },
-      { name: "collectionName", type: "string", description: "Filter by collection name" },
+      { name: "portfolioName", type: "string", description: "Filter by portfolio name" },
     ],
   },
   {
@@ -256,39 +256,39 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
-    name: "list_collections",
-    description: 'User wants to see collections (e.g. "list collections", "my collections", "collections for Acme")',
+    name: "list_portfolios",
+    description: 'User wants to see portfolios (e.g. "list portfolios", "my portfolios", "portfolios for Acme")',
     rawParams: [
       { name: "ownerType", type: "string", description: '"organization", "team", or "person"' },
-      { name: "ownerName", type: "string", description: 'Owner name. Use "__self__" for "my collections"' },
-      { name: "collectionType", type: "string", description: "goals, projects, quarterly, backlog, operations, other" },
+      { name: "ownerName", type: "string", description: 'Owner name. Use "__self__" for "my portfolios"' },
+      { name: "portfolioType", type: "string", description: "goals, projects, quarterly, backlog, operations, other" },
     ],
   },
   {
-    name: "get_collection",
+    name: "get_portfolio",
     description:
-      'User wants details about a specific collection including its ends (e.g. "show me the Sales collection", "details on Q1 Goals")',
+      'User wants details about a specific portfolio including its ends (e.g. "show me the Sales portfolio", "details on Q1 Goals")',
     rawParams: [
-      { name: "collectionName", type: "string", required: true, description: "Name of the collection" },
+      { name: "portfolioName", type: "string", required: true, description: "Name of the portfolio" },
     ],
   },
   {
-    name: "update_collection",
+    name: "update_portfolio",
     description:
-      'User wants to update a collection\'s name, type, or description (e.g. "change Sales collection type to quarterly", "rename Q1 Goals to Q2 Goals")',
+      'User wants to update a portfolio\'s name, type, or description (e.g. "change Sales portfolio type to quarterly", "rename Q1 Goals to Q2 Goals")',
     rawParams: [
-      { name: "collectionName", type: "string", required: true, description: "Name of the collection to update" },
+      { name: "portfolioName", type: "string", required: true, description: "Name of the portfolio to update" },
       { name: "newName", type: "string", description: "New name if renaming" },
-      { name: "collectionType", type: "string", description: "New type: goals, projects, quarterly, backlog, operations, other" },
+      { name: "portfolioType", type: "string", description: "New type: goals, projects, quarterly, backlog, operations, other" },
       { name: "description", type: "string", description: "New description" },
     ],
   },
   {
-    name: "delete_collection",
+    name: "delete_portfolio",
     description:
-      'User wants to delete or remove a collection (e.g. "delete the Sales collection", "remove Q1 Goals collection")',
+      'User wants to delete or remove a portfolio (e.g. "delete the Sales portfolio", "remove Q1 Goals portfolio")',
     rawParams: [
-      { name: "collectionName", type: "string", required: true, description: "Name of the collection to delete" },
+      { name: "portfolioName", type: "string", required: true, description: "Name of the portfolio to delete" },
     ],
   },
   {
@@ -387,7 +387,7 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     description: 'User wants ends AND habits together (e.g. "show my ends and habits", "ends and habits by area")',
     rawParams: [
       { name: "areaName", type: "string" },
-      { name: "collectionName", type: "string" },
+      { name: "portfolioName", type: "string" },
     ],
   },
   {
@@ -496,21 +496,21 @@ export const INTENT_CATALOG: IntentDefinition[] = [
   {
     name: "reflect",
     description:
-      'User wants to review how they\'re doing — what they committed to vs. what they did (e.g. "reflect on this week", "how am I doing?", "reflect on Family", "weekly review", "reflect on Be a Great Father", "how is the Sales collection doing?", "reflect on Operations collection")',
+      'User wants to review how they\'re doing — what they committed to vs. what they did (e.g. "reflect on this week", "how am I doing?", "reflect on Family", "weekly review", "reflect on Be a Great Father", "how is the Sales portfolio doing?", "reflect on Operations portfolio")',
     rawParams: [
       { name: "period", type: "string", description: "this_week, this_month, today. Default to this_week if not specified." },
       { name: "areaName", type: "string", description: "Optional area to focus on (use when user explicitly says area)" },
       { name: "endName", type: "string", description: "Optional specific end to reflect on (use when user explicitly says end)" },
-      { name: "collectionName", type: "string", description: "Optional collection to focus on (use when user explicitly says collection)" },
-      { name: "scope", type: "string", description: "When the user says 'reflect on X' without specifying area/end/collection, put X here and the system will determine the type" },
+      { name: "portfolioName", type: "string", description: "Optional portfolio to focus on (use when user explicitly says portfolio)" },
+      { name: "scope", type: "string", description: "When the user says 'reflect on X' without specifying area/end/portfolio, put X here and the system will determine the type" },
     ],
   },
   {
     name: "help",
     description:
-      'User wants to understand a concept or how the system works (e.g. "what is an end?", "how do collections work?", "explain sharing", "help")',
+      'User wants to understand a concept or how the system works (e.g. "what is an end?", "how do portfolios work?", "explain sharing", "help")',
     rawParams: [
-      { name: "topic", type: "string", description: "The concept to explain: areas, ends, habits, actions, tasks, collections, organizations, teams, persons, sharing, or overview" },
+      { name: "topic", type: "string", description: "The concept to explain: areas, ends, habits, actions, tasks, portfolios, organizations, teams, persons, sharing, or overview" },
     ],
   },
   {

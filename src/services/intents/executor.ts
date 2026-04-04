@@ -10,7 +10,7 @@ import { listEnds, createEnd, getEndById, updateEnd, deleteEnd, shareEnd, unshar
 import { listAreas, getAreaById } from "../../store/areas.js";
 import { listOrganizations, createOrganization, getOrganizationById, deleteOrganization } from "../../store/organizations.js";
 import { listTeams, createTeam, getTeamById, updateTeam, deleteTeam } from "../../store/teams.js";
-import { listCollections, createCollection, getCollectionById, updateCollection, deleteCollection } from "../../store/collections.js";
+import { listPortfolios, createPortfolio, getPortfolioById, updatePortfolio, deletePortfolio } from "../../store/portfolios.js";
 import { createAction, listActions, listActionsWithShared } from "../../store/actions.js";
 import { createTask, listTasks, updateTask, deleteTask } from "../../store/tasks.js";
 import type { RelationshipType } from "../../schemas/person.js";
@@ -70,24 +70,24 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async create_end(p) {
-    const { name, areaId, collectionId } = p as { name: string; areaId?: string; collectionId?: string };
-    const end = await createEnd({ name, areaId, collectionId });
+    const { name, areaId, portfolioId } = p as { name: string; areaId?: string; portfolioId?: string };
+    const end = await createEnd({ name, areaId, portfolioId: portfolioId });
     return { success: true, message: `Created end: ${end.name} (${end.id})` };
   },
 
   async update_end(p) {
-    const { id, name, areaId, collectionId } = p as { id: string; name?: string; areaId?: string; collectionId?: string };
+    const { id, name, areaId, portfolioId } = p as { id: string; name?: string; areaId?: string; portfolioId?: string };
     const updates: Record<string, unknown> = {};
     if (name != null) updates.name = name;
     if (areaId !== undefined) updates.areaId = areaId;
-    if (collectionId !== undefined) updates.collectionId = collectionId;
+    if (portfolioId !== undefined) updates.portfolioId = portfolioId;
     if (Object.keys(updates).length === 0) {
       return { success: false, message: "No updates provided for update_end." };
     }
     const end = await updateEnd(id, updates);
     if (!end) return { success: false, message: `End with ID ${id} not found.` };
     const parts = [`Updated end: ${end.name} (${end.id})`];
-    if (collectionId !== undefined) parts.push("added to collection");
+    if (portfolioId !== undefined) parts.push("added to portfolio");
     return { success: true, message: parts.join(" - ") };
   },
 
@@ -134,23 +134,23 @@ const executors: Record<string, ExecutorFn> = {
     return { success: true, message: `Created team: ${team.name} (${team.id}) in ${org?.name ?? team.organizationId}` };
   },
 
-  async create_collection(p) {
-    const { name, ownerType, ownerId, collectionType, description } = p as {
+  async create_portfolio(p) {
+    const { name, ownerType, ownerId, portfolioType, description } = p as {
       name: string;
       ownerType: string;
       ownerId: string;
-      collectionType?: string;
+      portfolioType?: string;
       description?: string;
     };
-    const collection = await createCollection({
+    const portfolio = await createPortfolio({
       name,
       ownerType: ownerType as "organization" | "team" | "person",
       ownerId,
-      collectionType: collectionType as "goals" | "projects" | "quarterly" | "backlog" | "operations" | "other" | undefined,
+      portfolioType: portfolioType as "goals" | "projects" | "quarterly" | "backlog" | "operations" | "other" | undefined,
       description,
     });
     const ownerLabel = await resolveOwnerName(ownerType, ownerId);
-    return { success: true, message: `Created collection: ${collection.name} (${collection.id}) owned by ${ownerLabel} (${ownerType})` };
+    return { success: true, message: `Created portfolio: ${portfolio.name} (${portfolio.id}) owned by ${ownerLabel} (${ownerType})` };
   },
 
   async create_person(p) {
@@ -268,9 +268,9 @@ const executors: Record<string, ExecutorFn> = {
     // Area
     const area = end.areaId ? await getAreaById(end.areaId) : undefined;
 
-    // Collection
-    const collections = await listCollections();
-    const collection = end.collectionId ? collections.find((c) => c.id === end.collectionId) : undefined;
+    // Portfolio
+    const portfolios = await listPortfolios();
+    const portfolio = end.portfolioId ? portfolios.find((c) => c.id === end.portfolioId) : undefined;
 
     // Habits — split into own vs shared
     const allHabits = await listHabitsWithShared({ endId });
@@ -355,7 +355,7 @@ const executors: Record<string, ExecutorFn> = {
     const parts = [
       `${end.name} (${end.id})`,
       area && `  Area: ${area.name}`,
-      collection && `  Collection: ${collection.name}`,
+      portfolio && `  Portfolio: ${portfolio.name}`,
       `  Created: ${end.createdAt}`,
       linkedBeliefs.length > 0 ? `  Beliefs:\n${beliefLines.join("\n")}` : undefined,
       myHabitLines.length > 0 ? `  Your habits:\n${myHabitLines.join("\n")}` : "  Your habits: (none)",
@@ -375,8 +375,8 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async list_ends(p) {
-    const { areaId, collectionId } = p as { areaId?: string; collectionId?: string };
-    const ends = await listEnds(areaId || collectionId ? { areaId, collectionId } : undefined);
+    const { areaId, portfolioId } = p as { areaId?: string; portfolioId?: string };
+    const ends = await listEnds(areaId || portfolioId ? { areaId, portfolioId: portfolioId } : undefined);
     if (ends.length === 0) {
       return { success: true, message: areaId ? "No ends found for this area." : "No ends found." };
     }
@@ -456,70 +456,70 @@ const executors: Record<string, ExecutorFn> = {
     return { success: true, message: `Organizations:\n\n${sections.join("\n\n")}` };
   },
 
-  async get_collection(p) {
-    const { collectionId } = p as { collectionId: string };
-    const collection = await getCollectionById(collectionId);
-    if (!collection) return { success: false, message: `Collection not found.` };
-    const ownerLabel = await resolveOwnerName(collection.ownerType, collection.ownerId);
+  async get_portfolio(p) {
+    const { portfolioId } = p as { portfolioId: string };
+    const portfolio = await getPortfolioById(portfolioId);
+    if (!portfolio) return { success: false, message: `Portfolio not found.` };
+    const ownerLabel = await resolveOwnerName(portfolio.ownerType, portfolio.ownerId);
     const allEnds = await listEnds();
-    const ends = allEnds.filter((e) => e.collectionId === collectionId);
+    const ends = allEnds.filter((e) => e.portfolioId === portfolioId);
     const endLines = ends.map((e) => `  - ${e.name} (${e.id})`);
     const parts = [
-      `${collection.name} (${collection.id})`,
-      `  Owner: ${ownerLabel} (${collection.ownerType})`,
-      collection.collectionType && `  Type: ${collection.collectionType}`,
-      collection.description && `  Description: ${collection.description}`,
+      `${portfolio.name} (${portfolio.id})`,
+      `  Owner: ${ownerLabel} (${portfolio.ownerType})`,
+      portfolio.portfolioType && `  Type: ${portfolio.portfolioType}`,
+      portfolio.description && `  Description: ${portfolio.description}`,
       ends.length > 0 ? `  Ends:\n${endLines.join("\n")}` : "  Ends: (none)",
     ].filter(Boolean);
     return { success: true, message: parts.join("\n") };
   },
 
-  async update_collection(p) {
-    const { collectionId, name, collectionType, description } = p as {
-      collectionId: string;
+  async update_portfolio(p) {
+    const { portfolioId, name, portfolioType, description } = p as {
+      portfolioId: string;
       name?: string;
-      collectionType?: string;
+      portfolioType?: string;
       description?: string;
     };
     const updates: Record<string, unknown> = {};
     if (name) updates.name = name;
-    if (collectionType) updates.collectionType = collectionType;
+    if (portfolioType) updates.portfolioType = portfolioType;
     if (description) updates.description = description;
     if (Object.keys(updates).length === 0) {
       return { success: false, message: "No updates provided." };
     }
-    const collection = await updateCollection(collectionId, updates);
-    if (!collection) return { success: false, message: `Collection not found.` };
+    const portfolio = await updatePortfolio(portfolioId, updates);
+    if (!portfolio) return { success: false, message: `Portfolio not found.` };
     const details: string[] = [];
     if (name) details.push(`renamed to "${name}"`);
-    if (collectionType) details.push(`type: ${collectionType}`);
+    if (portfolioType) details.push(`type: ${portfolioType}`);
     if (description) details.push(`description updated`);
-    return { success: true, message: `Updated collection: ${collection.name} - ${details.join(", ")}` };
+    return { success: true, message: `Updated portfolio: ${portfolio.name} - ${details.join(", ")}` };
   },
 
-  async delete_collection(p) {
-    const { collectionId } = p as { collectionId: string };
-    const collection = await getCollectionById(collectionId);
-    if (!collection) return { success: false, message: `Collection not found.` };
-    await deleteCollection(collectionId);
-    return { success: true, message: `Deleted collection: ${collection.name}` };
+  async delete_portfolio(p) {
+    const { portfolioId } = p as { portfolioId: string };
+    const portfolio = await getPortfolioById(portfolioId);
+    if (!portfolio) return { success: false, message: `Portfolio not found.` };
+    await deletePortfolio(portfolioId);
+    return { success: true, message: `Deleted portfolio: ${portfolio.name}` };
   },
 
-  async list_collections(p) {
-    const { ownerType, ownerId, collectionType } = p as {
+  async list_portfolios(p) {
+    const { ownerType, ownerId, portfolioType } = p as {
       ownerType?: string;
       ownerId?: string;
-      collectionType?: string;
+      portfolioType?: string;
     };
-    const collections = await listCollections(
-      ownerType || ownerId || collectionType ? { ownerType, ownerId, collectionType } : undefined
+    const portfolios = await listPortfolios(
+      ownerType || ownerId || portfolioType ? { ownerType, ownerId, portfolioType: portfolioType } : undefined
     );
-    if (collections.length === 0) return { success: true, message: "No collections found." };
-    const lines = await Promise.all(collections.map(async (c) => {
+    if (portfolios.length === 0) return { success: true, message: "No portfolios found." };
+    const lines = await Promise.all(portfolios.map(async (c) => {
       const ownerLabel = await resolveOwnerName(c.ownerType, c.ownerId);
-      return `  ${c.name} (${c.id}) - ${c.ownerType}: ${ownerLabel}${c.collectionType ? ` [${c.collectionType}]` : ""}`;
+      return `  ${c.name} (${c.id}) - ${c.ownerType}: ${ownerLabel}${c.portfolioType ? ` [${c.portfolioType}]` : ""}`;
     }));
-    return { success: true, message: `Collections:\n\n${lines.join("\n")}` };
+    return { success: true, message: `Portfolios:\n\n${lines.join("\n")}` };
   },
 
   async list_teams(p) {
@@ -714,26 +714,26 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async list_ends_and_habits(p) {
-    const { areaId, collectionId } = p as { areaId?: string; collectionId?: string };
-    if (areaId && collectionId) {
-      return { success: false, message: "Provide areaId OR collectionId, not both." };
+    const { areaId, portfolioId } = p as { areaId?: string; portfolioId?: string };
+    if (areaId && portfolioId) {
+      return { success: false, message: "Provide areaId OR portfolioId, not both." };
     }
     const areas = await listAreas();
     const allEnds = await listEnds();
     const allHabits = await listHabits();
 
-    if (collectionId) {
-      const collection = await getCollectionById(collectionId);
-      if (!collection) return { success: false, message: `Collection with ID ${collectionId} not found.` };
-      const ends = allEnds.filter((e) => e.collectionId === collectionId);
-      const parts: string[] = [`## ${collection.name}`];
+    if (portfolioId) {
+      const portfolio = await getPortfolioById(portfolioId);
+      if (!portfolio) return { success: false, message: `Portfolio with ID ${portfolioId} not found.` };
+      const ends = allEnds.filter((e) => e.portfolioId === portfolioId);
+      const parts: string[] = [`## ${portfolio.name}`];
       for (const e of ends) {
         const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
         parts.push(`  - ${e.name} (${e.id})`);
         habitsForEnd.forEach((h) => parts.push(`    - ${h.name} (${h.id})`));
       }
       if (ends.length === 0) {
-        return { success: true, message: `No ends or habits in collection "${collection.name}".` };
+        return { success: true, message: `No ends or habits in portfolio "${portfolio.name}".` };
       }
       return { success: true, message: parts.join("\n") };
     }
@@ -1153,18 +1153,18 @@ If none align, respond with: []`;
   },
 
   async reflect(p) {
-    const { fromDate, toDate, period, areaId, endId, collectionId } = p as {
+    const { fromDate, toDate, period, areaId, endId, portfolioId } = p as {
       fromDate: string;
       toDate: string;
       period: string;
       areaId?: string;
       endId?: string;
-      collectionId?: string;
+      portfolioId?: string;
     };
 
     const areas = await listAreas();
     const allEnds = await listEnds({ includeShared: true });
-    const allCollections = await listCollections();
+    const allPortfolios = await listPortfolios();
 
     // Get all habits but filter to ones the user owns or participates in
     const rawHabits = await listHabitsWithShared();
@@ -1235,13 +1235,13 @@ If none align, respond with: []`;
     const periodLabel = period === "this_week" ? "This Week" : period === "this_month" ? "This Month" : period === "today" ? "Today" : `${fromDate} to ${toDate}`;
     const sections: string[] = [`Reflection — ${periodLabel} (${fromDate} to ${toDate})\n`];
 
-    if (collectionId) {
-      // Collection-based view
-      const collection = allCollections.find((c) => c.id === collectionId);
-      const collectionEnds = allEnds.filter((e) => e.collectionId === collectionId);
-      const endLines = formatEnds(collectionEnds);
+    if (portfolioId) {
+      // Portfolio-based view
+      const portfolio = allPortfolios.find((c) => c.id === portfolioId);
+      const portfolioEnds = allEnds.filter((e) => e.portfolioId === portfolioId);
+      const endLines = formatEnds(portfolioEnds);
       if (endLines.length > 0) {
-        sections.push(`${collection?.name ?? "Collection"}:\n${endLines.join("\n")}`);
+        sections.push(`${portfolio?.name ?? "Portfolio"}:\n${endLines.join("\n")}`);
       }
     } else {
       // Area-based view (default)
@@ -1265,8 +1265,8 @@ If none align, respond with: []`;
       }
     }
 
-    // Habits without ends (skip if filtering by end or collection)
-    if (!endId && !collectionId) {
+    // Habits without ends (skip if filtering by end or portfolio)
+    if (!endId && !portfolioId) {
       const habitsWithoutEnds = allHabits.filter((h) => h.endIds.length === 0 && !h.isShared);
       if (habitsWithoutEnds.length > 0) {
         const lines = habitsWithoutEnds.map(formatHabit);

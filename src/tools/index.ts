@@ -32,12 +32,12 @@ import {
   deleteTeamsByOrganizationId,
 } from "../store/teams.js";
 import {
-  createCollection,
-  deleteCollection,
-  getCollectionById,
-  listCollections,
-  updateCollection,
-} from "../store/collections.js";
+  createPortfolio,
+  deletePortfolio,
+  getPortfolioById,
+  listPortfolios,
+  updatePortfolio,
+} from "../store/portfolios.js";
 import {
   createEnd,
   deleteEnd,
@@ -170,16 +170,16 @@ export function registerTools(server: McpServer): void {
     {
       title: "List Ends and Habits",
       description:
-        "Lists ends and habits. Filter by areaId OR collectionId (mutually exclusive). Omit both to show all areas.",
+        "Lists ends and habits. Filter by areaId OR portfolioId (mutually exclusive). Omit both to show all areas.",
       inputSchema: {
-        areaId: z.string().optional().describe("Filter to a specific area. Mutually exclusive with collectionId."),
-        collectionId: z.string().optional().describe("Filter to a specific collection. Mutually exclusive with areaId."),
+        areaId: z.string().optional().describe("Filter to a specific area. Mutually exclusive with portfolioId."),
+        portfolioId: z.string().optional().describe("Filter to a specific portfolio. Mutually exclusive with areaId."),
       },
     },
-    async ({ areaId, collectionId }) => {
-      if (areaId && collectionId) {
+    async ({ areaId, portfolioId }) => {
+      if (areaId && portfolioId) {
         return {
-          content: [{ type: "text", text: "Provide areaId OR collectionId, not both." }],
+          content: [{ type: "text", text: "Provide areaId OR portfolioId, not both." }],
           isError: true,
         };
       }
@@ -188,16 +188,16 @@ export function registerTools(server: McpServer): void {
       const allEnds = await listEnds();
       const allHabits = await listHabits();
 
-      if (collectionId) {
-        const collection = await getCollectionById(collectionId);
-        if (!collection) {
+      if (portfolioId) {
+        const portfolio = await getPortfolioById(portfolioId);
+        if (!portfolio) {
           return {
-            content: [{ type: "text", text: `Collection with ID ${collectionId} not found.` }],
+            content: [{ type: "text", text: `Portfolio with ID ${portfolioId} not found.` }],
             isError: true,
           };
         }
-        const ends = allEnds.filter((e) => e.collectionId === collectionId);
-        const parts: string[] = [`## ${collection.name}`];
+        const ends = allEnds.filter((e) => e.portfolioId === portfolioId);
+        const parts: string[] = [`## ${portfolio.name}`];
         for (const e of ends) {
           const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
           parts.push(`  - ${e.name} (${e.id})`);
@@ -205,7 +205,7 @@ export function registerTools(server: McpServer): void {
         }
         if (ends.length === 0) {
           return {
-            content: [{ type: "text", text: `No ends or habits in collection "${collection.name}".` }],
+            content: [{ type: "text", text: `No ends or habits in portfolio "${portfolio.name}".` }],
           };
         }
         return {
@@ -519,37 +519,37 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
-    "create_collection",
+    "create_portfolio",
     {
-      title: "Create Collection",
+      title: "Create Portfolio",
       description:
-        "Creates a collection - a grouping of ends under an org, team, or person. Enables the view: (org/team/person) -> collection -> ends -> habits.",
+        "Creates a portfolio - a grouping of ends under an org, team, or person. Enables the view: (org/team/person) -> portfolio -> ends -> habits.",
       inputSchema: {
-        name: z.string().min(1).describe("Collection name"),
+        name: z.string().min(1).describe("Portfolio name"),
         ownerType: z
           .enum(["organization", "team", "person"])
           .describe("Type of owner (org, team, or person)"),
         ownerId: z.string().min(1).describe("ID of the organization, team, or person"),
-        collectionType: z
+        portfolioType: z
           .enum(["goals", "projects", "quarterly", "backlog", "operations", "other"])
           .optional()
-          .describe("Type of collection (goals, projects, quarterly, backlog, other)"),
+          .describe("Type of portfolio (goals, projects, quarterly, backlog, other)"),
         description: z.string().optional().describe("Optional description"),
       },
     },
-    async ({ name, ownerType, ownerId, collectionType, description }) => {
-      const collection = await createCollection({
+    async ({ name, ownerType, ownerId, portfolioType, description }) => {
+      const portfolio = await createPortfolio({
         name,
         ownerType,
         ownerId,
-        collectionType,
+        portfolioType,
         description,
       });
       return {
         content: [
           {
             type: "text",
-            text: `Created collection: ${collection.name}\nID: ${collection.id}\nOwner: ${collection.ownerType} ${collection.ownerId}\n${collection.collectionType ? `Type: ${collection.collectionType}\n` : ""}${collection.description ? `Description: ${collection.description}\n` : ""}Created at: ${collection.createdAt}`,
+            text: `Created portfolio: ${portfolio.name}\nID: ${portfolio.id}\nOwner: ${portfolio.ownerType} ${portfolio.ownerId}\n${portfolio.portfolioType ? `Type: ${portfolio.portfolioType}\n` : ""}${portfolio.description ? `Description: ${portfolio.description}\n` : ""}Created at: ${portfolio.createdAt}`,
           },
         ],
       };
@@ -557,41 +557,41 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
-    "list_collections",
+    "list_portfolios",
     {
-      title: "List Collections",
+      title: "List Portfolios",
       description:
-        "Lists collections. Filter by owner (ownerType + ownerId) or by collectionType.",
+        "Lists portfolios. Filter by owner (ownerType + ownerId) or by portfolioType.",
       inputSchema: {
         ownerType: z
           .enum(["organization", "team", "person"])
           .optional()
           .describe("Filter by owner type"),
         ownerId: z.string().optional().describe("Filter by owner ID"),
-        collectionType: z
+        portfolioType: z
           .enum(["goals", "projects", "quarterly", "backlog", "operations", "other"])
           .optional()
-          .describe("Filter by collection type"),
+          .describe("Filter by portfolio type"),
       },
     },
-    async ({ ownerType, ownerId, collectionType }) => {
-      const collections = await listCollections(
-        ownerType || ownerId || collectionType
-          ? { ownerType, ownerId, collectionType }
+    async ({ ownerType, ownerId, portfolioType }) => {
+      const portfolios = await listPortfolios(
+        ownerType || ownerId || portfolioType
+          ? { ownerType, ownerId, portfolioType }
           : undefined
       );
-      if (collections.length === 0) {
-        return { content: [{ type: "text", text: "No collections found." }] };
+      if (portfolios.length === 0) {
+        return { content: [{ type: "text", text: "No portfolios found." }] };
       }
-      const lines = await Promise.all(collections.map(async (c) => {
+      const lines = await Promise.all(portfolios.map(async (c) => {
         const ownerName = await resolveOwnerName(c.ownerType, c.ownerId);
-        return `  ${c.name} (${c.id}) - ${c.ownerType}: ${ownerName}${c.collectionType ? ` [${c.collectionType}]` : ""}`;
+        return `  ${c.name} (${c.id}) - ${c.ownerType}: ${ownerName}${c.portfolioType ? ` [${c.portfolioType}]` : ""}`;
       }));
       return {
         content: [
           {
             type: "text",
-            text: `Found ${collections.length} collection(s):\n\n${lines.join("\n")}`,
+            text: `Found ${portfolios.length} portfolio(s):\n\n${lines.join("\n")}`,
           },
         ],
       };
@@ -599,30 +599,30 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
-    "get_collection",
+    "get_portfolio",
     {
-      title: "Get Collection",
+      title: "Get Portfolio",
       description:
-        "Gets a single collection by ID with full details: owner, type, and the ends it contains.",
+        "Gets a single portfolio by ID with full details: owner, type, and the ends it contains.",
       inputSchema: {
-        id: z.string().min(1).describe("ID of the collection to fetch"),
+        id: z.string().min(1).describe("ID of the portfolio to fetch"),
       },
     },
     async ({ id }) => {
-      const collection = await getCollectionById(id);
-      if (!collection) {
-        return { content: [{ type: "text", text: `Collection with ID ${id} not found.` }], isError: true };
+      const portfolio = await getPortfolioById(id);
+      if (!portfolio) {
+        return { content: [{ type: "text", text: `Portfolio with ID ${id} not found.` }], isError: true };
       }
-      const ownerName = await resolveOwnerName(collection.ownerType, collection.ownerId);
+      const ownerName = await resolveOwnerName(portfolio.ownerType, portfolio.ownerId);
       const allEnds = await listEnds();
-      const ends = allEnds.filter((e) => e.collectionId === id);
+      const ends = allEnds.filter((e) => e.portfolioId === id);
       const endLines = ends.map((e) => `    - ${e.name} (${e.id})`);
       const parts = [
-        `${collection.name} (${collection.id})`,
-        `  Owner: ${ownerName} (${collection.ownerType})`,
-        collection.collectionType && `  Type: ${collection.collectionType}`,
-        collection.description && `  Description: ${collection.description}`,
-        `  Created: ${collection.createdAt}`,
+        `${portfolio.name} (${portfolio.id})`,
+        `  Owner: ${ownerName} (${portfolio.ownerType})`,
+        portfolio.portfolioType && `  Type: ${portfolio.portfolioType}`,
+        portfolio.description && `  Description: ${portfolio.description}`,
+        `  Created: ${portfolio.createdAt}`,
         ends.length > 0 ? `  Ends:\n${endLines.join("\n")}` : "  Ends: (none)",
       ].filter(Boolean);
       return { content: [{ type: "text", text: parts.join("\n") }] };
@@ -630,38 +630,38 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
-    "update_collection",
+    "update_portfolio",
     {
-      title: "Update Collection",
-      description: "Updates a collection by ID. Only provided fields are updated.",
+      title: "Update Portfolio",
+      description: "Updates a portfolio by ID. Only provided fields are updated.",
       inputSchema: {
-        id: z.string().min(1).describe("ID of the collection to update"),
-        name: z.string().min(1).optional().describe("Collection name"),
-        collectionType: z
+        id: z.string().min(1).describe("ID of the portfolio to update"),
+        name: z.string().min(1).optional().describe("Portfolio name"),
+        portfolioType: z
           .enum(["goals", "projects", "quarterly", "backlog", "operations", "other"])
           .optional()
-          .describe("Collection type"),
+          .describe("Portfolio type"),
         description: z.string().optional().describe("Description"),
       },
     },
-    async ({ id, name, collectionType, description }) => {
-      const existing = await getCollectionById(id);
+    async ({ id, name, portfolioType, description }) => {
+      const existing = await getPortfolioById(id);
       if (!existing) {
         return {
-          content: [{ type: "text", text: `Collection with ID ${id} not found.` }],
+          content: [{ type: "text", text: `Portfolio with ID ${id} not found.` }],
           isError: true,
         };
       }
       const updates: Record<string, unknown> = {};
       if (name != null) updates.name = name;
-      if (collectionType !== undefined) updates.collectionType = collectionType;
+      if (portfolioType !== undefined) updates.portfolioType = portfolioType;
       if (description !== undefined) updates.description = description;
-      const collection = await updateCollection(id, updates);
+      const portfolio = await updatePortfolio(id, updates);
       return {
         content: [
           {
             type: "text",
-            text: `Updated collection: ${collection?.name} (${id})`,
+            text: `Updated portfolio: ${portfolio?.name} (${id})`,
           },
         ],
       };
@@ -669,29 +669,29 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
-    "delete_collection",
+    "delete_portfolio",
     {
-      title: "Delete Collection",
+      title: "Delete Portfolio",
       description:
-        "Deletes a collection by ID. Ends in the collection are not deleted; their collectionId is not automatically cleared.",
+        "Deletes a portfolio by ID. Ends in the portfolio are not deleted; their portfolioId is not automatically cleared.",
       inputSchema: {
-        id: z.string().min(1).describe("ID of the collection to delete"),
+        id: z.string().min(1).describe("ID of the portfolio to delete"),
       },
     },
     async ({ id }) => {
-      const collection = await getCollectionById(id);
-      if (!collection) {
+      const portfolio = await getPortfolioById(id);
+      if (!portfolio) {
         return {
-          content: [{ type: "text", text: `Collection with ID ${id} not found.` }],
+          content: [{ type: "text", text: `Portfolio with ID ${id} not found.` }],
           isError: true,
         };
       }
-      await deleteCollection(id);
+      await deletePortfolio(id);
       return {
         content: [
           {
             type: "text",
-            text: `Deleted collection: ${collection.name} (${id})`,
+            text: `Deleted portfolio: ${portfolio.name} (${id})`,
           },
         ],
       };
@@ -707,16 +707,16 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         name: z.string().min(1).describe("Name of the end"),
         areaId: z.string().optional().describe("Area this end belongs to"),
-        collectionId: z.string().optional().describe("Collection this end belongs to"),
+        portfolioId: z.string().optional().describe("Portfolio this end belongs to"),
       },
     },
-    async ({ name, areaId, collectionId }) => {
-      const end = await createEnd({ name, areaId, collectionId });
+    async ({ name, areaId, portfolioId }) => {
+      const end = await createEnd({ name, areaId, portfolioId });
       return {
         content: [
           {
             type: "text",
-            text: `Created end: ${end.name}\nID: ${end.id}\n${end.areaId ? `Area: ${end.areaId}\n` : ""}${end.collectionId ? `Collection: ${end.collectionId}\n` : ""}Created at: ${end.createdAt}`,
+            text: `Created end: ${end.name}\nID: ${end.id}\n${end.areaId ? `Area: ${end.areaId}\n` : ""}${end.portfolioId ? `Portfolio: ${end.portfolioId}\n` : ""}Created at: ${end.createdAt}`,
           },
         ],
       };
@@ -727,23 +727,23 @@ export function registerTools(server: McpServer): void {
     "list_ends",
     {
       title: "List Ends",
-      description: "Lists ends. Optionally filter by area ID or collection ID.",
+      description: "Lists ends. Optionally filter by area ID or portfolio ID.",
       inputSchema: {
         areaId: z.string().optional().describe("Filter by area ID"),
-        collectionId: z.string().optional().describe("Filter by collection ID"),
+        portfolioId: z.string().optional().describe("Filter by portfolio ID"),
       },
     },
-    async ({ areaId, collectionId }) => {
-      const ends = await listEnds(areaId || collectionId ? { areaId, collectionId } : undefined);
+    async ({ areaId, portfolioId }) => {
+      const ends = await listEnds(areaId || portfolioId ? { areaId, portfolioId } : undefined);
       if (ends.length === 0) {
         return { content: [{ type: "text", text: "No ends found." }] };
       }
       const allAreas = await listAreas();
-      const allCollections = await listCollections();
+      const allPortfolios = await listPortfolios();
       const lines = ends.map((e) => {
         const area = e.areaId ? allAreas.find((a) => a.id === e.areaId) : undefined;
-        const collection = e.collectionId ? allCollections.find((c) => c.id === e.collectionId) : undefined;
-        return `  ${e.name} (${e.id})${area ? ` - Area: ${area.name}` : ""}${collection ? ` - Collection: ${collection.name}` : ""}`;
+        const portfolio = e.portfolioId ? allPortfolios.find((c) => c.id === e.portfolioId) : undefined;
+        return `  ${e.name} (${e.id})${area ? ` - Area: ${area.name}` : ""}${portfolio ? ` - Portfolio: ${portfolio.name}` : ""}`;
       });
       return {
         content: [
@@ -761,7 +761,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Get End",
       description:
-        "Gets a single end by ID with full details: area, collection, habits (with participants), and sharing info.",
+        "Gets a single end by ID with full details: area, portfolio, habits (with participants), and sharing info.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the end to fetch"),
       },
@@ -772,8 +772,8 @@ export function registerTools(server: McpServer): void {
         return { content: [{ type: "text", text: `End with ID ${id} not found.` }], isError: true };
       }
       const area = end.areaId ? await getAreaById(end.areaId) : undefined;
-      const collections = await listCollections();
-      const collection = end.collectionId ? collections.find((c) => c.id === end.collectionId) : undefined;
+      const portfolios = await listPortfolios();
+      const portfolio = end.portfolioId ? portfolios.find((c) => c.id === end.portfolioId) : undefined;
       const allHabits = await listHabitsWithShared({ endId: id });
       const myHabits = allHabits.filter((h) => !h.isShared);
       const sharedHabits = allHabits.filter((h) => h.isShared);
@@ -848,7 +848,7 @@ export function registerTools(server: McpServer): void {
       const parts = [
         `${end.name} (${end.id})`,
         area && `  Area: ${area.name}`,
-        collection && `  Collection: ${collection.name}`,
+        portfolio && `  Portfolio: ${portfolio.name}`,
         `  Created: ${end.createdAt}`,
         linkedBeliefs.length > 0 ? `  Beliefs:\n${beliefLines.join("\n")}` : undefined,
         myHabitLines.length > 0 ? `  Your habits:\n${myHabitLines.join("\n")}` : "  Your habits: (none)",
@@ -865,15 +865,15 @@ export function registerTools(server: McpServer): void {
     {
       title: "Update End",
       description:
-        "Updates an end by ID. Only provided fields are updated. Use to add an end to a collection, change its area, or rename it.",
+        "Updates an end by ID. Only provided fields are updated. Use to add an end to a portfolio, change its area, or rename it.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the end to update"),
         name: z.string().min(1).optional().describe("End name"),
         areaId: z.string().optional().describe("Area this end belongs to"),
-        collectionId: z.string().optional().describe("Collection this end belongs to"),
+        portfolioId: z.string().optional().describe("Portfolio this end belongs to"),
       },
     },
-    async ({ id, name, areaId, collectionId }) => {
+    async ({ id, name, areaId, portfolioId }) => {
       const existing = await getEndById(id);
       if (!existing) {
         return {
@@ -884,13 +884,13 @@ export function registerTools(server: McpServer): void {
       const updates: Record<string, unknown> = {};
       if (name != null) updates.name = name;
       if (areaId !== undefined) updates.areaId = areaId;
-      if (collectionId !== undefined) updates.collectionId = collectionId;
+      if (portfolioId !== undefined) updates.portfolioId = portfolioId;
       const end = await updateEnd(id, updates);
       return {
         content: [
           {
             type: "text",
-            text: `Updated end: ${end?.name} (${id})${end?.collectionId ? ` - Collection: ${end.collectionId}` : ""}`,
+            text: `Updated end: ${end?.name} (${id})${end?.portfolioId ? ` - Portfolio: ${end.portfolioId}` : ""}`,
           },
         ],
       };

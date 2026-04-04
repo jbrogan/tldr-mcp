@@ -15,14 +15,14 @@ Here's how the pieces fit together:
   - Habits: Recurring behaviors that serve your ends (e.g. "Family dinner weekly")
   - Actions: Logged completions of habits (your track record)
   - Tasks: One-off to-dos, optionally linked to an end
-  - Collections: Group ends by owner (org, team, or person) for a structural view
+  - Portfolios: Group ends by owner (org, team, or person) for a structural view
   - Organizations & Teams: People hierarchy for collaborative tracking
   - Sharing: Share ends with other users for joint accountability
 
 Two ways to slice your data:
   - By Area: "How am I doing in Family?" (life domain lens)
   - By Organization: "How is the business doing?" (structural lens)
-  Collections bridge these two views.`,
+  Portfolios bridge these two views.`,
 
   beliefs: `Beliefs are your core values and convictions — the foundational principles that explain why your ends matter.
 
@@ -48,7 +48,7 @@ Examples: "Be a great father", "Stay physically fit", "Grow the client base"
 
 Key properties:
   - Each end belongs to an Area (life domain)
-  - Each end can belong to a Collection (organizational grouping)
+  - Each end can belong to a Portfolio (organizational grouping)
   - Habits attach to ends — they're the "how" for your "why"
   - Ends can be shared with other users for joint accountability
   - Ends are ongoing — you don't complete them, you pursue them`,
@@ -84,18 +84,18 @@ Key properties:
   - Tasks can involve people (with/for)
   - Tasks are owned by you, but when linked to a shared end they are visible to everyone the end is shared with — this helps confirm commitments between users`,
 
-  collections: `Collections group ends under an owner (organization, team, or person). They provide a structural view of your aspirations.
+  portfolios: `Portfolios group ends under an owner (organization, team, or person). They provide a structural view of your aspirations.
 
 Examples: "Sales" (org-owned), "Q1 Goals" (person-owned), "Kids Activities" (team-owned)
 
-Collections bridge the gap between Areas and Organizations:
+Portfolios bridge the gap between Areas and Organizations:
   - Area view: End → Area → "How am I doing in Family?"
-  - Org view: End → Collection → Organization → "How is the business doing?"
+  - Org view: End → Portfolio → Organization → "How is the business doing?"
 
 Key properties:
   - Owner can be an organization, team, or person
-  - Collection type: goals, projects, quarterly, backlog, operations, or other
-  - An end belongs to one collection (optional) and one area (required)`,
+  - Portfolio type: goals, projects, quarterly, backlog, operations, or other
+  - An end belongs to one portfolio (optional) and one area (required)`,
 
   organizations: `Organizations represent the top-level groups in your life — businesses, families, clubs, etc.
 
@@ -103,7 +103,7 @@ Examples: "Brogan Family", "Acme Corp", "Local Church"
 
 Organizations contain teams, which contain people. This hierarchy lets you:
   - Assign habits to teams
-  - Own collections at the org level
+  - Own portfolios at the org level
   - Roll up reporting by organizational structure
 
 Organizations are broader than just "work" — any group of people you interact with regularly can be an organization.`,
@@ -116,7 +116,7 @@ Key properties:
   - Every team belongs to an organization
   - People can be on multiple teams
   - Habits can be assigned to a team
-  - Collections can be owned by a team`,
+  - Portfolios can be owned by a team`,
 
   persons: `Persons represent the people in your life. Each person has a name, email, relationship type, and optional team memberships.
 
@@ -161,7 +161,9 @@ const TOPIC_ALIASES: Record<string, string> = {
   task: "tasks",
   "to-do": "tasks",
   todos: "tasks",
-  collection: "collections",
+  portfolio: "portfolios",
+  collection: "portfolios",
+  collections: "portfolios",
   organization: "organizations",
   org: "organizations",
   orgs: "organizations",

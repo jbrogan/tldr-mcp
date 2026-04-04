@@ -41,7 +41,7 @@ function toEntity(row: DbEnd): EndEntity {
     id: row.id,
     name: row.name,
     areaId: row.area_id ?? undefined,
-    collectionId: row.collection_id ?? undefined,
+    portfolioId: row.portfolio_id ?? undefined,
     createdAt: row.created_at,
   };
 }
@@ -59,7 +59,7 @@ export async function createEnd(data: End): Promise<EndEntity> {
       user_id: userId,
       name: data.name,
       area_id: data.areaId,
-      collection_id: data.collectionId,
+      portfolio_id: data.portfolioId,
     })
     .select()
     .single();
@@ -99,7 +99,7 @@ export async function getEndById(id: string): Promise<EndEntity | undefined> {
  */
 export async function updateEnd(
   id: string,
-  updates: Partial<Pick<EndEntity, "name" | "areaId" | "collectionId">>
+  updates: Partial<Pick<EndEntity, "name" | "areaId" | "portfolioId">>
 ): Promise<EndEntity | null> {
   const supabase = getSupabase();
   const userId = getUserId();
@@ -108,7 +108,7 @@ export async function updateEnd(
   const updateData: Record<string, unknown> = {};
   if (updates.name !== undefined) updateData.name = updates.name;
   if (updates.areaId !== undefined) updateData.area_id = updates.areaId;
-  if (updates.collectionId !== undefined) updateData.collection_id = updates.collectionId;
+  if (updates.portfolioId !== undefined) updateData.portfolio_id = updates.portfolioId;
 
   if (Object.keys(updateData).length === 0) {
     return getEndById(id) as Promise<EndEntity | null>;
@@ -138,7 +138,7 @@ export async function updateEnd(
  */
 export async function listEnds(options?: {
   areaId?: string;
-  collectionId?: string;
+  portfolioId?: string;
   includeShared?: boolean;
 }): Promise<EndWithOwner[]> {
   const supabase = getSupabase();
@@ -150,8 +150,8 @@ export async function listEnds(options?: {
   if (options?.areaId) {
     query = query.eq("area_id", options.areaId);
   }
-  if (options?.collectionId) {
-    query = query.eq("collection_id", options.collectionId);
+  if (options?.portfolioId) {
+    query = query.eq("portfolio_id", options.portfolioId);
   }
 
   const { data: ownedEnds, error: ownedError } = await query.order("name");
@@ -176,7 +176,7 @@ export async function listEnds(options?: {
           id,
           name,
           area_id,
-          collection_id,
+          portfolio_id,
           created_at,
           user_id,
           profiles!ends_user_id_fkey (display_name)
@@ -195,7 +195,7 @@ export async function listEnds(options?: {
 
       // Apply filters to shared ends too
       if (options?.areaId && end.area_id !== options.areaId) continue;
-      if (options?.collectionId && end.collection_id !== options.collectionId) continue;
+      if (options?.portfolioId && end.portfolio_id !== options.portfolioId) continue;
 
       results.push({
         ...toEntity(end),

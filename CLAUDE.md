@@ -36,7 +36,7 @@ User (Supabase Auth profile)
 ├── Organizations
 │   └── Teams
 │       └── People (with relationship types: spouse, child, colleague, etc.)
-└── Collections (goals, projects, quarterly, backlog, operations)
+└── Portfolios (goals, projects, quarterly, backlog, operations)
 ```
 
 **Sharing Model**:
@@ -111,7 +111,7 @@ Core tables with RLS policies:
 - `areas` - Wheel of Life segments (auto-seeded on signup)
 - `organizations`, `teams` - Org hierarchy
 - `persons` - People representations
-- `collections` - Groupings of ends
+- `portfolios` - Groupings of ends
 - `ends` - Aspirations (shareable)
 - `habits`, `actions` - Habit tracking
 - `tasks` - One-off to-dos

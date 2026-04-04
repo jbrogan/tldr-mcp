@@ -11,7 +11,7 @@ import { listEnds } from "../../store/ends.js";
 import { listAreas } from "../../store/areas.js";
 import { listOrganizations } from "../../store/organizations.js";
 import { listTeams } from "../../store/teams.js";
-import { listCollections } from "../../store/collections.js";
+import { listPortfolios } from "../../store/portfolios.js";
 import { listTasks } from "../../store/tasks.js";
 import { listBeliefs } from "../../store/beliefs.js";
 import { listPersons, getSelfPerson, getPersonById } from "../../store/persons.js";
@@ -187,10 +187,10 @@ async function resolveTeamNames(names: unknown): Promise<string[] | undefined> {
   return ids.length > 0 ? ids : undefined;
 }
 
-async function resolveCollectionName(name: string | undefined): Promise<string | undefined> {
+async function resolvePortfolioName(name: string | undefined): Promise<string | undefined> {
   if (!name) return undefined;
-  const collections = await listCollections();
-  return findBestMatch(collections, name, (c) => c.name)?.id;
+  const portfolios = await listPortfolios();
+  return findBestMatch(portfolios, name, (c) => c.name)?.id;
 }
 
 async function resolveHabitName(name: string | undefined): Promise<string | undefined> {
@@ -270,7 +270,7 @@ const resolvers: Record<string, ResolverFn> = {
     return {
       name: raw.name as string,
       areaId: await resolveAreaName(raw.areaName as string),
-      collectionId: await resolveCollectionName(raw.collectionName as string),
+      portfolioId: await resolvePortfolioName(raw.portfolioName as string),
     };
   },
 
@@ -281,7 +281,7 @@ const resolvers: Record<string, ResolverFn> = {
       id,
       name: raw.newName as string | undefined,
       areaId: await resolveAreaName(raw.areaName as string),
-      collectionId: await resolveCollectionName(raw.collectionName as string),
+      portfolioId: await resolvePortfolioName(raw.portfolioName as string),
     };
   },
 
@@ -331,7 +331,7 @@ const resolvers: Record<string, ResolverFn> = {
     return { name: raw.name as string, organizationId };
   },
 
-  async create_collection(raw) {
+  async create_portfolio(raw) {
     const rawOwnerType = raw.ownerType as string;
     const ownerType = rawOwnerType === SELF_PLACEHOLDER ? "person" : rawOwnerType;
     const ownerId = await resolveOwner(ownerType, raw.ownerName as string);
@@ -340,7 +340,7 @@ const resolvers: Record<string, ResolverFn> = {
       name: raw.name as string,
       ownerType,
       ownerId,
-      collectionType: raw.collectionType as string | undefined,
+      portfolioType: raw.portfolioType as string | undefined,
       description: raw.description as string | undefined,
     };
   },
@@ -422,7 +422,7 @@ const resolvers: Record<string, ResolverFn> = {
   async list_ends(raw) {
     return {
       areaId: await resolveAreaName(raw.areaName as string),
-      collectionId: await resolveCollectionName(raw.collectionName as string),
+      portfolioId: await resolvePortfolioName(raw.portfolioName as string),
     };
   },
 
@@ -465,30 +465,30 @@ const resolvers: Record<string, ResolverFn> = {
     return { expand: raw.expand as boolean | undefined };
   },
 
-  async get_collection(raw) {
-    const collectionId = await resolveCollectionName(raw.collectionName as string);
-    if (!collectionId) throw new Error(`Collection "${raw.collectionName}" not found.`);
-    return { collectionId };
+  async get_portfolio(raw) {
+    const portfolioId = await resolvePortfolioName(raw.portfolioName as string);
+    if (!portfolioId) throw new Error(`Portfolio "${raw.portfolioName}" not found.`);
+    return { portfolioId };
   },
 
-  async update_collection(raw) {
-    const collectionId = await resolveCollectionName(raw.collectionName as string);
-    if (!collectionId) throw new Error(`Collection "${raw.collectionName}" not found.`);
+  async update_portfolio(raw) {
+    const portfolioId = await resolvePortfolioName(raw.portfolioName as string);
+    if (!portfolioId) throw new Error(`Portfolio "${raw.portfolioName}" not found.`);
     return {
-      collectionId,
+      portfolioId,
       name: raw.newName as string | undefined,
-      collectionType: raw.collectionType as string | undefined,
+      portfolioType: raw.portfolioType as string | undefined,
       description: raw.description as string | undefined,
     };
   },
 
-  async delete_collection(raw) {
-    const collectionId = await resolveCollectionName(raw.collectionName as string);
-    if (!collectionId) throw new Error(`Collection "${raw.collectionName}" not found.`);
-    return { collectionId };
+  async delete_portfolio(raw) {
+    const portfolioId = await resolvePortfolioName(raw.portfolioName as string);
+    if (!portfolioId) throw new Error(`Portfolio "${raw.portfolioName}" not found.`);
+    return { portfolioId };
   },
 
-  async list_collections(raw) {
+  async list_portfolios(raw) {
     const rawOwnerType = raw.ownerType as string | undefined;
     const ownerType = rawOwnerType === SELF_PLACEHOLDER ? "person" : rawOwnerType;
     const ownerId = ownerType
@@ -497,7 +497,7 @@ const resolvers: Record<string, ResolverFn> = {
     return {
       ownerType,
       ownerId,
-      collectionType: raw.collectionType as string | undefined,
+      portfolioType: raw.portfolioType as string | undefined,
     };
   },
 
@@ -575,7 +575,7 @@ const resolvers: Record<string, ResolverFn> = {
   async list_ends_and_habits(raw) {
     return {
       areaId: await resolveAreaName(raw.areaName as string),
-      collectionId: await resolveCollectionName(raw.collectionName as string),
+      portfolioId: await resolvePortfolioName(raw.portfolioName as string),
     };
   },
 
@@ -744,21 +744,21 @@ const resolvers: Record<string, ResolverFn> = {
 
     let areaId = await resolveAreaName(raw.areaName as string);
     let endId = await resolveEndName(raw.endName as string);
-    let collectionId = await resolveCollectionName(raw.collectionName as string);
+    let portfolioId = await resolvePortfolioName(raw.portfolioName as string);
 
     // If no explicit type but scope is provided, try matching against all types
     const scope = raw.scope as string | undefined;
-    if (scope && !areaId && !endId && !collectionId) {
+    if (scope && !areaId && !endId && !portfolioId) {
       areaId = await resolveAreaName(scope);
       if (!areaId) {
         endId = await resolveEndName(scope);
         if (!endId) {
-          collectionId = await resolveCollectionName(scope);
+          portfolioId = await resolvePortfolioName(scope);
         }
       }
     }
 
-    return { fromDate, toDate, period, areaId, endId, collectionId };
+    return { fromDate, toDate, period, areaId, endId, portfolioId };
   },
 
   async help(raw) {

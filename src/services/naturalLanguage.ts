@@ -5,7 +5,7 @@
  */
 
 import { listEnds, updateEnd } from "../store/ends.js";
-import { listCollections } from "../store/collections.js";
+import { listPortfolios } from "../store/portfolios.js";
 import { classify } from "./intents/classifier.js";
 import { resolve } from "./intents/resolver.js";
 import { execute, type ExecuteResult } from "./intents/executor.js";
@@ -27,38 +27,38 @@ function findBestMatch<T>(items: T[], name: string, getName: (t: T) => string): 
   );
 }
 
-/** Match "add X to Y collection", "put X in Y collection", "move X to Y collection" */
-function parseAddEndToCollection(text: string): { endName: string; collectionName: string } | null {
+/** Match "add X to Y portfolio", "put X in Y portfolio", "move X to Y portfolio" */
+function parseAddEndToPortfolio(text: string): { endName: string; portfolioName: string } | null {
   const trimmed = text.trim().replace(/[.!?]+$/, "");
-  const addMatch = trimmed.match(/^add\s+(.+?)\s+to\s+(?:the\s+)?(.+?)\s+collection\s*$/i);
-  if (addMatch) return { endName: addMatch[1].trim(), collectionName: addMatch[2].trim() };
-  const putMatch = trimmed.match(/^put\s+(.+?)\s+in\s+(?:the\s+)?(.+?)\s+collection\s*$/i);
-  if (putMatch) return { endName: putMatch[1].trim(), collectionName: putMatch[2].trim() };
-  const moveMatch = trimmed.match(/^move\s+(.+?)\s+to\s+(?:the\s+)?(.+?)\s+collection\s*$/i);
-  if (moveMatch) return { endName: moveMatch[1].trim(), collectionName: moveMatch[2].trim() };
+  const addMatch = trimmed.match(/^add\s+(.+?)\s+to\s+(?:the\s+)?(.+?)\s+portfolio\s*$/i);
+  if (addMatch) return { endName: addMatch[1].trim(), portfolioName: addMatch[2].trim() };
+  const putMatch = trimmed.match(/^put\s+(.+?)\s+in\s+(?:the\s+)?(.+?)\s+portfolio\s*$/i);
+  if (putMatch) return { endName: putMatch[1].trim(), portfolioName: putMatch[2].trim() };
+  const moveMatch = trimmed.match(/^move\s+(.+?)\s+to\s+(?:the\s+)?(.+?)\s+portfolio\s*$/i);
+  if (moveMatch) return { endName: moveMatch[1].trim(), portfolioName: moveMatch[2].trim() };
   return null;
 }
 
 async function tryDeterministicShortcuts(text: string): Promise<NLResult | null> {
-  const addToCollection = parseAddEndToCollection(text);
-  if (!addToCollection) return null;
+  const addToPortfolio = parseAddEndToPortfolio(text);
+  if (!addToPortfolio) return null;
 
   const ends = await listEnds();
-  const collections = await listCollections();
-  const end = findBestMatch(ends, addToCollection.endName, (e) => e.name);
-  const collection = findBestMatch(collections, addToCollection.collectionName, (c) => c.name);
+  const portfolios = await listPortfolios();
+  const end = findBestMatch(ends, addToPortfolio.endName, (e) => e.name);
+  const portfolio = findBestMatch(portfolios, addToPortfolio.portfolioName, (c) => c.name);
 
   if (!end) {
-    return { success: false, message: `End "${addToCollection.endName}" not found. Check the name or create it first.` };
+    return { success: false, message: `End "${addToPortfolio.endName}" not found. Check the name or create it first.` };
   }
-  if (!collection) {
-    return { success: false, message: `Collection "${addToCollection.collectionName}" not found. Check the name or create it first.` };
+  if (!portfolio) {
+    return { success: false, message: `Portfolio "${addToPortfolio.portfolioName}" not found. Check the name or create it first.` };
   }
 
-  const updated = await updateEnd(end.id, { collectionId: collection.id });
+  const updated = await updateEnd(end.id, { portfolioId: portfolio.id });
   return {
     success: true,
-    message: `Updated end: ${updated?.name} (${updated?.id}) - added to collection ${collection.name}`,
+    message: `Updated end: ${updated?.name} (${updated?.id}) - added to portfolio ${portfolio.name}`,
   };
 }
 
