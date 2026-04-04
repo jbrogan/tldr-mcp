@@ -82,7 +82,7 @@ Key properties:
   - Tasks can optionally link to an end (the aspiration they support)
   - Tasks can have a due date
   - Tasks can involve people (with/for)
-  - Tasks are personal — they don't share like ends do`,
+  - Tasks are owned by you, but when linked to a shared end they are visible to everyone the end is shared with — this helps confirm commitments between users`,
 
   collections: `Collections group ends under an owner (organization, team, or person). They provide a structural view of your aspirations.
 

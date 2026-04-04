@@ -42,8 +42,10 @@ function getDetailConfig(section: string, itemId: string, _itemName: string) {
       return { tool: "get_person", args: { id: itemId } };
     case "organizations":
       return { tool: "list_teams", args: { organizationId: itemId } };
-    case "tasks":
+    case "tasks_open":
       return { tool: "get_task", args: { id: itemId } };
+    case "tasks_completed":
+      return { tool: "list_tasks", args: { completed: true } };
     case "teams":
       return { tool: "list_people", args: { teamId: itemId } };
     case "collections":

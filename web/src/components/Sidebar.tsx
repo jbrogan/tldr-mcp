@@ -108,10 +108,20 @@ const sections: SidebarSection[] = [
     ],
   },
   {
-    key: "tasks",
-    label: "Tasks",
+    key: "tasks_open",
+    label: "Tasks (Open)",
     tool: "list_tasks",
+    args: { completed: false },
     parse: parseNameIdLines,
+  },
+  {
+    key: "tasks_completed",
+    label: "Tasks (Completed)",
+    staticItems: [
+      { id: "this_week", name: "This Week" },
+      { id: "this_month", name: "This Month" },
+      { id: "all", name: "All" },
+    ],
   },
   {
     key: "organizations",
