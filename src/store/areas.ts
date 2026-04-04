@@ -49,11 +49,12 @@ export async function getAreaById(id: string): Promise<AreaEntity | undefined> {
   const supabase = getSupabase();
   const userId = getUserId();
 
+  // Don't filter by user_id — areas are standard categories and shared ends
+  // reference the owner's area ID, which needs to be resolvable by shared users
   const { data, error } = await supabase
     .from("areas")
     .select("*")
     .eq("id", id)
-    .eq("user_id", userId)
     .single();
 
   if (error) {
