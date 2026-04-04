@@ -1152,8 +1152,16 @@ If none align, respond with: []`;
 
     const areas = await listAreas();
     const allEnds = await listEnds({ includeShared: true });
-    const allHabits = await listHabitsWithShared();
     const allCollections = await listCollections();
+
+    // Get all habits but filter to ones the user owns or participates in
+    const rawHabits = await listHabitsWithShared();
+    const { getSelfPerson } = await import("../../store/persons.js");
+    const selfPerson = await getSelfPerson();
+    const selfPersonId = selfPerson?.id;
+    const allHabits = rawHabits.filter((h) =>
+      !h.isShared || (selfPersonId && h.personIds?.includes(selfPersonId))
+    );
     // Use own actions only for personal reflection
     const actions = await listActions({ fromDate, toDate });
 
