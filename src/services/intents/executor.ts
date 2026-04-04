@@ -341,6 +341,14 @@ const executors: Record<string, ExecutorFn> = {
       }
     }
 
+    // Open tasks
+    const tasks = await listTasks({ endId, completed: false });
+    const taskLines = tasks.map((t) => {
+      const meta: string[] = [];
+      if (t.dueDate) meta.push(`due: ${t.dueDate}`);
+      return `    - ${t.name}${meta.length ? ` (${meta.join(", ")})` : ""}`;
+    });
+
     const parts = [
       `${end.name} (${end.id})`,
       area && `  Area: ${area.name}`,
@@ -349,6 +357,7 @@ const executors: Record<string, ExecutorFn> = {
       linkedBeliefs.length > 0 ? `  Beliefs:\n${beliefLines.join("\n")}` : undefined,
       myHabitLines.length > 0 ? `  Your habits:\n${myHabitLines.join("\n")}` : "  Your habits: (none)",
       sharedHabitLines.length > 0 ? `  Shared habits:\n${sharedHabitLines.join("\n")}` : undefined,
+      taskLines.length > 0 ? `  Open tasks:\n${taskLines.join("\n")}` : undefined,
       sharingLine,
     ].filter(Boolean);
 

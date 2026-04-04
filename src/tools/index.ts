@@ -836,6 +836,12 @@ export function registerTools(server: McpServer): void {
           sharingLine = `  Shared by: ${sharedEnd.ownerDisplayName}`;
         }
       }
+      const tasks = await listTasks({ endId: id, completed: false });
+      const taskLines = tasks.map((t) => {
+        const meta: string[] = [];
+        if (t.dueDate) meta.push(`due: ${t.dueDate}`);
+        return `    - ${t.name} (${t.id})${meta.length ? ` [${meta.join(", ")}]` : ""}`;
+      });
       const parts = [
         `${end.name} (${end.id})`,
         area && `  Area: ${area.name}`,
@@ -844,6 +850,7 @@ export function registerTools(server: McpServer): void {
         linkedBeliefs.length > 0 ? `  Beliefs:\n${beliefLines.join("\n")}` : undefined,
         myHabitLines.length > 0 ? `  Your habits:\n${myHabitLines.join("\n")}` : "  Your habits: (none)",
         sharedHabitLines.length > 0 ? `  Shared habits:\n${sharedHabitLines.join("\n")}` : undefined,
+        taskLines.length > 0 ? `  Open tasks:\n${taskLines.join("\n")}` : undefined,
         sharingLine,
       ].filter(Boolean);
       return { content: [{ type: "text", text: parts.join("\n") }] };
