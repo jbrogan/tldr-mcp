@@ -636,9 +636,9 @@ const executors: Record<string, ExecutorFn> = {
       const forSet = new Set(forPersonIds);
       actions = actions.filter((a) => a.forPersonIds?.some((pid) => forSet.has(pid)));
     }
-    if (actions.length === 0) return { success: true, message: "No actions found." };
+    // Format habit actions
     const habitMap = new Map((await listHabitsWithShared()).map((h) => [h.id, h.name]));
-    const lines = await Promise.all(actions.map(async (a) => {
+    const actionLines = actions.length > 0 ? await Promise.all(actions.map(async (a) => {
       const habitName = habitMap.get(a.habitId) ?? a.habitId;
       const date = a.completedAt.slice(0, 10);
       const parts: string[] = [];
@@ -660,8 +660,40 @@ const executors: Record<string, ExecutorFn> = {
       if (a.ownerDisplayName) parts.push(`by ${a.ownerDisplayName}`);
       const extra = parts.length > 0 ? ` (${parts.join(", ")})` : "";
       return `  ${date}: ${habitName}${extra}`;
-    }));
-    return { success: true, message: `Actions:\n\n${lines.join("\n")}` };
+    })) : [];
+
+    // Include task time entries when not filtering by habit
+    const { listTaskTime } = await import("../../store/taskTime.js");
+    let taskTimeLines: string[] = [];
+    if (!habitId) {
+      const taskEntries = await listTaskTime({ fromDate, toDate });
+      const { getTaskById } = await import("../../store/tasks.js");
+      taskTimeLines = await Promise.all(taskEntries.map(async (e) => {
+        const task = await getTaskById(e.taskId);
+        const date = e.completedAt.slice(0, 10);
+        const parts: string[] = [];
+        if (e.actualDurationMinutes != null) parts.push(`${e.actualDurationMinutes} min`);
+        if (e.withPersonIds?.length) {
+          const names = await Promise.all(e.withPersonIds.map(async (pid) => {
+            const p = await getPersonById(pid);
+            return p ? `${p.firstName} ${p.lastName}` : pid;
+          }));
+          parts.push(`with ${names.join(", ")}`);
+        }
+        if (e.notes) parts.push(e.notes);
+        const extra = parts.length > 0 ? ` (${parts.join(", ")})` : "";
+        return `  ${date}: ${task?.name ?? e.taskId}${extra}`;
+      }));
+    }
+
+    if (actionLines.length === 0 && taskTimeLines.length === 0) {
+      return { success: true, message: "No activity found." };
+    }
+
+    const sections: string[] = [];
+    if (actionLines.length > 0) sections.push(`Actions:\n\n${actionLines.join("\n")}`);
+    if (taskTimeLines.length > 0) sections.push(`Task Time:\n\n${taskTimeLines.join("\n")}`);
+    return { success: true, message: sections.join("\n\n") };
   },
 
   async get_task(p) {
