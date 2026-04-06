@@ -222,11 +222,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
   {
     name: "update_habit",
     description:
-      'User wants to update a habit — add/remove participants, change frequency, rename, etc. (e.g. "add Alex to the Weekly Check-in habit", "remove Jennifer from Weekly Check-in", "change gym frequency to daily")',
+      'User wants to update a habit — add/remove participants, link/unlink/move ends, change frequency, rename, etc. (e.g. "add Alex to Weekly Check-in", "link gym to Stay Fit", "move gym to Health Goals", "unlink gym from Learn Guitar")',
     rawParams: [
       { name: "habitName", type: "string", required: true, description: "Name of the habit to update" },
       { name: "personNamesToAdd", type: "string[]", description: "People to add as participants" },
       { name: "personNamesToRemove", type: "string[]", description: "People to remove as participants" },
+      { name: "endNameToAdd", type: "string", description: "End name to link (additive)" },
+      { name: "endNameToRemove", type: "string", description: "End name to unlink" },
+      { name: "endNameToMoveTo", type: "string", description: "End name to move to (replaces all current end links)" },
       { name: "newName", type: "string", description: "New name if renaming" },
       { name: "frequency", type: "string", description: "New frequency (daily, weekly, etc.)" },
       { name: "durationMinutes", type: "number", description: "New expected duration in minutes" },

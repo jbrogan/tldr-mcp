@@ -54,6 +54,7 @@ ROUTING RULES:
 - "add [person] to [team] team" -> update_person with personName and teamNamesToAdd (NOT update_team). Adding a person to a team is update_person, not renaming a team.
 - "add [person] to [habit]" / "add [person] as participant" -> update_habit with personNamesToAdd (NOT update_end, update_person, or delete_habit). People are participants on habits, not ends.
 - "remove [person] from [habit]" -> update_habit with personNamesToRemove (NOT delete_habit). Only use delete_habit when user wants to delete the entire habit.
+- "link [habit] to [end]" / "unlink [habit] from [end]" / "move [habit] to [end]" -> update_habit with endNameToAdd, endNameToRemove, or endNameToMoveTo (NOT link_end_to_belief or update_task)
 - "link [task] to [end]" / "set end on [task] to [end]" / "move [task] to [area]" -> update_task with taskName and endName or areaName (NOT link_end_to_belief)
 - "who am I?" / "show my profile" -> get_person with personName: "__self__"
 - "what is X?" / "how does X work?" / "explain X" / "help" -> help intent (conceptual questions about the system). NOT help when user wants their actual data — "what are my habits?" -> list_habits, "show my ends" -> list_ends

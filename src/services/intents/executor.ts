@@ -778,15 +778,18 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async update_habit(p) {
-    const { habitId, personIdsToAdd, personIdsToRemove, newName, frequency, durationMinutes } = p as {
+    const { habitId, personIdsToAdd, personIdsToRemove, endIdToAdd, endIdToRemove, endIdToMoveTo, newName, frequency, durationMinutes } = p as {
       habitId: string;
       personIdsToAdd?: string[];
       personIdsToRemove?: string[];
+      endIdToAdd?: string;
+      endIdToRemove?: string;
+      endIdToMoveTo?: string;
       newName?: string;
       frequency?: string;
       durationMinutes?: number;
     };
-    const { updateHabit, addHabitPersons, removeHabitPersons, getHabitById: getHabit } = await import("../../store/habits.js");
+    const { updateHabit, addHabitPersons, removeHabitPersons, updateHabitEnds, getHabitById: getHabit } = await import("../../store/habits.js");
 
     const details: string[] = [];
 
@@ -821,6 +824,32 @@ const executors: Record<string, ExecutorFn> = {
         return person ? `${person.firstName} ${person.lastName}` : pid;
       }));
       details.push(`removed participants: ${names.join(", ")}`);
+    }
+
+    // End management
+    if (endIdToMoveTo) {
+      // Replace all end links with the new one
+      await updateHabitEnds(habitId, [endIdToMoveTo]);
+      const end = await getEndById(endIdToMoveTo);
+      details.push(`moved to end: ${end?.name ?? endIdToMoveTo}`);
+    } else {
+      if (endIdToAdd) {
+        const currentHabit = await getHabit(habitId);
+        const currentEndIds = currentHabit?.endIds ?? [];
+        if (!currentEndIds.includes(endIdToAdd)) {
+          await updateHabitEnds(habitId, [...currentEndIds, endIdToAdd]);
+          const end = await getEndById(endIdToAdd);
+          details.push(`linked to end: ${end?.name ?? endIdToAdd}`);
+        }
+      }
+      if (endIdToRemove) {
+        const currentHabit = await getHabit(habitId);
+        const currentEndIds = currentHabit?.endIds ?? [];
+        const newEndIds = currentEndIds.filter((id) => id !== endIdToRemove);
+        await updateHabitEnds(habitId, newEndIds);
+        const end = await getEndById(endIdToRemove);
+        details.push(`unlinked from end: ${end?.name ?? endIdToRemove}`);
+      }
     }
 
     if (details.length === 0) {
