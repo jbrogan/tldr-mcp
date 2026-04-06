@@ -246,6 +246,48 @@ export type Database = {
           },
         ];
       };
+      task_time: {
+        Row: TaskTimeRow;
+        Insert: TaskTimeInsert;
+        Update: Partial<TaskTimeInsert>;
+        Relationships: [
+          {
+            foreignKeyName: "task_time_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "task_time_task_id_fkey";
+            columns: ["task_id"];
+            isOneToOne: false;
+            referencedRelation: "tasks";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      task_time_persons: {
+        Row: TaskTimePersonRow;
+        Insert: TaskTimePersonInsert;
+        Update: Partial<TaskTimePersonInsert>;
+        Relationships: [
+          {
+            foreignKeyName: "task_time_persons_task_time_id_fkey";
+            columns: ["task_time_id"];
+            isOneToOne: false;
+            referencedRelation: "task_time";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "task_time_persons_person_id_fkey";
+            columns: ["person_id"];
+            isOneToOne: false;
+            referencedRelation: "persons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -412,6 +454,24 @@ export type TaskRow = {
 export type TaskPersonRow = {
   id: string;
   task_id: string;
+  person_id: string;
+  relation_type: string;
+  created_at: string;
+};
+
+export type TaskTimeRow = {
+  id: string;
+  user_id: string;
+  task_id: string;
+  completed_at: string;
+  actual_duration_minutes: number | null;
+  notes: string | null;
+  created_at: string;
+};
+
+export type TaskTimePersonRow = {
+  id: string;
+  task_time_id: string;
   person_id: string;
   relation_type: string;
   created_at: string;
@@ -586,6 +646,24 @@ export type TaskPersonInsert = {
   created_at?: string;
 };
 
+export type TaskTimeInsert = {
+  id?: string;
+  user_id: string;
+  task_id: string;
+  completed_at?: string;
+  actual_duration_minutes?: number | null;
+  notes?: string | null;
+  created_at?: string;
+};
+
+export type TaskTimePersonInsert = {
+  id?: string;
+  task_time_id: string;
+  person_id: string;
+  relation_type: string;
+  created_at?: string;
+};
+
 // ============================================================================
 // Convenience Aliases
 // ============================================================================
@@ -608,3 +686,5 @@ export type Action = ActionRow;
 export type ActionPerson = ActionPersonRow;
 export type Task = TaskRow;
 export type TaskPerson = TaskPersonRow;
+export type TaskTime = TaskTimeRow;
+export type TaskTimePerson = TaskTimePersonRow;

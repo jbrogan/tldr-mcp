@@ -172,6 +172,19 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "log_task_time",
+    description:
+      'User wants to log time spent working on a task (e.g. "I worked on the proposal for 30 minutes", "spent 2 hours on API docs yesterday", "worked on fix auth bug with Alex for 45 minutes")',
+    rawParams: [
+      { name: "taskName", type: "string", required: true, description: "Name of the task" },
+      { name: "completedDate", type: "string", description: '"today", "yesterday", or YYYY-MM-DD. Default to today.' },
+      { name: "durationMinutes", type: "number", description: "Duration in minutes" },
+      { name: "notes", type: "string", description: "Notes about what was done" },
+      { name: "withPersonNames", type: "string[]", description: "People who worked on it with you" },
+      { name: "forPersonNames", type: "string[]", description: "People the work was for" },
+    ],
+  },
+  {
     name: "suggest_habits",
     description:
       'User asks for habit suggestions (e.g. "What habits would help me be a better father?", "Suggest habits for getting promoted")',

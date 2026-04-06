@@ -213,6 +213,29 @@ const executors: Record<string, ExecutorFn> = {
     };
   },
 
+  async log_task_time(p) {
+    const { taskId, completedAt, actualDurationMinutes, notes, withPersonIds, forPersonIds } = p as {
+      taskId: string;
+      completedAt: string;
+      actualDurationMinutes?: number;
+      notes?: string;
+      withPersonIds?: string[];
+      forPersonIds?: string[];
+    };
+    const { createTaskTime } = await import("../../store/taskTime.js");
+    const { getTaskById } = await import("../../store/tasks.js");
+    const completedAtISO = completedAt.length === 10 ? `${completedAt}T12:00:00.000Z` : completedAt;
+    await createTaskTime({ taskId, completedAt: completedAtISO, actualDurationMinutes, notes, withPersonIds, forPersonIds });
+    const task = await getTaskById(taskId);
+    const extras: string[] = [];
+    if (actualDurationMinutes) extras.push(`${actualDurationMinutes} min`);
+    if (notes) extras.push(notes);
+    return {
+      success: true,
+      message: `Logged time: ${task?.name ?? taskId} on ${completedAt.slice(0, 10)}${extras.length ? ` (${extras.join(", ")})` : ""}`,
+    };
+  },
+
   async update_task(p) {
     const { id, completedAt, reopen, dueDate, actualDurationMinutes, name, endId, areaId, withPersonIds, forPersonIds, notes } = p as {
       id: string;
@@ -668,6 +691,20 @@ const executors: Record<string, ExecutorFn> = {
       task.notes && `  Notes: ${task.notes}`,
       `  Created: ${task.createdAt}`,
     ].filter(Boolean);
+
+    // Time entries
+    const { listTaskTime } = await import("../../store/taskTime.js");
+    const entries = await listTaskTime({ taskId });
+    if (entries.length > 0) {
+      const totalMin = entries.reduce((sum, e) => sum + (e.actualDurationMinutes ?? 0), 0);
+      parts.push(`  Time logged: ${entries.length} session(s), ${totalMin} min total`);
+      for (const e of entries.slice(0, 5)) {
+        const extra = e.actualDurationMinutes != null ? ` (${e.actualDurationMinutes} min)` : "";
+        const note = e.notes ? ` — ${e.notes}` : "";
+        parts.push(`    - ${e.completedAt.slice(0, 10)}${extra}${note}`);
+      }
+    }
+
     return { success: true, message: parts.join("\n") };
   },
 
@@ -1314,6 +1351,29 @@ If none align, respond with: []`;
         const lines = habitsWithoutEnds.map(formatHabit);
         sections.push(`Unlinked Habits (no end):\n${lines.join("\n")}`);
       }
+    }
+
+    // Task time summary
+    const { listTaskTime } = await import("../../store/taskTime.js");
+    const taskEntries = await listTaskTime({ fromDate, toDate });
+    if (taskEntries.length > 0) {
+      // Group by task
+      const taskMap = new Map<string, { count: number; totalMinutes: number }>();
+      for (const entry of taskEntries) {
+        const existing = taskMap.get(entry.taskId) ?? { count: 0, totalMinutes: 0 };
+        existing.count++;
+        existing.totalMinutes += entry.actualDurationMinutes ?? 0;
+        taskMap.set(entry.taskId, existing);
+      }
+      const taskLines: string[] = [];
+      const { getTaskById } = await import("../../store/tasks.js");
+      for (const [taskId, stats] of taskMap) {
+        const task = await getTaskById(taskId);
+        const name = task?.name ?? taskId;
+        const status = task?.completedAt ? "✓" : "○";
+        taskLines.push(`  ${status} ${name}: ${stats.count} session(s), ${stats.totalMinutes} min total`);
+      }
+      sections.push(`Task Time:\n${taskLines.join("\n")}`);
     }
 
     if (sections.length === 1) {

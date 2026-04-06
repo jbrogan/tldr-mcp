@@ -389,6 +389,20 @@ const resolvers: Record<string, ResolverFn> = {
     };
   },
 
+  async log_task_time(raw) {
+    const taskId = await resolveTaskName(raw.taskName as string);
+    if (!taskId) throw new Error(`Task "${raw.taskName}" not found.`);
+    const completedAt = resolveDate(raw.completedDate as string) ?? new Date().toISOString().slice(0, 10);
+    return {
+      taskId,
+      completedAt,
+      actualDurationMinutes: typeof raw.durationMinutes === "number" ? raw.durationMinutes : undefined,
+      notes: raw.notes as string | undefined,
+      withPersonIds: await resolvePersonNames(raw.withPersonNames),
+      forPersonIds: await resolvePersonNames(raw.forPersonNames),
+    };
+  },
+
   async update_task(raw) {
     const id = await resolveTaskName(raw.taskName as string);
     if (!id) throw new Error(`Task "${raw.taskName}" not found.`);
