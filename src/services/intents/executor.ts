@@ -1353,27 +1353,55 @@ If none align, respond with: []`;
       }
     }
 
-    // Task time summary
+    // Task time summary — filtered to relevant scope
     const { listTaskTime } = await import("../../store/taskTime.js");
-    const taskEntries = await listTaskTime({ fromDate, toDate });
-    if (taskEntries.length > 0) {
-      // Group by task
-      const taskMap = new Map<string, { count: number; totalMinutes: number }>();
-      for (const entry of taskEntries) {
-        const existing = taskMap.get(entry.taskId) ?? { count: 0, totalMinutes: 0 };
-        existing.count++;
-        existing.totalMinutes += entry.actualDurationMinutes ?? 0;
-        taskMap.set(entry.taskId, existing);
+    const allTaskEntries = await listTaskTime({ fromDate, toDate });
+    if (allTaskEntries.length > 0) {
+      // Get all tasks to filter by scope
+      const allTasks = await listTasks();
+      const relevantTaskIds = new Set<string>();
+
+      if (endId) {
+        // Single end — only tasks linked to this end
+        for (const t of allTasks) {
+          if (t.endId === endId) relevantTaskIds.add(t.id);
+        }
+      } else if (portfolioId) {
+        // Portfolio — tasks linked to ends in this portfolio
+        const portfolioEndIds = new Set(allEnds.filter((e) => e.portfolioId === portfolioId).map((e) => e.id));
+        for (const t of allTasks) {
+          if (t.endId && portfolioEndIds.has(t.endId)) relevantTaskIds.add(t.id);
+        }
+      } else if (areaId) {
+        // Area — tasks linked to ends in this area, or tasks directly in this area
+        const areaEndIds = new Set(allEnds.filter((e) => e.areaId === areaId).map((e) => e.id));
+        for (const t of allTasks) {
+          if (t.areaId === areaId || (t.endId && areaEndIds.has(t.endId))) relevantTaskIds.add(t.id);
+        }
+      } else {
+        // No filter — include all
+        for (const t of allTasks) relevantTaskIds.add(t.id);
       }
-      const taskLines: string[] = [];
-      const { getTaskById } = await import("../../store/tasks.js");
-      for (const [taskId, stats] of taskMap) {
-        const task = await getTaskById(taskId);
-        const name = task?.name ?? taskId;
-        const status = task?.completedAt ? "✓" : "○";
-        taskLines.push(`  ${status} ${name}: ${stats.count} session(s), ${stats.totalMinutes} min total`);
+
+      const taskEntries = allTaskEntries.filter((e) => relevantTaskIds.has(e.taskId));
+      if (taskEntries.length > 0) {
+        const taskMap = new Map<string, { count: number; totalMinutes: number }>();
+        for (const entry of taskEntries) {
+          const existing = taskMap.get(entry.taskId) ?? { count: 0, totalMinutes: 0 };
+          existing.count++;
+          existing.totalMinutes += entry.actualDurationMinutes ?? 0;
+          taskMap.set(entry.taskId, existing);
+        }
+        const taskLines: string[] = [];
+        const { getTaskById } = await import("../../store/tasks.js");
+        for (const [taskId, stats] of taskMap) {
+          const task = await getTaskById(taskId);
+          const name = task?.name ?? taskId;
+          const status = task?.completedAt ? "✓" : "○";
+          taskLines.push(`  ${status} ${name}: ${stats.count} session(s), ${stats.totalMinutes} min total`);
+        }
+        sections.push(`Task Time:\n${taskLines.join("\n")}`);
       }
-      sections.push(`Task Time:\n${taskLines.join("\n")}`);
     }
 
     if (sections.length === 1) {
