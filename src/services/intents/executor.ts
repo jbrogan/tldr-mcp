@@ -1311,7 +1311,11 @@ If none align, respond with: []`;
       return lines;
     }
 
-    const periodLabel = period === "this_week" ? "This Week" : period === "this_month" ? "This Month" : period === "today" ? "Today" : `${fromDate} to ${toDate}`;
+    const periodLabels: Record<string, string> = {
+      today: "Today", yesterday: "Yesterday", this_week: "This Week", last_week: "Last Week",
+      this_month: "This Month", last_month: "Last Month", past_7_days: "Past 7 Days", past_30_days: "Past 30 Days",
+    };
+    const periodLabel = periodLabels[period] ?? `${fromDate} to ${toDate}`;
     const sections: string[] = [`Reflection — ${periodLabel} (${fromDate} to ${toDate})\n`];
 
     if (portfolioId) {

@@ -373,7 +373,7 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     rawParams: [
       { name: "endName", type: "string", description: "Filter by end/aspiration name — shows actions across all habits linked to that end" },
       { name: "habitName", type: "string", description: "Filter by habit name" },
-      { name: "period", type: "string", description: "today, yesterday, this_week, this_month" },
+      { name: "period", type: "string", description: "today, yesterday, this_week, last_week, this_month, last_month, past_7_days, past_30_days" },
       { name: "fromDate", type: "string", description: "YYYY-MM-DD start date for custom range" },
       { name: "toDate", type: "string", description: "YYYY-MM-DD end date for custom range" },
       { name: "withPersonNames", type: "string[]", description: 'Filter to actions done WITH these people (e.g. "with Jennifer")' },
@@ -514,7 +514,7 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     description:
       'User wants to review how they\'re doing — what they committed to vs. what they did (e.g. "reflect on this week", "how am I doing?", "reflect on Family", "weekly review", "reflect on Be a Great Father", "how is the Sales portfolio doing?", "reflect on Operations portfolio")',
     rawParams: [
-      { name: "period", type: "string", description: "this_week, this_month, today. Default to this_week if not specified." },
+      { name: "period", type: "string", description: "this_week, last_week, this_month, last_month, past_7_days, past_30_days, today, yesterday. Default to this_week. Map: 'this past week'/'past week'→last_week, 'last 7 days'→past_7_days, 'last 30 days'→past_30_days" },
       { name: "areaName", type: "string", description: "Optional area to focus on (use when user explicitly says area)" },
       { name: "endName", type: "string", description: "Optional specific end to reflect on (use when user explicitly says end)" },
       { name: "portfolioName", type: "string", description: "Optional portfolio to focus on (use when user explicitly says portfolio)" },

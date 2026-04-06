@@ -105,6 +105,42 @@ function resolvePeriod(period: string): { fromDate: string; toDate: string } {
         toDate: lastDay.toISOString().slice(0, 10),
       };
     }
+    case "last_week": {
+      const day = now.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const thisMonday = new Date(now);
+      thisMonday.setDate(now.getDate() + mondayOffset);
+      const lastMonday = new Date(thisMonday);
+      lastMonday.setDate(thisMonday.getDate() - 7);
+      const lastSunday = new Date(lastMonday);
+      lastSunday.setDate(lastMonday.getDate() + 6);
+      return {
+        fromDate: lastMonday.toISOString().slice(0, 10),
+        toDate: lastSunday.toISOString().slice(0, 10),
+      };
+    }
+    case "last_month": {
+      const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+      return {
+        fromDate: firstDay.toISOString().slice(0, 10),
+        toDate: lastDay.toISOString().slice(0, 10),
+      };
+    }
+    case "past_7_days": {
+      const from = new Date(now.getTime() - 6 * 86400000);
+      return {
+        fromDate: from.toISOString().slice(0, 10),
+        toDate: today,
+      };
+    }
+    case "past_30_days": {
+      const from = new Date(now.getTime() - 29 * 86400000);
+      return {
+        fromDate: from.toISOString().slice(0, 10),
+        toDate: today,
+      };
+    }
     default:
       return { fromDate: today, toDate: today };
   }
