@@ -58,6 +58,12 @@ function stemWords(text: string): string {
   }).join(" ");
 }
 
+const MONTH_NAMES: Record<string, number> = {
+  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+  jan: 0, feb: 1, mar: 2, apr: 3, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+};
+
 function resolveDate(expr: string | undefined): string | undefined {
   if (!expr) return undefined;
   const lower = expr.toLowerCase().trim();
@@ -70,8 +76,33 @@ function resolveDate(expr: string | undefined): string | undefined {
   if (lower === "tomorrow") {
     return new Date(now.getTime() + 86400000).toISOString().slice(0, 10);
   }
-  // If already YYYY-MM-DD, return as-is
+  // YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(lower)) return lower;
+
+  // "April 4th", "March 30", "Apr 4", "december 25th"
+  const monthDayMatch = lower.match(/^(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?$/);
+  if (monthDayMatch) {
+    const month = MONTH_NAMES[monthDayMatch[1]];
+    if (month !== undefined) {
+      const day = parseInt(monthDayMatch[2]);
+      const year = monthDayMatch[3] ? parseInt(monthDayMatch[3]) : now.getFullYear();
+      const date = new Date(year, month, day);
+      return date.toISOString().slice(0, 10);
+    }
+  }
+
+  // "4 April", "30 March", "4th April 2026"
+  const dayMonthMatch = lower.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+(\w+)(?:,?\s*(\d{4}))?$/);
+  if (dayMonthMatch) {
+    const month = MONTH_NAMES[dayMonthMatch[2]];
+    if (month !== undefined) {
+      const day = parseInt(dayMonthMatch[1]);
+      const year = dayMonthMatch[3] ? parseInt(dayMonthMatch[3]) : now.getFullYear();
+      const date = new Date(year, month, day);
+      return date.toISOString().slice(0, 10);
+    }
+  }
+
   return lower;
 }
 
@@ -141,8 +172,14 @@ function resolvePeriod(period: string): { fromDate: string; toDate: string } {
         toDate: today,
       };
     }
-    default:
+    default: {
+      // Try resolving as a specific date
+      const resolved = resolveDate(period);
+      if (resolved && /^\d{4}-\d{2}-\d{2}$/.test(resolved)) {
+        return { fromDate: resolved, toDate: resolved };
+      }
       return { fromDate: today, toDate: today };
+    }
   }
 }
 
