@@ -885,6 +885,22 @@ const resolvers: Record<string, ResolverFn> = {
     let endId = await resolveEndName(raw.endName as string);
     let portfolioId = await resolvePortfolioName(raw.portfolioName as string);
 
+    // Cross-resolve: if classifier put name in wrong field, try other types
+    const unresolved = (raw.areaName && !areaId) ? raw.areaName as string
+      : (raw.endName && !endId) ? raw.endName as string
+      : (raw.portfolioName && !portfolioId) ? raw.portfolioName as string
+      : undefined;
+
+    if (unresolved && !areaId && !endId && !portfolioId) {
+      areaId = await resolveAreaName(unresolved);
+      if (!areaId) {
+        endId = await resolveEndName(unresolved);
+        if (!endId) {
+          portfolioId = await resolvePortfolioName(unresolved);
+        }
+      }
+    }
+
     // If no explicit type but scope is provided, try matching against all types
     const scope = raw.scope as string | undefined;
     if (scope && !areaId && !endId && !portfolioId) {
