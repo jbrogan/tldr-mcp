@@ -26,6 +26,7 @@ export const INTENT_CATALOG: IntentDefinition[] = [
       'User logged/tracked a habit completion (e.g. "I went to the gym", "practiced guitar for 30 minutes", "had family dinner with Patrick and Andrew")',
     rawParams: [
       { name: "habitName", type: "string", required: true, description: "Name of the habit performed" },
+      { name: "endName", type: "string", description: "End/aspiration name if mentioned for context (e.g. 'weekly call for Better Together' → endName: 'Better Together')" },
       { name: "completedDate", type: "string", required: true, description: 'When it happened: "today", "yesterday", or YYYY-MM-DD' },
       { name: "durationMinutes", type: "number", description: "Duration in minutes if mentioned" },
       { name: "notes", type: "string", description: "Any additional notes" },

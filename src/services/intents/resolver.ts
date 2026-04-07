@@ -266,10 +266,50 @@ async function resolvePortfolioName(name: string | undefined): Promise<string | 
   return findBestMatch(portfolios, name, (c) => c.name)?.id;
 }
 
-async function resolveHabitName(name: string | undefined): Promise<string | undefined> {
+async function resolveHabitName(
+  name: string | undefined,
+  context?: { endId?: string; personIds?: string[] }
+): Promise<string | undefined> {
   if (!name) return undefined;
   const habits = await listHabitsWithShared();
-  return findBestMatch(habits, name, (h) => h.name)?.id;
+
+  // Find all matches
+  const lower = name.toLowerCase();
+  const matches = habits.filter((h) => {
+    const hLower = h.name.toLowerCase();
+    return hLower === lower || hLower.includes(lower) || lower.includes(hLower);
+  });
+
+  // Also try stem matching
+  if (matches.length === 0) {
+    const stemmed = stemWords(lower);
+    const stemMatch = habits.find((h) => {
+      const itemStemmed = stemWords(h.name.toLowerCase());
+      return itemStemmed.includes(stemmed) || stemmed.includes(itemStemmed);
+    });
+    return stemMatch?.id;
+  }
+
+  // Single match — no disambiguation needed
+  if (matches.length === 1) return matches[0].id;
+
+  // Multiple matches — use context to narrow down
+  if (matches.length > 1 && context) {
+    if (context.endId) {
+      const byEnd = matches.find((h) => h.endIds.includes(context.endId!));
+      if (byEnd) return byEnd.id;
+    }
+    if (context.personIds?.length) {
+      const personSet = new Set(context.personIds);
+      const byPerson = matches.find((h) =>
+        h.personIds?.some((pid) => personSet.has(pid))
+      );
+      if (byPerson) return byPerson.id;
+    }
+  }
+
+  // Fall back to first match
+  return matches[0]?.id;
 }
 
 async function resolveTaskName(name: string | undefined): Promise<string | undefined> {
@@ -325,7 +365,16 @@ type ResolverFn = (raw: Record<string, unknown>) => Promise<ResolvedParams>;
 
 const resolvers: Record<string, ResolverFn> = {
   async create_action(raw) {
-    const habitId = await resolveHabitName(raw.habitName as string);
+    // Resolve context first for disambiguation
+    const endId = await resolveEndName(raw.endName as string);
+    const withPersonIds = await resolvePersonNames(raw.withPersonNames);
+    const forPersonIds = await resolvePersonNames(raw.forPersonNames);
+    const allPersonIds = [...(withPersonIds ?? []), ...(forPersonIds ?? [])];
+
+    const habitId = await resolveHabitName(raw.habitName as string, {
+      endId: endId ?? undefined,
+      personIds: allPersonIds.length > 0 ? allPersonIds : undefined,
+    });
     if (!habitId) throw new Error(`Habit "${raw.habitName}" not found.`);
     const completedAt = resolveDate(raw.completedDate as string);
     if (!completedAt) throw new Error("Missing completion date for action.");
@@ -334,8 +383,8 @@ const resolvers: Record<string, ResolverFn> = {
       completedAt,
       actualDurationMinutes: raw.durationMinutes as number | undefined,
       notes: raw.notes as string | undefined,
-      withPersonIds: await resolvePersonNames(raw.withPersonNames),
-      forPersonIds: await resolvePersonNames(raw.forPersonNames),
+      withPersonIds,
+      forPersonIds,
     };
   },
 

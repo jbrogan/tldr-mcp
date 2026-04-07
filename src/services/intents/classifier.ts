@@ -48,6 +48,7 @@ ROUTING RULES:
 - When user says "with [names]" while recording an action -> MUST include withPersonNames
 - When user says "for [name]" while recording an action -> MUST include forPersonNames
 - When extracting habitName for create_action, use the user's exact words as closely as possible. Do NOT rephrase, restructure, or convert between noun/verb forms. "Badge fabrication" stays "Badge fabrication". "I cleaned the kitchen" → habitName: "cleaned the kitchen" is fine — the resolver handles tense matching.
+- For create_action: "I did [habit] for [end]" → habitName is just the habit part, endName is the end part. Example: "I did Weekly Call for Mom & Dad Relationship" → habitName: "Weekly Call", endName: "Mom & Dad Relationship". Do NOT include the end name in habitName.
 - "I worked on X for Y minutes" / "spent Y hours on X" → log_task_time if X sounds like a one-off task. Use create_action only when X sounds like a recurring habit.
 - "I finished X" / "completed X" / "done with X" / "mark X done" → update_task if X sounds like a one-off task (call someone, buy something, fix something, get something done). Use create_action only when X sounds like a recurring habit (went to the gym, practiced guitar, meditated).
 - Preserve full task descriptions including reason/purpose (e.g. "call Alex to discuss security deposit" NOT "call Alex")
