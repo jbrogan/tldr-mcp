@@ -267,6 +267,19 @@ const executors: Record<string, ExecutorFn> = {
     if (notes !== undefined) updates.notes = notes;
     const task = await updateTask(id, updates as Parameters<typeof updateTask>[1]);
     if (!task) return { success: false, message: `Task with ID ${id} not found.` };
+
+    // Auto-create task_time entry when completing with duration
+    if (!reopen && completedAt && actualDurationMinutes) {
+      const { createTaskTime } = await import("../../store/taskTime.js");
+      const completedAtISO = completedAt.length === 10 ? `${completedAt}T12:00:00.000Z` : completedAt;
+      await createTaskTime({
+        taskId: id,
+        completedAt: completedAtISO,
+        actualDurationMinutes,
+        notes,
+      });
+    }
+
     if (reopen) {
       return { success: true, message: `Reopened task: ${task.name}` };
     }
@@ -662,13 +675,16 @@ const executors: Record<string, ExecutorFn> = {
       return `  ${date}: ${habitName}${extra}`;
     })) : [];
 
-    // Include task time entries when not filtering by habit
-    const { listTaskTime } = await import("../../store/taskTime.js");
-    let taskTimeLines: string[] = [];
+    // Include task activity when not filtering by habit
+    let taskLines: string[] = [];
     if (!habitId) {
+      const { listTaskTime } = await import("../../store/taskTime.js");
       const taskEntries = await listTaskTime({ fromDate, toDate });
+      const taskEntryTaskIds = new Set(taskEntries.map((e) => e.taskId));
+
+      // Task time entries
       const { getTaskById } = await import("../../store/tasks.js");
-      taskTimeLines = await Promise.all(taskEntries.map(async (e) => {
+      const timeLines = await Promise.all(taskEntries.map(async (e) => {
         const task = await getTaskById(e.taskId);
         const date = e.completedAt.slice(0, 10);
         const parts: string[] = [];
@@ -684,15 +700,32 @@ const executors: Record<string, ExecutorFn> = {
         const extra = parts.length > 0 ? ` (${parts.join(", ")})` : "";
         return `  ${date}: ${task?.name ?? e.taskId}${extra}`;
       }));
+
+      // Tasks completed in this period that don't have task_time entries
+      const completedTasks = await listTasks({ completed: true });
+      const completedInPeriod = completedTasks.filter((t) => {
+        if (!t.completedAt) return false;
+        const completedDate = t.completedAt.slice(0, 10);
+        return completedDate >= (fromDate ?? "") && completedDate <= (toDate ?? "9999") && !taskEntryTaskIds.has(t.id);
+      });
+      const completedLines = completedInPeriod.map((t) => {
+        const date = t.completedAt!.slice(0, 10);
+        const parts: string[] = ["completed"];
+        if (t.actualDurationMinutes != null) parts.push(`${t.actualDurationMinutes} min`);
+        const extra = ` (${parts.join(", ")})`;
+        return `  ${date}: ${t.name}${extra}`;
+      });
+
+      taskLines = [...timeLines, ...completedLines];
     }
 
-    if (actionLines.length === 0 && taskTimeLines.length === 0) {
+    if (actionLines.length === 0 && taskLines.length === 0) {
       return { success: true, message: "No activity found." };
     }
 
     const sections: string[] = [];
     if (actionLines.length > 0) sections.push(`Actions:\n\n${actionLines.join("\n")}`);
-    if (taskTimeLines.length > 0) sections.push(`Task Time:\n\n${taskTimeLines.join("\n")}`);
+    if (taskLines.length > 0) sections.push(`Tasks:\n\n${taskLines.join("\n")}`);
     return { success: true, message: sections.join("\n\n") };
   },
 
