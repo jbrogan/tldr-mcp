@@ -523,6 +523,14 @@ export const INTENT_CATALOG: IntentDefinition[] = [
     ],
   },
   {
+    name: "ask",
+    description:
+      'User wants to have a conversation or ask an open-ended question about their data that requires reasoning (e.g. "what should I focus on this week?", "help me think about my beliefs", "why am I behind on fitness?", "tell me about my patterns"). Use this for questions that go beyond simple listing or CRUD.',
+    rawParams: [
+      { name: "question", type: "string", required: true, description: "The user's question or message, passed through unchanged" },
+    ],
+  },
+  {
     name: "help",
     description:
       'User wants to understand a concept or how the system works (e.g. "what is an end?", "how do portfolios work?", "explain sharing", "help")',

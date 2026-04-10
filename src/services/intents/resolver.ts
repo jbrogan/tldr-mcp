@@ -916,6 +916,10 @@ const resolvers: Record<string, ResolverFn> = {
     return { fromDate, toDate, period, areaId, endId, portfolioId };
   },
 
+  async ask(raw) {
+    return { question: raw.question as string };
+  },
+
   async help(raw) {
     return { topic: raw.topic as string | undefined };
   },

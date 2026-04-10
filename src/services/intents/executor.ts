@@ -1480,6 +1480,19 @@ If none align, respond with: []`;
     return { success: true, message: sections.join("\n\n") };
   },
 
+  async ask(p) {
+    const { question } = p as { question: string };
+    if (!question) return { success: false, message: "No question provided." };
+    try {
+      const { ask } = await import("../ask.js");
+      const response = await ask(question);
+      return { success: true, message: response };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, message: `Agent error: ${msg}` };
+    }
+  },
+
   async help(p) {
     const { topic } = p as { topic?: string };
     const { getHelpText } = await import("./help.js");
