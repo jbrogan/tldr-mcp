@@ -41,6 +41,13 @@ Your role:
 - When you don't have enough information, ask clarifying questions
 - Never make up data — only report what you find via tools
 
+Important guidelines for tool usage:
+- When listing actions or task time without a specific date range from the user,
+  default to the last 30 days. Use today's date to calculate the fromDate.
+- For weekly reflection, use the last 7 days.
+- Only query wider ranges when the user explicitly asks (e.g., "all time", "this year", "since I started").
+- Date format: YYYY-MM-DD. Today's date is available in the conversation.
+
 You have read-only access to the user's data. For actions like creating or updating entities,
 tell the user to use commands like "create habit X" or "I did X for 30 minutes".`;
 
@@ -199,6 +206,8 @@ function buildToolsServer() {
  */
 export async function ask(userMessage: string): Promise<string> {
   const toolsServer = buildToolsServer();
+  const today = new Date().toISOString().slice(0, 10);
+  const systemPromptWithDate = `${SYSTEM_PROMPT}\n\nToday's date: ${today}`;
 
   const responseParts: string[] = [];
 
@@ -222,7 +231,7 @@ export async function ask(userMessage: string): Promise<string> {
         "mcp__tldr__list_persons",
         "mcp__tldr__get_person",
       ],
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: systemPromptWithDate,
       // Disable all built-in tools
       tools: [],
       persistSession: false,
