@@ -235,6 +235,10 @@ export async function ask(userMessage: string): Promise<string> {
       // Disable all built-in tools
       tools: [],
       persistSession: false,
+      // Performance tuning
+      model: "claude-haiku-4-5",
+      maxTurns: 5,
+      effort: "medium",
     },
   })) {
     if (message.type === "result" && message.subtype === "success") {
