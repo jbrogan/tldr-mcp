@@ -145,6 +145,50 @@ app.post("/mcp", authMiddleware, handleMcpRequest);
 app.get("/mcp", authMiddleware, handleMcpRequest);
 app.delete("/mcp", authMiddleware, handleMcpRequest);
 
+// --- API token management ---
+// These endpoints require Supabase JWT auth (not API tokens, to prevent
+// tokens from creating or deleting themselves).
+app.get("/api/tokens", authMiddleware, async (req, res) => {
+  try {
+    const { listApiTokens } = await import("./store/apiTokens.js");
+    const tokens = await runWithContextAsync(req.storeContext!, () => listApiTokens());
+    res.json({ tokens });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to list tokens";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/tokens", authMiddleware, async (req, res) => {
+  try {
+    const { name, expiryDays } = req.body ?? {};
+    if (!name || typeof name !== "string") {
+      res.status(400).json({ error: "name is required" });
+      return;
+    }
+    const { createApiToken } = await import("./store/apiTokens.js");
+    const token = await runWithContextAsync(req.storeContext!, () =>
+      createApiToken(name, typeof expiryDays === "number" ? expiryDays : undefined)
+    );
+    res.json({ token });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create token";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.delete("/api/tokens/:id", authMiddleware, async (req, res) => {
+  try {
+    const { deleteApiToken } = await import("./store/apiTokens.js");
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    await runWithContextAsync(req.storeContext!, () => deleteApiToken(id));
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete token";
+    res.status(500).json({ error: message });
+  }
+});
+
 // --- Start ---
 
 app.listen(PORT, () => {

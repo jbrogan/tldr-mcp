@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useMcpTool } from "../hooks/useMcpTool";
+import { Settings } from "./Settings";
 
 interface Message {
   id: number;
@@ -16,6 +17,7 @@ interface ChatProps {
 export function Chat({ onSignOut, userEmail }: ChatProps) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
   const { call, loading } = useMcpTool();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -57,6 +59,12 @@ export function Chat({ onSignOut, userEmail }: ChatProps) {
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500">{userEmail}</span>
           <button
+            onClick={() => setShowSettings(true)}
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            Settings
+          </button>
+          <button
             onClick={onSignOut}
             className="text-sm text-gray-500 hover:text-gray-700"
           >
@@ -64,6 +72,7 @@ export function Chat({ onSignOut, userEmail }: ChatProps) {
           </button>
         </div>
       </header>
+      {showSettings && <Settings onClose={() => setShowSettings(false)} userEmail={userEmail} />}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-6">

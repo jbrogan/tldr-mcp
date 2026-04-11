@@ -15,6 +15,20 @@ export type Database = {
         Update: Partial<ProfileInsert>;
         Relationships: [];
       };
+      api_tokens: {
+        Row: ApiTokenRow;
+        Insert: ApiTokenInsert;
+        Update: Partial<ApiTokenInsert>;
+        Relationships: [
+          {
+            foreignKeyName: "api_tokens_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       areas: {
         Row: AreaRow;
         Insert: AreaInsert;
@@ -316,6 +330,17 @@ export type ProfileRow = {
   updated_at: string;
 };
 
+export type ApiTokenRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  token_hash: string;
+  last_four: string;
+  expires_at: string;
+  last_used_at: string | null;
+  created_at: string;
+};
+
 export type AreaRow = {
   id: string;
   user_id: string;
@@ -487,6 +512,17 @@ export type ProfileInsert = {
   display_name: string;
   created_at?: string;
   updated_at?: string;
+};
+
+export type ApiTokenInsert = {
+  id?: string;
+  user_id: string;
+  name: string;
+  token_hash: string;
+  last_four: string;
+  expires_at: string;
+  last_used_at?: string | null;
+  created_at?: string;
 };
 
 export type AreaInsert = {
@@ -669,6 +705,7 @@ export type TaskTimePersonInsert = {
 // ============================================================================
 
 export type Profile = ProfileRow;
+export type ApiToken = ApiTokenRow;
 export type Area = AreaRow;
 export type Organization = OrganizationRow;
 export type Team = TeamRow;
