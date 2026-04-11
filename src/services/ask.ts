@@ -236,7 +236,7 @@ export async function ask(userMessage: string): Promise<string> {
       tools: [],
       persistSession: false,
       // Performance tuning
-      model: "claude-haiku-4-5",
+      model: "claude-sonnet-4-6",
       maxTurns: 5,
       effort: "medium",
     },
