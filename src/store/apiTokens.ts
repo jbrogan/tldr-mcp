@@ -132,12 +132,10 @@ export async function deleteApiToken(id: string): Promise<boolean> {
  */
 export async function findUserIdByToken(rawToken: string): Promise<string | null> {
   if (!rawToken.startsWith(TOKEN_PREFIX)) {
-    console.error("[apiTokens] Token doesn't start with prefix");
     return null;
   }
 
   const tokenHash = hashToken(rawToken);
-  console.error(`[apiTokens] Looking up hash: ${tokenHash.slice(0, 16)}...`);
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
@@ -146,12 +144,7 @@ export async function findUserIdByToken(rawToken: string): Promise<string | null
     .eq("token_hash", tokenHash)
     .single();
 
-  if (error) {
-    console.error(`[apiTokens] Query error: ${error.message} (code: ${error.code})`);
-    return null;
-  }
-  if (!data) {
-    console.error(`[apiTokens] No data returned`);
+  if (error || !data) {
     return null;
   }
 
