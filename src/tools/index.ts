@@ -55,6 +55,11 @@ import {
   getHabitById,
   listHabits,
   listHabitsWithShared,
+  updateHabit,
+  updateHabitEnds,
+  updateHabitPersons,
+  addHabitPersons,
+  removeHabitPersons,
 } from "../store/habits.js";
 import {
   createAction,
@@ -138,6 +143,100 @@ export function registerTools(server: McpServer): void {
         endNames.length > 0 ? `  Linked ends:\n${endNames.map((n) => `    - ${n}`).join("\n")}` : "  Linked ends: (none)",
       ].filter(Boolean);
       return { content: [{ type: "text", text: parts.join("\n") }] };
+    }
+  );
+
+  server.registerTool(
+    "update_belief",
+    {
+      title: "Update Belief",
+      description: "Updates a belief's name or description.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the belief to update"),
+        name: z.string().optional().describe("New name"),
+        description: z.string().optional().describe("New description"),
+      },
+    },
+    async ({ id, name, description }) => {
+      const { updateBelief } = await import("../store/beliefs.js");
+      const updates: { name?: string; description?: string } = {};
+      if (name !== undefined) updates.name = name;
+      if (description !== undefined) updates.description = description;
+      const belief = await updateBelief(id, updates);
+      if (!belief) {
+        return { content: [{ type: "text", text: `Belief with ID ${id} not found.` }], isError: true };
+      }
+      return { content: [{ type: "text", text: `Updated belief: ${belief.name}` }] };
+    }
+  );
+
+  server.registerTool(
+    "create_belief",
+    {
+      title: "Create Belief",
+      description: "Creates a core belief — a foundational value that motivates ends.",
+      inputSchema: {
+        name: z.string().min(1).describe("The belief statement"),
+        description: z.string().optional().describe("Additional context"),
+      },
+    },
+    async ({ name, description }) => {
+      const { createBelief } = await import("../store/beliefs.js");
+      const belief = await createBelief({ name, description });
+      return { content: [{ type: "text", text: `Created belief: ${belief.name} (${belief.id})` }] };
+    }
+  );
+
+  server.registerTool(
+    "delete_belief",
+    {
+      title: "Delete Belief",
+      description: "Deletes a belief by ID. Removes all end linkages.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the belief to delete"),
+      },
+    },
+    async ({ id }) => {
+      const { deleteBelief } = await import("../store/beliefs.js");
+      const belief = await deleteBelief(id);
+      if (!belief) {
+        return { content: [{ type: "text", text: `Belief with ID ${id} not found.` }], isError: true };
+      }
+      return { content: [{ type: "text", text: `Deleted belief: ${belief.name}` }] };
+    }
+  );
+
+  server.registerTool(
+    "link_end_to_belief",
+    {
+      title: "Link End to Belief",
+      description: "Links an end to a belief, indicating the end is motivated by this belief.",
+      inputSchema: {
+        beliefId: z.string().min(1).describe("ID of the belief"),
+        endId: z.string().min(1).describe("ID of the end"),
+      },
+    },
+    async ({ beliefId, endId }) => {
+      const { linkEndToBelief } = await import("../store/beliefs.js");
+      await linkEndToBelief(beliefId, endId);
+      return { content: [{ type: "text", text: `Linked end ${endId} to belief ${beliefId}` }] };
+    }
+  );
+
+  server.registerTool(
+    "unlink_end_from_belief",
+    {
+      title: "Unlink End from Belief",
+      description: "Removes the link between an end and a belief.",
+      inputSchema: {
+        beliefId: z.string().min(1).describe("ID of the belief"),
+        endId: z.string().min(1).describe("ID of the end"),
+      },
+    },
+    async ({ beliefId, endId }) => {
+      const { unlinkEndFromBelief } = await import("../store/beliefs.js");
+      await unlinkEndFromBelief(beliefId, endId);
+      return { content: [{ type: "text", text: `Unlinked end ${endId} from belief ${beliefId}` }] };
     }
   );
 
@@ -343,6 +442,26 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "update_organization",
+    {
+      title: "Update Organization",
+      description: "Updates an organization's name.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the organization to update"),
+        name: z.string().optional().describe("New name"),
+      },
+    },
+    async ({ id, name }) => {
+      const { updateOrganization } = await import("../store/organizations.js");
+      const org = await updateOrganization(id, { name });
+      if (!org) {
+        return { content: [{ type: "text", text: `Organization with ID ${id} not found.` }], isError: true };
+      }
+      return { content: [{ type: "text", text: `Updated organization: ${org.name}` }] };
+    }
+  );
+
+  server.registerTool(
     "delete_organization",
     {
       title: "Delete Organization",
@@ -484,6 +603,26 @@ export function registerTools(server: McpServer): void {
         members.length > 0 ? `  Members:\n${memberLines.join("\n")}` : "  Members: (none)",
       ].filter(Boolean);
       return { content: [{ type: "text", text: parts.join("\n") }] };
+    }
+  );
+
+  server.registerTool(
+    "update_team",
+    {
+      title: "Update Team",
+      description: "Updates a team's name.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the team to update"),
+        name: z.string().optional().describe("New team name"),
+      },
+    },
+    async ({ id, name }) => {
+      const { updateTeam } = await import("../store/teams.js");
+      const team = await updateTeam(id, { name });
+      if (!team) {
+        return { content: [{ type: "text", text: `Team with ID ${id} not found.` }], isError: true };
+      }
+      return { content: [{ type: "text", text: `Updated team: ${team.name}` }] };
     }
   );
 
@@ -1089,6 +1228,82 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "update_habit",
+    {
+      title: "Update Habit",
+      description:
+        "Updates a habit's name, frequency, or duration. Supports adding/removing participants and linking/unlinking/moving ends.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the habit to update"),
+        name: z.string().optional().describe("New name"),
+        frequency: z.string().optional().describe("New frequency (daily, weekly, monthly, etc.)"),
+        durationMinutes: z.number().optional().describe("New expected duration in minutes"),
+        personIdsToAdd: z.array(z.string()).optional().describe("Person IDs to add as participants"),
+        personIdsToRemove: z.array(z.string()).optional().describe("Person IDs to remove as participants"),
+        endIdToAdd: z.string().optional().describe("End ID to link (additive)"),
+        endIdToRemove: z.string().optional().describe("End ID to unlink"),
+        endIdsToReplace: z.array(z.string()).optional().describe("Replace all end links with this list"),
+      },
+    },
+    async ({ id, name, frequency, durationMinutes, personIdsToAdd, personIdsToRemove, endIdToAdd, endIdToRemove, endIdsToReplace }) => {
+      const existing = await getHabitById(id);
+      if (!existing) {
+        return {
+          content: [{ type: "text", text: `Habit with ID ${id} not found.` }],
+          isError: true,
+        };
+      }
+      const details: string[] = [];
+      const fieldUpdates: { name?: string; frequency?: string; durationMinutes?: number } = {};
+      if (name != null) fieldUpdates.name = name;
+      if (frequency != null) fieldUpdates.frequency = frequency;
+      if (durationMinutes != null) fieldUpdates.durationMinutes = durationMinutes;
+      if (Object.keys(fieldUpdates).length > 0) {
+        await updateHabit(id, fieldUpdates);
+        if (name) details.push(`renamed to "${name}"`);
+        if (frequency) details.push(`frequency: ${frequency}`);
+        if (durationMinutes != null) details.push(`duration: ${durationMinutes} min`);
+      }
+      if (personIdsToAdd?.length) {
+        await addHabitPersons(id, personIdsToAdd);
+        details.push(`added ${personIdsToAdd.length} participant(s)`);
+      }
+      if (personIdsToRemove?.length) {
+        await removeHabitPersons(id, personIdsToRemove);
+        details.push(`removed ${personIdsToRemove.length} participant(s)`);
+      }
+      if (endIdsToReplace) {
+        await updateHabitEnds(id, endIdsToReplace);
+        details.push(`replaced end links`);
+      } else {
+        if (endIdToAdd) {
+          const current = await getHabitById(id);
+          const currentIds = current?.endIds ?? [];
+          if (!currentIds.includes(endIdToAdd)) {
+            await updateHabitEnds(id, [...currentIds, endIdToAdd]);
+            details.push(`linked end ${endIdToAdd}`);
+          }
+        }
+        if (endIdToRemove) {
+          const current = await getHabitById(id);
+          const currentIds = current?.endIds ?? [];
+          await updateHabitEnds(id, currentIds.filter((eid) => eid !== endIdToRemove));
+          details.push(`unlinked end ${endIdToRemove}`);
+        }
+      }
+      const habit = await getHabitById(id);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Updated habit: ${habit?.name ?? id}${details.length ? ` — ${details.join(", ")}` : ""}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
     "delete_habit",
     {
       title: "Delete Habit",
@@ -1456,6 +1671,77 @@ export function registerTools(server: McpServer): void {
     }
   );
 
+  // --- Task Time ---
+
+  server.registerTool(
+    "log_task_time",
+    {
+      title: "Log Task Time",
+      description: "Records a work session against a task. Different from completing the task — this tracks time spent.",
+      inputSchema: {
+        taskId: z.string().min(1).describe("ID of the task"),
+        completedAt: z.string().describe("When the work happened (YYYY-MM-DD or ISO timestamp)"),
+        actualDurationMinutes: z.number().optional().describe("Duration in minutes"),
+        notes: z.string().optional().describe("Notes about what was done"),
+        withPersonIds: z.array(z.string()).optional().describe("Person IDs worked with"),
+        forPersonIds: z.array(z.string()).optional().describe("Person IDs worked for"),
+      },
+    },
+    async ({ taskId, completedAt, actualDurationMinutes, notes, withPersonIds, forPersonIds }) => {
+      const { createTaskTime } = await import("../store/taskTime.js");
+      const completedAtISO = completedAt.length === 10 ? `${completedAt}T12:00:00.000Z` : completedAt;
+      const entry = await createTaskTime({ taskId, completedAt: completedAtISO, actualDurationMinutes, notes, withPersonIds, forPersonIds });
+      return { content: [{ type: "text", text: `Logged task time: ${entry.id}${actualDurationMinutes ? ` (${actualDurationMinutes} min)` : ""}` }] };
+    }
+  );
+
+  server.registerTool(
+    "list_task_time",
+    {
+      title: "List Task Time",
+      description: "Lists task time entries. Filter by task, or by date range.",
+      inputSchema: {
+        taskId: z.string().optional().describe("Filter by task ID"),
+        fromDate: z.string().optional().describe("YYYY-MM-DD start date"),
+        toDate: z.string().optional().describe("YYYY-MM-DD end date"),
+      },
+    },
+    async ({ taskId, fromDate, toDate }) => {
+      const { listTaskTime } = await import("../store/taskTime.js");
+      const entries = await listTaskTime({ taskId, fromDate, toDate });
+      if (entries.length === 0) {
+        return { content: [{ type: "text", text: "No task time entries found." }] };
+      }
+      const lines = entries.map((e) => {
+        const date = e.completedAt.slice(0, 10);
+        const parts: string[] = [];
+        if (e.actualDurationMinutes != null) parts.push(`${e.actualDurationMinutes} min`);
+        if (e.notes) parts.push(e.notes);
+        return `  ${date}: task ${e.taskId}${parts.length ? ` (${parts.join(", ")})` : ""} [${e.id}]`;
+      });
+      return { content: [{ type: "text", text: `Task time entries:\n\n${lines.join("\n")}` }] };
+    }
+  );
+
+  server.registerTool(
+    "delete_task_time",
+    {
+      title: "Delete Task Time",
+      description: "Deletes a task time entry by ID.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the task time entry"),
+      },
+    },
+    async ({ id }) => {
+      const { deleteTaskTime } = await import("../store/taskTime.js");
+      const entry = await deleteTaskTime(id);
+      if (!entry) {
+        return { content: [{ type: "text", text: `Task time entry ${id} not found.` }], isError: true };
+      }
+      return { content: [{ type: "text", text: `Deleted task time entry ${id}` }] };
+    }
+  );
+
   server.registerTool(
     "create_person",
     {
@@ -1700,6 +1986,46 @@ export function registerTools(server: McpServer): void {
       return {
         content: [{ type: "text", text: summary }],
       };
+    }
+  );
+
+  server.registerTool(
+    "link_person",
+    {
+      title: "Link Person to User Account",
+      description: "Links a person record to a user account by looking up the email in profiles. Optionally updates the person's email first.",
+      inputSchema: {
+        personId: z.string().min(1).describe("ID of the person to link"),
+        emailOverride: z.string().optional().describe("If provided, updates the person's email before looking up"),
+      },
+    },
+    async ({ personId, emailOverride }) => {
+      const person = await getPersonById(personId);
+      if (!person) {
+        return { content: [{ type: "text", text: `Person not found.` }], isError: true };
+      }
+      if (person.userId) {
+        return { content: [{ type: "text", text: `${person.firstName} ${person.lastName} is already linked to an account.` }] };
+      }
+      const lookupEmail = emailOverride ?? person.email;
+      if (!lookupEmail || lookupEmail === "unknown@example.com") {
+        return { content: [{ type: "text", text: `${person.firstName} ${person.lastName} has no email on file.` }], isError: true };
+      }
+      if (emailOverride && emailOverride !== person.email) {
+        await updatePerson(personId, { email: emailOverride });
+      }
+      const { getSupabase } = await import("../store/base.js");
+      const supabase = getSupabase();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", lookupEmail)
+        .single();
+      if (!profile) {
+        return { content: [{ type: "text", text: `No user account found for ${lookupEmail}.` }], isError: true };
+      }
+      await updatePerson(personId, { userId: profile.id });
+      return { content: [{ type: "text", text: `Linked ${person.firstName} ${person.lastName} to ${lookupEmail}.` }] };
     }
   );
 

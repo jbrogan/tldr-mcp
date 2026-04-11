@@ -92,6 +92,45 @@ export async function listOrganizations(): Promise<OrganizationEntity[]> {
 }
 
 /**
+ * Update an organization.
+ */
+export async function updateOrganization(
+  id: string,
+  updates: { name?: string }
+): Promise<OrganizationEntity | null> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const updateData: Record<string, unknown> = {};
+  if (updates.name !== undefined) updateData.name = updates.name;
+
+  if (Object.keys(updateData).length === 0) {
+    const { data } = await supabase
+      .from("organizations")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .single();
+    return data ? toEntity(data) : null;
+  }
+
+  const { data, error } = await supabase
+    .from("organizations")
+    .update(updateData)
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") return null;
+    throw new Error(`Failed to update organization: ${error.message}`);
+  }
+
+  return data ? toEntity(data) : null;
+}
+
+/**
  * Delete an organization.
  * Note: Teams will be cascade deleted by database FK constraint.
  */
