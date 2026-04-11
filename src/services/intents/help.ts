@@ -129,17 +129,54 @@ Key properties:
   - Actions can track "with" and "for" people
   - Your own person record (relationship: self) represents you in the system`,
 
-  sharing: `Sharing lets you collaborate on ends with other users. When you share an end, the other user can see:
-  - The end itself
-  - All habits linked to that end
+  sharing: `Sharing lets you collaborate on ends with other users.
+
+WHAT GETS SHARED
+Sharing happens at the end level. When you share an end, the other user can see:
+  - The end itself, its beliefs and portfolio context
+  - All habits linked to that end (yours and theirs)
   - All actions logged against those habits
+  - All tasks linked to that end, with owner attribution
 
-To share, the other person must:
-  1. Have a person record in your system (with their email)
-  2. Have signed up for an account (their email matches a profile)
-  3. Be linked — this happens automatically on person creation if their email matches, or manually via "link [person] to their account"
+Habits, tasks, actions, and portfolios are NOT shared directly — they flow through the shared end.
 
-The owner has full control over the end. Shared users get read-only access.`,
+HOW TO SHARE
+  1. The other person must have a person record in your system with their email
+  2. They must have signed up for an account (their email matches a profile)
+  3. The person record must be linked — happens automatically if their email matches at creation, or manually via "link [person] to their account"
+  4. Share with: "share [end name] with [person name]"
+  5. Unshare with: "unshare [end name] with [person name]"
+
+SHARING SEMANTICS
+Two distinct concepts:
+  - Sharing (end level): visibility and accountability
+  - Participant (habit level): active doer who can log actions
+
+Sharing an end does NOT automatically make the shared user a participant on its habits.
+
+WHAT SHARED USERS CAN DO
+  - View the end, its habits, actions, and tasks
+  - Create their OWN habits linked to the shared end (shared write access)
+  - Create their own tasks linked to the shared end
+  - Log actions on habits where they've been explicitly added as participants (via "add [person] to [habit]")
+  - Log task time on their own tasks
+
+WHAT SHARED USERS CANNOT DO
+  - Edit the owner's habits or the end itself
+  - Delete anything that isn't theirs
+  - Log actions on habits they're not a participant on
+
+CONTEXTUAL DISPLAY
+  - The owner sees "Shared with: [names]" on an end
+  - The recipient sees "Shared by: [owner name]"
+  - Shared habits show "by [owner]" when you're not the owner
+  - Shared tasks show "by [owner]" when you're not the owner
+  - Action lists show "by [owner]" on actions logged by other users
+
+LIST VIEWS
+  - "list my shares" — ends you've shared with others
+  - "list shared ends" — ends others have shared with you
+  - "list shared habits" — habits visible through ends shared with you`,
 };
 
 const TOPIC_ALIASES: Record<string, string> = {
