@@ -1445,6 +1445,64 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "get_action",
+    {
+      title: "Get Action",
+      description: "Gets a single action by ID with full details.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the action"),
+      },
+    },
+    async ({ id }) => {
+      const { getActionById } = await import("../store/actions.js");
+      const action = await getActionById(id);
+      if (!action) {
+        return { content: [{ type: "text", text: `Action with ID ${id} not found.` }], isError: true };
+      }
+      const habit = await getHabitById(action.habitId);
+      const parts = [
+        `${habit?.name ?? action.habitId} — ${action.completedAt.slice(0, 10)} (${action.id})`,
+        action.actualDurationMinutes != null && `  Duration: ${action.actualDurationMinutes} min`,
+        action.notes && `  Notes: ${action.notes}`,
+        action.withPersonIds?.length && `  With: ${action.withPersonIds.join(", ")}`,
+        action.forPersonIds?.length && `  For: ${action.forPersonIds.join(", ")}`,
+        `  Created: ${action.createdAt}`,
+      ].filter(Boolean);
+      return { content: [{ type: "text", text: parts.join("\n") }] };
+    }
+  );
+
+  server.registerTool(
+    "update_action",
+    {
+      title: "Update Action",
+      description: "Updates an action's date, duration, notes, or with/for persons.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the action to update"),
+        completedAt: z.string().optional().describe("New completion date (ISO or YYYY-MM-DD)"),
+        actualDurationMinutes: z.number().optional().describe("New duration in minutes"),
+        notes: z.string().optional().describe("New notes"),
+        withPersonIds: z.array(z.string()).optional().describe("Replace with-person IDs"),
+        forPersonIds: z.array(z.string()).optional().describe("Replace for-person IDs"),
+      },
+    },
+    async ({ id, completedAt, actualDurationMinutes, notes, withPersonIds, forPersonIds }) => {
+      const { updateAction } = await import("../store/actions.js");
+      const updates: Record<string, unknown> = {};
+      if (completedAt !== undefined) updates.completedAt = completedAt;
+      if (actualDurationMinutes !== undefined) updates.actualDurationMinutes = actualDurationMinutes;
+      if (notes !== undefined) updates.notes = notes;
+      if (withPersonIds !== undefined) updates.withPersonIds = withPersonIds;
+      if (forPersonIds !== undefined) updates.forPersonIds = forPersonIds;
+      const action = await updateAction(id, updates);
+      if (!action) {
+        return { content: [{ type: "text", text: `Action with ID ${id} not found.` }], isError: true };
+      }
+      return { content: [{ type: "text", text: `Updated action ${id}` }] };
+    }
+  );
+
+  server.registerTool(
     "delete_action",
     {
       title: "Delete Action",

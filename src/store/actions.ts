@@ -221,6 +221,92 @@ export async function listActionsWithShared(options?: {
 }
 
 /**
+ * Get an action by ID.
+ */
+export async function getActionById(id: string): Promise<ActionEntity | undefined> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const { data, error } = await supabase
+    .from("actions")
+    .select(`*, action_persons (*)`)
+    .eq("id", id)
+    .eq("user_id", userId)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") return undefined;
+    throw new Error(`Failed to get action: ${error.message}`);
+  }
+
+  return data ? toEntity(data as ActionWithPersons) : undefined;
+}
+
+/**
+ * Update an action.
+ */
+export async function updateAction(
+  id: string,
+  updates: {
+    completedAt?: string;
+    actualDurationMinutes?: number;
+    notes?: string;
+    withPersonIds?: string[];
+    forPersonIds?: string[];
+  }
+): Promise<ActionEntity | null> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const existing = await getActionById(id);
+  if (!existing) return null;
+
+  const updateData: Record<string, unknown> = {};
+  if (updates.completedAt !== undefined) updateData.completed_at = updates.completedAt;
+  if (updates.actualDurationMinutes !== undefined) updateData.actual_duration_minutes = updates.actualDurationMinutes;
+  if (updates.notes !== undefined) updateData.notes = updates.notes;
+
+  if (Object.keys(updateData).length > 0) {
+    const { error } = await supabase
+      .from("actions")
+      .update(updateData)
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new Error(`Failed to update action: ${error.message}`);
+    }
+  }
+
+  // Update person relationships if provided
+  if (updates.withPersonIds !== undefined || updates.forPersonIds !== undefined) {
+    await supabase.from("action_persons").delete().eq("action_id", id);
+
+    const personRelations: Array<{
+      action_id: string;
+      person_id: string;
+      relation_type: "with" | "for";
+    }> = [];
+
+    for (const personId of updates.withPersonIds ?? existing.withPersonIds ?? []) {
+      personRelations.push({ action_id: id, person_id: personId, relation_type: "with" });
+    }
+    for (const personId of updates.forPersonIds ?? existing.forPersonIds ?? []) {
+      personRelations.push({ action_id: id, person_id: personId, relation_type: "for" });
+    }
+
+    if (personRelations.length > 0) {
+      const { error } = await supabase.from("action_persons").insert(personRelations);
+      if (error) {
+        throw new Error(`Failed to update action persons: ${error.message}`);
+      }
+    }
+  }
+
+  return (await getActionById(id)) ?? null;
+}
+
+/**
  * Delete actions by habit ID.
  */
 export async function deleteActionsByHabitId(habitId: string): Promise<number> {
