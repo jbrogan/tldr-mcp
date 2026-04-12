@@ -237,12 +237,14 @@ const executors: Record<string, ExecutorFn> = {
   },
 
   async update_task(p) {
-    const { id, completedAt, reopen, dueDate, actualDurationMinutes, name, endId, areaId, withPersonIds, forPersonIds, notes } = p as {
+    const { id, completedAt, reopen, dueDate, scheduledDate, estimatedDurationMinutes, durationMinutes, name, endId, areaId, withPersonIds, forPersonIds, notes } = p as {
       id: string;
       completedAt?: string;
       reopen?: boolean;
       dueDate?: string;
-      actualDurationMinutes?: number;
+      scheduledDate?: string;
+      estimatedDurationMinutes?: number;
+      durationMinutes?: number;
       name?: string;
       endId?: string;
       areaId?: string;
@@ -256,11 +258,11 @@ const executors: Record<string, ExecutorFn> = {
     if (areaId !== undefined) updates.areaId = areaId;
     if (withPersonIds !== undefined) updates.withPersonIds = withPersonIds;
     if (forPersonIds !== undefined) updates.forPersonIds = forPersonIds;
-    if (actualDurationMinutes !== undefined) updates.actualDurationMinutes = actualDurationMinutes;
     if (dueDate !== undefined) updates.dueDate = dueDate;
+    if (scheduledDate !== undefined) updates.scheduledDate = scheduledDate;
+    if (estimatedDurationMinutes !== undefined) updates.estimatedDurationMinutes = estimatedDurationMinutes;
     if (reopen) {
       updates.completedAt = null;
-      updates.actualDurationMinutes = null;
     } else if (completedAt !== undefined) {
       updates.completedAt = completedAt.length === 10 ? `${completedAt}T12:00:00.000Z` : completedAt;
     }
@@ -269,13 +271,13 @@ const executors: Record<string, ExecutorFn> = {
     if (!task) return { success: false, message: `Task with ID ${id} not found.` };
 
     // Auto-create task_time entry when completing with duration
-    if (!reopen && completedAt && actualDurationMinutes) {
+    if (!reopen && completedAt && durationMinutes) {
       const { createTaskTime } = await import("../../store/taskTime.js");
       const completedAtISO = completedAt.length === 10 ? `${completedAt}T12:00:00.000Z` : completedAt;
       await createTaskTime({
         taskId: id,
         completedAt: completedAtISO,
-        actualDurationMinutes,
+        actualDurationMinutes: durationMinutes,
         notes,
       });
     }
@@ -711,7 +713,7 @@ const executors: Record<string, ExecutorFn> = {
       const completedLines = completedInPeriod.map((t) => {
         const date = t.completedAt!.slice(0, 10);
         const parts: string[] = ["completed"];
-        if (t.actualDurationMinutes != null) parts.push(`${t.actualDurationMinutes} min`);
+        if (t.estimatedDurationMinutes != null) parts.push(`est: ${t.estimatedDurationMinutes} min`);
         const extra = ` (${parts.join(", ")})`;
         return `  ${date}: ${t.name}${extra}`;
       });
@@ -750,7 +752,8 @@ const executors: Record<string, ExecutorFn> = {
       end && `  End: ${end.name}`,
       area && `  Area: ${area.name}`,
       task.dueDate && `  Due: ${task.dueDate}`,
-      task.actualDurationMinutes != null && `  Duration: ${task.actualDurationMinutes} min`,
+      task.scheduledDate && `  Scheduled: ${task.scheduledDate}`,
+      task.estimatedDurationMinutes != null && `  Estimated: ${task.estimatedDurationMinutes} min`,
       withNames.length > 0 && `  With: ${withNames.join(", ")}`,
       forNames.length > 0 && `  For: ${forNames.join(", ")}`,
       task.notes && `  Notes: ${task.notes}`,

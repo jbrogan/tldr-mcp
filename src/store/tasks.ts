@@ -37,8 +37,9 @@ function toEntity(row: TaskWithPersons): TaskEntity {
     name: row.name,
     endId: row.end_id ?? undefined,
     areaId: row.area_id ?? undefined,
-    actualDurationMinutes: row.actual_duration_minutes ?? undefined,
     dueDate: row.due_date ?? undefined,
+    scheduledDate: row.scheduled_date ?? undefined,
+    estimatedDurationMinutes: row.estimated_duration_minutes ?? undefined,
     completedAt: row.completed_at ?? undefined,
     notes: row.notes ?? undefined,
     withPersonIds: withPersonIds.length > 0 ? withPersonIds : undefined,
@@ -62,8 +63,9 @@ export async function createTask(data: Task): Promise<TaskEntity> {
       name: data.name,
       end_id: data.endId,
       area_id: data.areaId,
-      actual_duration_minutes: data.actualDurationMinutes,
       due_date: data.dueDate,
+      scheduled_date: data.scheduledDate,
+      estimated_duration_minutes: data.estimatedDurationMinutes,
       completed_at: data.completedAt,
       notes: data.notes,
     })
@@ -156,8 +158,9 @@ export async function updateTask(
       | "areaId"
       | "withPersonIds"
       | "forPersonIds"
-      | "actualDurationMinutes"
       | "dueDate"
+      | "scheduledDate"
+      | "estimatedDurationMinutes"
       | "completedAt"
       | "notes"
     >
@@ -177,9 +180,9 @@ export async function updateTask(
   if (updates.name !== undefined) updateData.name = updates.name;
   if (updates.endId !== undefined) updateData.end_id = updates.endId;
   if (updates.areaId !== undefined) updateData.area_id = updates.areaId;
-  if (updates.actualDurationMinutes !== undefined)
-    updateData.actual_duration_minutes = updates.actualDurationMinutes;
   if (updates.dueDate !== undefined) updateData.due_date = updates.dueDate;
+  if (updates.scheduledDate !== undefined) updateData.scheduled_date = updates.scheduledDate;
+  if (updates.estimatedDurationMinutes !== undefined) updateData.estimated_duration_minutes = updates.estimatedDurationMinutes;
   if (updates.completedAt !== undefined) updateData.completed_at = updates.completedAt;
   if (updates.notes !== undefined) updateData.notes = updates.notes;
 

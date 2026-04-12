@@ -470,8 +470,9 @@ export type TaskRow = {
   name: string;
   end_id: string | null;
   area_id: string | null;
-  actual_duration_minutes: number | null;
   due_date: string | null;
+  scheduled_date: string | null;
+  estimated_duration_minutes: number | null;
   completed_at: string | null;
   notes: string | null;
   created_at: string;
@@ -669,8 +670,9 @@ export type TaskInsert = {
   name: string;
   end_id?: string | null;
   area_id?: string | null;
-  actual_duration_minutes?: number | null;
   due_date?: string | null;
+  scheduled_date?: string | null;
+  estimated_duration_minutes?: number | null;
   completed_at?: string | null;
   notes?: string | null;
   created_at?: string;

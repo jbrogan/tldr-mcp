@@ -1543,10 +1543,12 @@ export function registerTools(server: McpServer): void {
         withPersonIds: z.array(z.string()).optional().describe("Person IDs - did it with"),
         forPersonIds: z.array(z.string()).optional().describe("Person IDs - did it for"),
         dueDate: z.string().optional().describe("Due date (YYYY-MM-DD)"),
+        scheduledDate: z.string().optional().describe("Scheduled work date (YYYY-MM-DD)"),
+        estimatedDurationMinutes: z.number().optional().describe("Estimated time to complete (minutes)"),
         notes: z.string().optional(),
       },
     },
-    async ({ name, endId, areaId, withPersonIds, forPersonIds, dueDate, notes }) => {
+    async ({ name, endId, areaId, withPersonIds, forPersonIds, dueDate, scheduledDate, estimatedDurationMinutes, notes }) => {
       const task = await createTask({
         name,
         endId,
@@ -1554,6 +1556,8 @@ export function registerTools(server: McpServer): void {
         withPersonIds,
         forPersonIds,
         dueDate,
+        scheduledDate,
+        estimatedDurationMinutes,
         notes,
       });
       return {
@@ -1606,7 +1610,8 @@ export function registerTools(server: McpServer): void {
           end ? `end: ${end.name}` : null,
           area ? `area: ${area.name}` : null,
           t.dueDate ? `due: ${t.dueDate}` : null,
-          t.actualDurationMinutes != null ? `${t.actualDurationMinutes} min` : null,
+          t.scheduledDate ? `scheduled: ${t.scheduledDate}` : null,
+          t.estimatedDurationMinutes != null ? `est: ${t.estimatedDurationMinutes} min` : null,
           withNames?.length ? `with: ${withNames.join(", ")}` : null,
           forNames?.length ? `for: ${forNames.join(", ")}` : null,
         ].filter(Boolean);
@@ -1645,7 +1650,8 @@ export function registerTools(server: McpServer): void {
         end && `  End: ${end.name}`,
         area && `  Area: ${area.name}`,
         task.dueDate && `  Due: ${task.dueDate}`,
-        task.actualDurationMinutes != null && `  Duration: ${task.actualDurationMinutes} min`,
+        task.scheduledDate && `  Scheduled: ${task.scheduledDate}`,
+        task.estimatedDurationMinutes != null && `  Estimated: ${task.estimatedDurationMinutes} min`,
         task.notes && `  Notes: ${task.notes}`,
         `  Created: ${task.createdAt}`,
       ].filter(Boolean);
@@ -1657,7 +1663,7 @@ export function registerTools(server: McpServer): void {
     "update_task",
     {
       title: "Update Task",
-      description: "Updates a task. Use to complete (completedAt, actualDurationMinutes), change details, or add with/for.",
+      description: "Updates a task. Use to complete, schedule, estimate time, change details, or add with/for.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the task to update"),
         name: z.string().min(1).optional().describe("Task name"),
@@ -1665,13 +1671,14 @@ export function registerTools(server: McpServer): void {
         areaId: z.string().optional().describe("Area ID"),
         withPersonIds: z.array(z.string()).optional().describe("Person IDs - did it with"),
         forPersonIds: z.array(z.string()).optional().describe("Person IDs - did it for"),
-        actualDurationMinutes: z.number().int().positive().optional().describe("Time spent when completed (minutes)"),
         dueDate: z.string().optional().describe("Due date (YYYY-MM-DD)"),
+        scheduledDate: z.string().optional().describe("Scheduled work date (YYYY-MM-DD)"),
+        estimatedDurationMinutes: z.number().optional().describe("Estimated time to complete (minutes)"),
         completedAt: z.string().optional().describe("When completed (ISO). Set to mark complete."),
         notes: z.string().optional(),
       },
     },
-    async ({ id, name, endId, areaId, withPersonIds, forPersonIds, actualDurationMinutes, dueDate, completedAt, notes }) => {
+    async ({ id, name, endId, areaId, withPersonIds, forPersonIds, dueDate, scheduledDate, estimatedDurationMinutes, completedAt, notes }) => {
       const existing = await getTaskById(id);
       if (!existing) {
         return {
@@ -1685,8 +1692,9 @@ export function registerTools(server: McpServer): void {
       if (areaId !== undefined) updates.areaId = areaId;
       if (withPersonIds !== undefined) updates.withPersonIds = withPersonIds;
       if (forPersonIds !== undefined) updates.forPersonIds = forPersonIds;
-      if (actualDurationMinutes !== undefined) updates.actualDurationMinutes = actualDurationMinutes;
       if (dueDate !== undefined) updates.dueDate = dueDate;
+      if (scheduledDate !== undefined) updates.scheduledDate = scheduledDate;
+      if (estimatedDurationMinutes !== undefined) updates.estimatedDurationMinutes = estimatedDurationMinutes;
       if (completedAt !== undefined) updates.completedAt = completedAt;
       if (notes !== undefined) updates.notes = notes;
       const task = await updateTask(id, updates as Parameters<typeof updateTask>[1]);
