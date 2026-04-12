@@ -202,7 +202,7 @@ export async function createContextFromUserId(userId: string): Promise<StoreCont
     .setAudience("authenticated")
     .setSubject(userId)
     .setIssuedAt(now)
-    .setExpirationTime(now + 300)
+    .setExpirationTime(now + 2100) // 35 minutes — covers MCP session TTL (30 min)
     .sign(privateKey);
 
   const supabase = createUserClient(token);

@@ -93,7 +93,8 @@ async function handleMcpRequest(req: express.Request, res: express.Response) {
     const session = sessions.get(sessionId)!;
     session.lastActivity = Date.now();
 
-    await runWithContextAsync(session.context, () =>
+    // Use the fresh context from this request (handles token refresh for API tokens)
+    await runWithContextAsync(context, () =>
       session.transport.handleRequest(req, res, req.body)
     );
     return;
