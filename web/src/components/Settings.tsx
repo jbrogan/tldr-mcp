@@ -127,6 +127,15 @@ export function Settings({ onClose, userEmail }: SettingsProps) {
             <div className="text-sm text-gray-700">{userEmail}</div>
           </section>
 
+          {/* Timezone */}
+          <section>
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Timezone</h3>
+            <div className="text-sm text-gray-700">
+              {Intl.DateTimeFormat().resolvedOptions().timeZone}
+              <span className="text-xs text-gray-400 ml-2">(auto-detected from browser)</span>
+            </div>
+          </section>
+
           {/* API Tokens */}
           <section>
             <div className="flex items-center justify-between mb-3">

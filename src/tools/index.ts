@@ -1957,6 +1957,28 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "set_timezone",
+    {
+      title: "Set Timezone",
+      description: "Sets the user's timezone for date calculations. Use IANA timezone names (e.g. America/New_York, Europe/London, Asia/Tokyo).",
+      inputSchema: {
+        timezone: z.string().min(1).describe("IANA timezone name (e.g. America/New_York)"),
+      },
+    },
+    async ({ timezone }) => {
+      // Validate timezone
+      try {
+        Intl.DateTimeFormat(undefined, { timeZone: timezone });
+      } catch {
+        return { content: [{ type: "text", text: `Invalid timezone: "${timezone}". Use IANA format like America/New_York.` }], isError: true };
+      }
+      const { updateUserTimezone } = await import("../store/users.js");
+      await updateUserTimezone(timezone);
+      return { content: [{ type: "text", text: `Timezone set to ${timezone}` }] };
+    }
+  );
+
+  server.registerTool(
     "list_users",
     {
       title: "List Users",

@@ -23,6 +23,40 @@ function toEntity(row: Profile): UserEntity {
 }
 
 /**
+ * Get the current user's timezone (from profile).
+ * Returns IANA timezone string (e.g. "America/New_York"), defaults to "UTC".
+ */
+export async function getUserTimezone(): Promise<string> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("timezone")
+    .eq("id", userId)
+    .single();
+
+  return data?.timezone ?? "UTC";
+}
+
+/**
+ * Update the current user's timezone.
+ */
+export async function updateUserTimezone(timezone: string): Promise<void> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ timezone })
+    .eq("id", userId);
+
+  if (error) {
+    throw new Error(`Failed to update timezone: ${error.message}`);
+  }
+}
+
+/**
  * Get the current user's profile.
  */
 export async function getCurrentUser(): Promise<UserEntity | undefined> {

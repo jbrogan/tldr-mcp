@@ -64,20 +64,45 @@ const MONTH_NAMES: Record<string, number> = {
   jan: 0, feb: 1, mar: 2, apr: 3, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
 };
 
+// Cached timezone for the current request — set by resolve() before calling resolvers
+let _currentTimezone = "America/New_York";
+
+/**
+ * Get today's date in the user's timezone as YYYY-MM-DD.
+ */
+function todayInTz(tz: string = _currentTimezone): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: tz }); // en-CA gives YYYY-MM-DD
+}
+
+/**
+ * Get a date offset by N days from today in the user's timezone.
+ */
+function offsetDayInTz(days: number, tz: string = _currentTimezone): string {
+  const now = new Date();
+  const localDateStr = now.toLocaleDateString("en-CA", { timeZone: tz });
+  const localDate = new Date(localDateStr + "T12:00:00");
+  localDate.setDate(localDate.getDate() + days);
+  return localDate.toISOString().slice(0, 10);
+}
+
+/**
+ * Get the current year in the user's timezone.
+ */
+function currentYearInTz(tz: string = _currentTimezone): number {
+  return parseInt(new Date().toLocaleDateString("en-CA", { timeZone: tz }).slice(0, 4));
+}
+
 function resolveDate(expr: string | undefined): string | undefined {
   if (!expr) return undefined;
   const lower = expr.toLowerCase().trim();
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  const today = todayInTz();
   if (lower === "today") return today;
-  if (lower === "yesterday") {
-    return new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
-  }
-  if (lower === "tomorrow") {
-    return new Date(now.getTime() + 86400000).toISOString().slice(0, 10);
-  }
+  if (lower === "yesterday") return offsetDayInTz(-1);
+  if (lower === "tomorrow") return offsetDayInTz(1);
   // YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(lower)) return lower;
+
+  const year = currentYearInTz();
 
   // "April 4th", "March 30", "Apr 4", "december 25th"
   const monthDayMatch = lower.match(/^(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?$/);
@@ -85,9 +110,10 @@ function resolveDate(expr: string | undefined): string | undefined {
     const month = MONTH_NAMES[monthDayMatch[1]];
     if (month !== undefined) {
       const day = parseInt(monthDayMatch[2]);
-      const year = monthDayMatch[3] ? parseInt(monthDayMatch[3]) : now.getFullYear();
-      const date = new Date(year, month, day);
-      return date.toISOString().slice(0, 10);
+      const y = monthDayMatch[3] ? parseInt(monthDayMatch[3]) : year;
+      const m = String(month + 1).padStart(2, "0");
+      const d = String(day).padStart(2, "0");
+      return `${y}-${m}-${d}`;
     }
   }
 
@@ -97,9 +123,10 @@ function resolveDate(expr: string | undefined): string | undefined {
     const month = MONTH_NAMES[dayMonthMatch[2]];
     if (month !== undefined) {
       const day = parseInt(dayMonthMatch[1]);
-      const year = dayMonthMatch[3] ? parseInt(dayMonthMatch[3]) : now.getFullYear();
-      const date = new Date(year, month, day);
-      return date.toISOString().slice(0, 10);
+      const y = dayMonthMatch[3] ? parseInt(dayMonthMatch[3]) : year;
+      const m = String(month + 1).padStart(2, "0");
+      const d = String(day).padStart(2, "0");
+      return `${y}-${m}-${d}`;
     }
   }
 
@@ -107,9 +134,12 @@ function resolveDate(expr: string | undefined): string | undefined {
 }
 
 function resolvePeriod(period: string): { fromDate: string; toDate: string } {
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const yesterday = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+  const today = todayInTz();
+  const yesterday = offsetDayInTz(-1);
+
+  // Parse today into components for week/month calculations
+  const [yearStr, monthStr, dayStr] = today.split("-");
+  const todayDate = new Date(parseInt(yearStr), parseInt(monthStr) - 1, parseInt(dayStr));
 
   switch (period) {
     case "today":
@@ -117,10 +147,10 @@ function resolvePeriod(period: string): { fromDate: string; toDate: string } {
     case "yesterday":
       return { fromDate: yesterday, toDate: yesterday };
     case "this_week": {
-      const day = now.getDay();
+      const day = todayDate.getDay();
       const mondayOffset = day === 0 ? -6 : 1 - day;
-      const monday = new Date(now);
-      monday.setDate(now.getDate() + mondayOffset);
+      const monday = new Date(todayDate);
+      monday.setDate(todayDate.getDate() + mondayOffset);
       const sunday = new Date(monday);
       sunday.setDate(monday.getDate() + 6);
       return {
@@ -129,18 +159,18 @@ function resolvePeriod(period: string): { fromDate: string; toDate: string } {
       };
     }
     case "this_month": {
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const firstDay = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+      const lastDay = new Date(todayDate.getFullYear(), todayDate.getMonth() + 1, 0);
       return {
         fromDate: firstDay.toISOString().slice(0, 10),
         toDate: lastDay.toISOString().slice(0, 10),
       };
     }
     case "last_week": {
-      const day = now.getDay();
+      const day = todayDate.getDay();
       const mondayOffset = day === 0 ? -6 : 1 - day;
-      const thisMonday = new Date(now);
-      thisMonday.setDate(now.getDate() + mondayOffset);
+      const thisMonday = new Date(todayDate);
+      thisMonday.setDate(todayDate.getDate() + mondayOffset);
       const lastMonday = new Date(thisMonday);
       lastMonday.setDate(thisMonday.getDate() - 7);
       const lastSunday = new Date(lastMonday);
@@ -151,27 +181,17 @@ function resolvePeriod(period: string): { fromDate: string; toDate: string } {
       };
     }
     case "last_month": {
-      const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+      const firstDay = new Date(todayDate.getFullYear(), todayDate.getMonth() - 1, 1);
+      const lastDay = new Date(todayDate.getFullYear(), todayDate.getMonth(), 0);
       return {
         fromDate: firstDay.toISOString().slice(0, 10),
         toDate: lastDay.toISOString().slice(0, 10),
       };
     }
-    case "past_7_days": {
-      const from = new Date(now.getTime() - 6 * 86400000);
-      return {
-        fromDate: from.toISOString().slice(0, 10),
-        toDate: today,
-      };
-    }
-    case "past_30_days": {
-      const from = new Date(now.getTime() - 29 * 86400000);
-      return {
-        fromDate: from.toISOString().slice(0, 10),
-        toDate: today,
-      };
-    }
+    case "past_7_days":
+      return { fromDate: offsetDayInTz(-6), toDate: today };
+    case "past_30_days":
+      return { fromDate: offsetDayInTz(-29), toDate: today };
     default: {
       // Try resolving as a specific date
       const resolved = resolveDate(period);
@@ -933,6 +953,14 @@ export async function resolve(
   intent: string,
   rawParams: Record<string, unknown>
 ): Promise<ResolvedParams> {
+  // Set timezone for date resolution
+  const { getUserTimezone } = await import("../../store/users.js");
+  try {
+    _currentTimezone = await getUserTimezone();
+  } catch {
+    _currentTimezone = "America/New_York";
+  }
+
   const resolver = resolvers[intent];
   if (!resolver) {
     throw new Error(`No resolver for intent: ${intent}`);

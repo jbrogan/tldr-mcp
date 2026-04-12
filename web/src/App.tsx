@@ -28,6 +28,12 @@ function App() {
       connectingRef.current = true;
 
       try {
+        // Auto-detect and update timezone on login
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (tz) {
+          supabase.from("profiles").update({ timezone: tz }).eq("id", session!.user.id).then(() => {});
+        }
+
         await connect(async () => {
           const { data } = await supabase.auth.getSession();
           return data.session?.access_token ?? session!.access_token;
