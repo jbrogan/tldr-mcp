@@ -1778,14 +1778,22 @@ export function registerTools(server: McpServer): void {
       if (entries.length === 0) {
         return { content: [{ type: "text", text: "No task time entries found." }] };
       }
-      const lines = entries.map((e) => {
+      const lines = await Promise.all(entries.map(async (e) => {
+        const task = await getTaskById(e.taskId);
         const date = e.completedAt.slice(0, 10);
         const parts: string[] = [];
         if (e.actualDurationMinutes != null) parts.push(`${e.actualDurationMinutes} min`);
+        if (e.withPersonIds?.length) {
+          const names = await Promise.all(e.withPersonIds.map(async (pid) => {
+            const p = await getPersonById(pid);
+            return p ? `${p.firstName} ${p.lastName}` : pid;
+          }));
+          parts.push(`with ${names.join(", ")}`);
+        }
         if (e.notes) parts.push(e.notes);
-        return `  ${date}: task ${e.taskId}${parts.length ? ` (${parts.join(", ")})` : ""} [${e.id}]`;
-      });
-      return { content: [{ type: "text", text: `Task time entries:\n\n${lines.join("\n")}` }] };
+        return `  ${date}: ${task?.name ?? e.taskId}${parts.length ? ` (${parts.join(", ")})` : ""}`;
+      }));
+      return { content: [{ type: "text", text: `Task time:\n\n${lines.join("\n")}` }] };
     }
   );
 
