@@ -8,28 +8,32 @@ interface DetailPanelProps {
   onClose: () => void;
 }
 
+function getDateRanges(): Record<string, { fromDate: string; toDate: string }> {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const yesterday = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+  const day = now.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + mondayOffset);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  return {
+    today: { fromDate: today, toDate: today },
+    yesterday: { fromDate: yesterday, toDate: yesterday },
+    this_week: { fromDate: monday.toISOString().slice(0, 10), toDate: sunday.toISOString().slice(0, 10) },
+    this_month: { fromDate: firstOfMonth, toDate: lastOfMonth },
+  };
+}
+
 function getDetailConfig(section: string, itemId: string, _itemName: string) {
   switch (section) {
-    case "actions": {
-      const now = new Date();
-      const today = now.toISOString().slice(0, 10);
-      const yesterday = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
-      const day = now.getDay();
-      const mondayOffset = day === 0 ? -6 : 1 - day;
-      const monday = new Date(now);
-      monday.setDate(now.getDate() + mondayOffset);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-      const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-      const ranges: Record<string, { fromDate: string; toDate: string }> = {
-        today: { fromDate: today, toDate: today },
-        yesterday: { fromDate: yesterday, toDate: yesterday },
-        this_week: { fromDate: monday.toISOString().slice(0, 10), toDate: sunday.toISOString().slice(0, 10) },
-        this_month: { fromDate: firstOfMonth, toDate: lastOfMonth },
-      };
-      return { tool: "list_actions", args: ranges[itemId] ?? {} };
-    }
+    case "actions":
+      return { tool: "list_actions", args: getDateRanges()[itemId] ?? {} };
+    case "task_time":
+      return { tool: "list_task_time", args: getDateRanges()[itemId] ?? {} };
     case "beliefs":
       return { tool: "get_belief", args: { id: itemId } };
     case "areas":

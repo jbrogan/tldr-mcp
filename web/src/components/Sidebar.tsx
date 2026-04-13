@@ -124,6 +124,16 @@ const sections: SidebarSection[] = [
     ],
   },
   {
+    key: "task_time",
+    label: "Tasks (Time)",
+    staticItems: [
+      { id: "today", name: "Today" },
+      { id: "yesterday", name: "Yesterday" },
+      { id: "this_week", name: "This Week" },
+      { id: "this_month", name: "This Month" },
+    ],
+  },
+  {
     key: "organizations",
     label: "Organizations",
     tool: "list_organizations",
