@@ -1342,7 +1342,7 @@ export function registerTools(server: McpServer): void {
         "Records a completed habit action (e.g., practiced guitar on Feb 24). Use withPersonIds for shared experience, forPersonIds for acts of service.",
       inputSchema: {
         habitId: z.string().min(1).describe("ID of the habit"),
-        completedAt: z.string().describe("ISO date when completed (e.g. 2026-02-24)"),
+        completedAt: z.string().describe("When completed: 'today' | 'yesterday' | YYYY-MM-DD | full ISO timestamp"),
         actualDurationMinutes: z.number().int().positive().optional().describe("Actual time spent in minutes"),
         notes: z.string().optional(),
         withPersonIds: z.array(z.string()).optional().describe("Person IDs - did it with (shared experience)"),
@@ -1350,12 +1350,9 @@ export function registerTools(server: McpServer): void {
       },
     },
     async ({ habitId, completedAt, actualDurationMinutes, notes, withPersonIds, forPersonIds }) => {
-      let completedAtISO = completedAt;
-      if (completedAt.length === 10) {
-        const { getUserTimezone, localDateToUtcAnchor } = await import("../utils/timezone.js");
-        const tz = await getUserTimezone();
-        completedAtISO = localDateToUtcAnchor(completedAt, tz);
-      }
+      const { getUserTimezone, resolveCompletedAt } = await import("../utils/timezone.js");
+      const tz = await getUserTimezone();
+      const completedAtISO = resolveCompletedAt(completedAt, tz);
       const action = await createAction({
         habitId,
         completedAt: completedAtISO,
@@ -1473,7 +1470,7 @@ export function registerTools(server: McpServer): void {
       description: "Updates an action's date, duration, notes, or with/for persons.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the action to update"),
-        completedAt: z.string().optional().describe("New completion date (ISO or YYYY-MM-DD)"),
+        completedAt: z.string().optional().describe("When completed: 'today' | 'yesterday' | YYYY-MM-DD | full ISO timestamp"),
         actualDurationMinutes: z.number().optional().describe("New duration in minutes"),
         notes: z.string().optional().describe("New notes"),
         withPersonIds: z.array(z.string()).optional().describe("Replace with-person IDs"),
@@ -1484,13 +1481,9 @@ export function registerTools(server: McpServer): void {
       const { updateAction } = await import("../store/actions.js");
       const updates: Record<string, unknown> = {};
       if (completedAt !== undefined) {
-        if (completedAt.length === 10) {
-          const { getUserTimezone, localDateToUtcAnchor } = await import("../utils/timezone.js");
-          const tz = await getUserTimezone();
-          updates.completedAt = localDateToUtcAnchor(completedAt, tz);
-        } else {
-          updates.completedAt = completedAt;
-        }
+        const { getUserTimezone, resolveCompletedAt } = await import("../utils/timezone.js");
+        const tz = await getUserTimezone();
+        updates.completedAt = resolveCompletedAt(completedAt, tz);
       }
       if (actualDurationMinutes !== undefined) updates.actualDurationMinutes = actualDurationMinutes;
       if (notes !== undefined) updates.notes = notes;
@@ -1748,7 +1741,7 @@ export function registerTools(server: McpServer): void {
       description: "Records a work session against a task. Different from completing the task — this tracks time spent.",
       inputSchema: {
         taskId: z.string().min(1).describe("ID of the task"),
-        completedAt: z.string().describe("When the work happened (YYYY-MM-DD or ISO timestamp)"),
+        completedAt: z.string().describe("When the work happened: 'today' | 'yesterday' | YYYY-MM-DD | full ISO timestamp"),
         actualDurationMinutes: z.number().optional().describe("Duration in minutes"),
         notes: z.string().optional().describe("Notes about what was done"),
         withPersonIds: z.array(z.string()).optional().describe("Person IDs worked with"),
@@ -1757,12 +1750,9 @@ export function registerTools(server: McpServer): void {
     },
     async ({ taskId, completedAt, actualDurationMinutes, notes, withPersonIds, forPersonIds }) => {
       const { createTaskTime } = await import("../store/taskTime.js");
-      let completedAtISO = completedAt;
-      if (completedAt.length === 10) {
-        const { getUserTimezone, localDateToUtcAnchor } = await import("../utils/timezone.js");
-        const tz = await getUserTimezone();
-        completedAtISO = localDateToUtcAnchor(completedAt, tz);
-      }
+      const { getUserTimezone, resolveCompletedAt } = await import("../utils/timezone.js");
+      const tz = await getUserTimezone();
+      const completedAtISO = resolveCompletedAt(completedAt, tz);
       const entry = await createTaskTime({ taskId, completedAt: completedAtISO, actualDurationMinutes, notes, withPersonIds, forPersonIds });
       return { content: [{ type: "text", text: `Logged task time: ${entry.id}${actualDurationMinutes ? ` (${actualDurationMinutes} min)` : ""}` }] };
     }

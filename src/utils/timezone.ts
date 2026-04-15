@@ -162,6 +162,36 @@ function formatOffset(minutes: number): string {
 }
 
 /**
+ * Resolve a user-provided completion timestamp into a UTC ISO instant.
+ *
+ * Accepts:
+ *  - "today" / "yesterday" / "tomorrow" (case-insensitive) — resolved in `tz`
+ *    then anchored at local noon.
+ *  - "YYYY-MM-DD" — anchored at local noon.
+ *  - Any other string — assumed to be a full ISO timestamp and passed through.
+ *
+ * Noon anchoring means the resulting instant sits ~12 hours from both local
+ * day boundaries, which keeps the rendered date stable across reasonable
+ * timezone shifts at display time.
+ */
+export function resolveCompletedAt(value: string, tz: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "today") {
+    return localDateToUtcAnchor(todayInTz(tz), tz);
+  }
+  if (normalized === "yesterday") {
+    return localDateToUtcAnchor(offsetDayInTz(todayInTz(tz), -1, tz), tz);
+  }
+  if (normalized === "tomorrow") {
+    return localDateToUtcAnchor(offsetDayInTz(todayInTz(tz), 1, tz), tz);
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return localDateToUtcAnchor(value, tz);
+  }
+  return value;
+}
+
+/**
  * Resolve a period shorthand to a user-local YYYY-MM-DD range.
  */
 export function periodToDateRange(
