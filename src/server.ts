@@ -118,10 +118,7 @@ app.get("/.well-known/oauth-authorization-server", async (_req, res) => {
 
 // Helper to handle MCP requests (shared by POST, GET, DELETE)
 async function handleMcpRequest(req: express.Request, res: express.Response) {
-  const ua = req.headers["user-agent"] ?? "unknown";
-  console.error(
-    `[MCP] ${req.method} session=${req.headers["mcp-session-id"] || "none"} ua="${ua}" method=${req.body?.method ?? "n/a"}`,
-  );
+  console.error(`[MCP] ${req.method} session=${req.headers["mcp-session-id"] || "none"} body=${JSON.stringify(req.body?.method || req.body)}`);
   const context = req.storeContext!;
 
   // Check for existing session via header
