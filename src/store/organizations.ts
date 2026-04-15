@@ -5,6 +5,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
+import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
 import type { Organization } from "../schemas/organization.js";
 import type { OrganizationEntity } from "../schemas/organization.js";
 import type { Organization as DbOrganization } from "../supabase/types.js";
@@ -12,11 +13,12 @@ import type { Organization as DbOrganization } from "../supabase/types.js";
 /**
  * Convert database row to entity format
  */
-function toEntity(row: DbOrganization): OrganizationEntity {
+async function toEntity(row: DbOrganization): Promise<OrganizationEntity> {
+  const tz = await getUserTimezone();
   return {
     id: row.id,
     name: row.name,
-    createdAt: row.created_at,
+    createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
 
@@ -68,7 +70,7 @@ export async function getOrganizationById(
     throw new Error(`Failed to get organization: ${error.message}`);
   }
 
-  return data ? toEntity(data) : undefined;
+  return data ? await toEntity(data) : undefined;
 }
 
 /**
@@ -88,7 +90,7 @@ export async function listOrganizations(): Promise<OrganizationEntity[]> {
     throw new Error(`Failed to list organizations: ${error.message}`);
   }
 
-  return (data ?? []).map(toEntity);
+  return Promise.all((data ?? []).map(toEntity));
 }
 
 /**
@@ -111,7 +113,7 @@ export async function updateOrganization(
       .eq("id", id)
       .eq("user_id", userId)
       .single();
-    return data ? toEntity(data) : null;
+    return data ? await toEntity(data) : null;
   }
 
   const { data, error } = await supabase
@@ -127,7 +129,7 @@ export async function updateOrganization(
     throw new Error(`Failed to update organization: ${error.message}`);
   }
 
-  return data ? toEntity(data) : null;
+  return data ? await toEntity(data) : null;
 }
 
 /**

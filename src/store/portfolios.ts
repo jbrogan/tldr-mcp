@@ -5,6 +5,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
+import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
 import type { Portfolio, PortfolioOwnerType, PortfolioType } from "../schemas/portfolio.js";
 import type { PortfolioEntity } from "../schemas/portfolio.js";
 import type { Portfolio as DbPortfolio } from "../supabase/types.js";
@@ -12,7 +13,8 @@ import type { Portfolio as DbPortfolio } from "../supabase/types.js";
 /**
  * Convert database row to entity format
  */
-function toEntity(row: DbPortfolio): PortfolioEntity {
+async function toEntity(row: DbPortfolio): Promise<PortfolioEntity> {
+  const tz = await getUserTimezone();
   return {
     id: row.id,
     name: row.name,
@@ -20,7 +22,7 @@ function toEntity(row: DbPortfolio): PortfolioEntity {
     ownerType: row.owner_type as PortfolioOwnerType,
     ownerId: row.owner_id,
     portfolioType: (row.portfolio_type ?? undefined) as PortfolioType | undefined,
-    createdAt: row.created_at,
+    createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
 
@@ -76,7 +78,7 @@ export async function getPortfolioById(
     throw new Error(`Failed to get portfolio: ${error.message}`);
   }
 
-  return data ? toEntity(data) : undefined;
+  return data ? await toEntity(data) : undefined;
 }
 
 /**
@@ -111,7 +113,7 @@ export async function listPortfolios(options?: {
     throw new Error(`Failed to list portfolios: ${error.message}`);
   }
 
-  return (data ?? []).map(toEntity);
+  return Promise.all((data ?? []).map(toEntity));
 }
 
 /**
@@ -152,7 +154,7 @@ export async function updatePortfolio(
     throw new Error(`Failed to update portfolio: ${error.message}`);
   }
 
-  return data ? toEntity(data) : null;
+  return data ? await toEntity(data) : null;
 }
 
 /**

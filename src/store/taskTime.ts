@@ -5,7 +5,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
-import { getUserTimezone, localDateToUtcRange } from "../utils/timezone.js";
+import { getUserTimezone, localDateToUtcRange, formatInstantForUser } from "../utils/timezone.js";
 import type { TaskTime } from "../schemas/taskTime.js";
 import type { TaskTimeEntity } from "../schemas/taskTime.js";
 
@@ -23,7 +23,8 @@ interface TaskTimeWithPersons {
   }>;
 }
 
-function toEntity(row: TaskTimeWithPersons): TaskTimeEntity {
+async function toEntity(row: TaskTimeWithPersons): Promise<TaskTimeEntity> {
+  const tz = await getUserTimezone();
   const withPersonIds: string[] = [];
   const forPersonIds: string[] = [];
   for (const p of row.task_time_persons ?? []) {
@@ -33,12 +34,12 @@ function toEntity(row: TaskTimeWithPersons): TaskTimeEntity {
   return {
     id: row.id,
     taskId: row.task_id,
-    completedAt: row.completed_at,
+    completedAt: formatInstantForUser(row.completed_at, tz),
     actualDurationMinutes: row.actual_duration_minutes ?? undefined,
     notes: row.notes ?? undefined,
     withPersonIds: withPersonIds.length > 0 ? withPersonIds : undefined,
     forPersonIds: forPersonIds.length > 0 ? forPersonIds : undefined,
-    createdAt: row.created_at,
+    createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
 
@@ -99,7 +100,7 @@ export async function createTaskTime(data: TaskTime): Promise<TaskTimeEntity> {
   }
 
   return {
-    ...toEntity(created as TaskTimeWithPersons),
+    ...(await toEntity(created as TaskTimeWithPersons)),
     withPersonIds: data.withPersonIds,
     forPersonIds: data.forPersonIds,
   };
@@ -145,7 +146,7 @@ export async function listTaskTime(options?: {
     throw new Error(`Failed to list task time: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => toEntity(row as TaskTimeWithPersons));
+  return Promise.all((data ?? []).map((row) => toEntity(row as TaskTimeWithPersons)));
 }
 
 /**
@@ -179,5 +180,5 @@ export async function deleteTaskTime(id: string): Promise<TaskTimeEntity | null>
     throw new Error(`Failed to delete task time: ${error.message}`);
   }
 
-  return toEntity(existing as TaskTimeWithPersons);
+  return await toEntity(existing as TaskTimeWithPersons);
 }

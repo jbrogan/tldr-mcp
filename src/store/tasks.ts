@@ -6,6 +6,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
+import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
 import type { Task } from "../schemas/task.js";
 import type { TaskEntity } from "../schemas/task.js";
 import type { Task as DbTask } from "../supabase/types.js";
@@ -20,7 +21,8 @@ interface TaskWithPersons extends DbTask {
 /**
  * Convert database row to entity format
  */
-function toEntity(row: TaskWithPersons): TaskEntity {
+async function toEntity(row: TaskWithPersons): Promise<TaskEntity> {
+  const tz = await getUserTimezone();
   const withPersonIds: string[] = [];
   const forPersonIds: string[] = [];
 
@@ -40,11 +42,11 @@ function toEntity(row: TaskWithPersons): TaskEntity {
     dueDate: row.due_date ?? undefined,
     scheduledDate: row.scheduled_date ?? undefined,
     estimatedDurationMinutes: row.estimated_duration_minutes ?? undefined,
-    completedAt: row.completed_at ?? undefined,
+    completedAt: row.completed_at ? formatInstantForUser(row.completed_at, tz) : undefined,
     notes: row.notes ?? undefined,
     withPersonIds: withPersonIds.length > 0 ? withPersonIds : undefined,
     forPersonIds: forPersonIds.length > 0 ? forPersonIds : undefined,
-    createdAt: row.created_at,
+    createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
 
@@ -110,7 +112,7 @@ export async function createTask(data: Task): Promise<TaskEntity> {
   }
 
   return {
-    ...toEntity(created),
+    ...(await toEntity(created)),
     withPersonIds: data.withPersonIds,
     forPersonIds: data.forPersonIds,
   };
@@ -142,7 +144,7 @@ export async function getTaskById(id: string): Promise<TaskEntity | undefined> {
     throw new Error(`Failed to get task: ${error.message}`);
   }
 
-  return data ? toEntity(data as TaskWithPersons) : undefined;
+  return data ? await toEntity(data as TaskWithPersons) : undefined;
 }
 
 /**
@@ -299,7 +301,7 @@ export async function listTasks(options?: {
     throw new Error(`Failed to list tasks: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => toEntity(row as TaskWithPersons));
+  return Promise.all((data ?? []).map((row) => toEntity(row as TaskWithPersons)));
 }
 
 /**
@@ -335,15 +337,15 @@ export async function listTasksForEnd(endId: string, options?: {
     throw new Error(`Failed to list tasks for end: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => {
+  return Promise.all((data ?? []).map(async (row) => {
     const task = row as TaskWithPersons & { profiles?: { display_name: string } };
     const isOwned = task.user_id === userId;
     return {
-      ...toEntity(task),
+      ...(await toEntity(task)),
       isShared: !isOwned,
       ownerDisplayName: task.profiles?.display_name,
     };
-  });
+  }));
 }
 
 /**

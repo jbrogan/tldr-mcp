@@ -5,6 +5,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
+import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
 import type { Team } from "../schemas/team.js";
 import type { TeamEntity } from "../schemas/team.js";
 import type { Team as DbTeam } from "../supabase/types.js";
@@ -12,12 +13,13 @@ import type { Team as DbTeam } from "../supabase/types.js";
 /**
  * Convert database row to entity format
  */
-function toEntity(row: DbTeam): TeamEntity {
+async function toEntity(row: DbTeam): Promise<TeamEntity> {
+  const tz = await getUserTimezone();
   return {
     id: row.id,
     name: row.name,
     organizationId: row.organization_id,
-    createdAt: row.created_at,
+    createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
 
@@ -66,7 +68,7 @@ export async function getTeamById(id: string): Promise<TeamEntity | undefined> {
     throw new Error(`Failed to get team: ${error.message}`);
   }
 
-  return data ? toEntity(data) : undefined;
+  return data ? await toEntity(data) : undefined;
 }
 
 /**
@@ -92,7 +94,7 @@ export async function listTeams(organizationId?: string): Promise<TeamEntity[]> 
     throw new Error(`Failed to list teams: ${error.message}`);
   }
 
-  return (data ?? []).map(toEntity);
+  return Promise.all((data ?? []).map(toEntity));
 }
 
 /**

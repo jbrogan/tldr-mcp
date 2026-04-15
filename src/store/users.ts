@@ -6,6 +6,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
+import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
 import type { User } from "../schemas/user.js";
 import type { UserEntity } from "../schemas/user.js";
 import type { ProfileRow as Profile } from "../supabase/types.js";
@@ -13,30 +14,14 @@ import type { ProfileRow as Profile } from "../supabase/types.js";
 /**
  * Convert database profile to user entity format
  */
-function toEntity(row: Profile): UserEntity {
+async function toEntity(row: Profile): Promise<UserEntity> {
+  const tz = await getUserTimezone();
   return {
     id: row.id,
     email: row.email,
     displayName: row.display_name,
-    createdAt: row.created_at,
+    createdAt: formatInstantForUser(row.created_at, tz),
   };
-}
-
-/**
- * Get the current user's timezone (from profile).
- * Returns IANA timezone string (e.g. "America/New_York"), defaults to "UTC".
- */
-export async function getUserTimezone(): Promise<string> {
-  const supabase = getSupabase();
-  const userId = getUserId();
-
-  const { data } = await supabase
-    .from("profiles")
-    .select("timezone")
-    .eq("id", userId)
-    .single();
-
-  return data?.timezone ?? "UTC";
 }
 
 /**
@@ -76,7 +61,7 @@ export async function getCurrentUser(): Promise<UserEntity | undefined> {
     throw new Error(`Failed to get current user: ${error.message}`);
   }
 
-  return data ? toEntity(data) : undefined;
+  return data ? await toEntity(data) : undefined;
 }
 
 /**
@@ -98,7 +83,7 @@ export async function getUserById(id: string): Promise<UserEntity | undefined> {
     throw new Error(`Failed to get user: ${error.message}`);
   }
 
-  return data ? toEntity(data) : undefined;
+  return data ? await toEntity(data) : undefined;
 }
 
 /**
@@ -120,7 +105,7 @@ export async function getUserByEmail(email: string): Promise<UserEntity | undefi
     throw new Error(`Failed to get user by email: ${error.message}`);
   }
 
-  return data ? toEntity(data) : undefined;
+  return data ? await toEntity(data) : undefined;
 }
 
 /**
@@ -139,7 +124,7 @@ export async function listUsers(): Promise<UserEntity[]> {
     throw new Error(`Failed to list users: ${error.message}`);
   }
 
-  return (data ?? []).map(toEntity);
+  return Promise.all((data ?? []).map(toEntity));
 }
 
 /**
@@ -169,7 +154,7 @@ export async function updateCurrentUser(
     throw new Error(`Failed to update user: ${error.message}`);
   }
 
-  return data ? toEntity(data) : null;
+  return data ? await toEntity(data) : null;
 }
 
 // Legacy functions for compatibility - these are now managed by Supabase Auth

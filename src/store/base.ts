@@ -22,6 +22,8 @@ import {
 export interface StoreContext {
   supabase: SupabaseClient<Database>;
   userId: string;
+  /** IANA timezone, lazily populated on first lookup per request. */
+  timezone?: string;
 }
 
 // AsyncLocalStorage for concurrent multi-user context (HTTP mode)
@@ -105,6 +107,16 @@ export function getUserId(): string {
   throw new Error(
     "Store context not set. Call setStoreContext() with authenticated user before store operations."
   );
+}
+
+/**
+ * Get the active store context (for mutation of lazy-cached fields like timezone).
+ * Returns null if no context is set.
+ */
+export function getActiveContext(): StoreContext | null {
+  const asyncCtx = asyncContext.getStore();
+  if (asyncCtx) return asyncCtx;
+  return currentContext;
 }
 
 /**

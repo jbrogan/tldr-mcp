@@ -8,9 +8,34 @@
  *  - Any conversion between the two MUST go through these helpers.
  */
 
-import { getUserTimezone } from "../store/users.js";
+import { getActiveContext, getSupabase, getUserId } from "../store/base.js";
 
-export { getUserTimezone };
+/**
+ * Raw DB fetch of the current user's IANA timezone.
+ * Falls back to "UTC" when no profile row is found.
+ */
+async function fetchUserTimezone(): Promise<string> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+  const { data } = await supabase
+    .from("profiles")
+    .select("timezone")
+    .eq("id", userId)
+    .single();
+  return data?.timezone ?? "UTC";
+}
+
+/**
+ * Get the current user's IANA timezone, cached on the active StoreContext
+ * so repeated lookups within a request hit the DB once.
+ */
+export async function getUserTimezone(): Promise<string> {
+  const ctx = getActiveContext();
+  if (ctx?.timezone) return ctx.timezone;
+  const tz = await fetchUserTimezone();
+  if (ctx) ctx.timezone = tz;
+  return tz;
+}
 
 /**
  * Today's date in the given timezone as YYYY-MM-DD.
@@ -44,7 +69,9 @@ function tzOffsetMinutes(utcInstant: number, tz: string): number {
     get("minute"),
     get("second"),
   );
-  return (asUtcIfLocal - utcInstant) / 60_000;
+  // Round to whole minutes: Intl only reports second precision, so any sub-second
+  // component of `utcInstant` would otherwise produce a fractional offset.
+  return Math.round((asUtcIfLocal - utcInstant) / 60_000);
 }
 
 /**
@@ -102,6 +129,36 @@ export function offsetDayInTz(date: string, days: number, tz: string): string {
   const anchor = new Date(localWallTimeToUtc(y, m, d, 12, 0, 0, tz));
   anchor.setUTCDate(anchor.getUTCDate() + days);
   return anchor.toLocaleDateString("en-CA", { timeZone: tz });
+}
+
+/**
+ * Format a UTC instant as an ISO 8601 string in the user's timezone,
+ * preserving the UTC instant via an explicit offset (e.g. "-04:00").
+ *
+ * `"2026-04-14T22:00:00Z"` + `"America/New_York"` → `"2026-04-14T18:00:00-04:00"`.
+ *
+ * The result round-trips losslessly — Postgres and JS both parse it back to
+ * the same UTC instant — but `.slice(0, 10)` yields the user-local date.
+ */
+export function formatInstantForUser(utcIso: string, tz: string): string {
+  const instant = new Date(utcIso);
+  const offsetMin = tzOffsetMinutes(instant.getTime(), tz);
+  const localMs = instant.getTime() + offsetMin * 60_000;
+  const rawLocal = new Date(localMs).toISOString();
+  // Strip trailing Z; drop ".000" millis when not informative.
+  const localWall = rawLocal.endsWith(".000Z")
+    ? rawLocal.slice(0, -5)
+    : rawLocal.slice(0, -1);
+  return `${localWall}${formatOffset(offsetMin)}`;
+}
+
+function formatOffset(minutes: number): string {
+  if (minutes === 0) return "Z";
+  const sign = minutes >= 0 ? "+" : "-";
+  const abs = Math.abs(minutes);
+  const h = String(Math.floor(abs / 60)).padStart(2, "0");
+  const m = String(abs % 60).padStart(2, "0");
+  return `${sign}${h}:${m}`;
 }
 
 /**

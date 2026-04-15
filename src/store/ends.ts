@@ -6,6 +6,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
+import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
 import type { End } from "../schemas/end.js";
 import type { EndEntity } from "../schemas/end.js";
 import type { End as DbEnd, EndShare, Profile } from "../supabase/types.js";
@@ -36,13 +37,14 @@ export interface EndShareInfo {
 /**
  * Convert database row to entity format
  */
-function toEntity(row: DbEnd): EndEntity {
+async function toEntity(row: DbEnd): Promise<EndEntity> {
+  const tz = await getUserTimezone();
   return {
     id: row.id,
     name: row.name,
     areaId: row.area_id ?? undefined,
     portfolioId: row.portfolio_id ?? undefined,
-    createdAt: row.created_at,
+    createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
 
@@ -91,7 +93,7 @@ export async function getEndById(id: string): Promise<EndEntity | undefined> {
     throw new Error(`Failed to get end: ${error.message}`);
   }
 
-  return data ? toEntity(data) : undefined;
+  return data ? await toEntity(data) : undefined;
 }
 
 /**
@@ -129,7 +131,7 @@ export async function updateEnd(
     throw new Error(`Failed to update end: ${error.message}`);
   }
 
-  return data ? toEntity(data) : null;
+  return data ? await toEntity(data) : null;
 }
 
 /**
@@ -160,10 +162,10 @@ export async function listEnds(options?: {
     throw new Error(`Failed to list ends: ${ownedError.message}`);
   }
 
-  const results: EndWithOwner[] = (ownedEnds ?? []).map((row) => ({
-    ...toEntity(row),
+  const results: EndWithOwner[] = await Promise.all((ownedEnds ?? []).map(async (row) => ({
+    ...(await toEntity(row)),
     isShared: false,
-  }));
+  })));
 
   // Get shared ends if requested
   if (options?.includeShared) {
@@ -198,7 +200,7 @@ export async function listEnds(options?: {
       if (options?.portfolioId && end.portfolio_id !== options.portfolioId) continue;
 
       results.push({
-        ...toEntity(end),
+        ...(await toEntity(end)),
         isShared: true,
         ownerId: end.user_id,
         ownerDisplayName: end.profiles?.display_name,
@@ -244,7 +246,7 @@ export async function deleteEnd(id: string): Promise<EndEntity | null> {
     throw new Error(`Failed to delete end: ${error.message}`);
   }
 
-  return toEntity(existing);
+  return await toEntity(existing);
 }
 
 // ============================================================================
@@ -318,6 +320,7 @@ export async function shareEnd(
     .eq("id", userId)
     .single();
 
+  const tz = await getUserTimezone();
   return {
     id: share.id,
     endId: endId,
@@ -326,7 +329,7 @@ export async function shareEnd(
     sharedByDisplayName: sharer?.display_name ?? "Unknown",
     sharedWithUserId: targetUser.id,
     sharedWithEmail: targetUser.email,
-    createdAt: share.created_at,
+    createdAt: formatInstantForUser(share.created_at, tz),
   };
 }
 
@@ -412,6 +415,7 @@ export async function listMyShares(): Promise<EndShareInfo[]> {
     .eq("id", userId)
     .single();
 
+  const tz = await getUserTimezone();
   return (data ?? []).map((row) => {
     const end = row.ends as unknown as { name: string };
     const sharedWith = row.profiles as unknown as { email: string; display_name: string };
@@ -424,7 +428,7 @@ export async function listMyShares(): Promise<EndShareInfo[]> {
       sharedByDisplayName: me?.display_name ?? "You",
       sharedWithUserId: row.shared_with_user_id,
       sharedWithEmail: sharedWith?.email ?? "Unknown",
-      createdAt: row.created_at,
+      createdAt: formatInstantForUser(row.created_at, tz),
     };
   });
 }

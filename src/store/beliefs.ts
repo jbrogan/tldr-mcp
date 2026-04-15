@@ -5,6 +5,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
+import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
 import type { Belief } from "../schemas/belief.js";
 import type { BeliefEntity } from "../schemas/belief.js";
 import type { Belief as DbBelief } from "../supabase/types.js";
@@ -13,13 +14,14 @@ interface BeliefWithEnds extends DbBelief {
   belief_ends?: Array<{ end_id: string }>;
 }
 
-function toEntity(row: BeliefWithEnds): BeliefEntity {
+async function toEntity(row: BeliefWithEnds): Promise<BeliefEntity> {
+  const tz = await getUserTimezone();
   return {
     id: row.id,
     name: row.name,
     description: row.description ?? undefined,
     endIds: row.belief_ends?.map((be) => be.end_id) ?? [],
-    createdAt: row.created_at,
+    createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
 
@@ -66,7 +68,7 @@ export async function getBeliefById(id: string): Promise<BeliefEntity | undefine
     throw new Error(`Failed to get belief: ${error.message}`);
   }
 
-  return data ? toEntity(data as BeliefWithEnds) : undefined;
+  return data ? await toEntity(data as BeliefWithEnds) : undefined;
 }
 
 /**
@@ -86,7 +88,7 @@ export async function listBeliefs(): Promise<BeliefEntity[]> {
     throw new Error(`Failed to list beliefs: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => toEntity(row as BeliefWithEnds));
+  return Promise.all((data ?? []).map((row) => toEntity(row as BeliefWithEnds)));
 }
 
 /**

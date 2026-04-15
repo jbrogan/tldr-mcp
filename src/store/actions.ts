@@ -7,7 +7,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
-import { getUserTimezone, localDateToUtcRange } from "../utils/timezone.js";
+import { getUserTimezone, localDateToUtcRange, formatInstantForUser } from "../utils/timezone.js";
 import type { Action } from "../schemas/action.js";
 import type { ActionEntity } from "../schemas/action.js";
 import type { Action as DbAction } from "../supabase/types.js";
@@ -47,7 +47,8 @@ export interface ActionWithOwner extends ActionEntity {
 /**
  * Convert database row to entity format
  */
-function toEntity(row: ActionWithPersons): ActionEntity {
+async function toEntity(row: ActionWithPersons): Promise<ActionEntity> {
+  const tz = await getUserTimezone();
   const withPersonIds: string[] = [];
   const forPersonIds: string[] = [];
 
@@ -62,12 +63,12 @@ function toEntity(row: ActionWithPersons): ActionEntity {
   return {
     id: row.id,
     habitId: row.habit_id,
-    completedAt: row.completed_at,
+    completedAt: formatInstantForUser(row.completed_at, tz),
     actualDurationMinutes: row.actual_duration_minutes ?? undefined,
     notes: row.notes ?? undefined,
     withPersonIds: withPersonIds.length > 0 ? withPersonIds : undefined,
     forPersonIds: forPersonIds.length > 0 ? forPersonIds : undefined,
-    createdAt: row.created_at,
+    createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
 
@@ -129,7 +130,7 @@ export async function createAction(data: Action): Promise<ActionEntity> {
   }
 
   return {
-    ...toEntity(created),
+    ...(await toEntity(created)),
     withPersonIds: data.withPersonIds,
     forPersonIds: data.forPersonIds,
   };
@@ -171,7 +172,7 @@ export async function listActions(options?: {
     throw new Error(`Failed to list actions: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => toEntity(row as ActionWithPersons));
+  return Promise.all((data ?? []).map((row) => toEntity(row as ActionWithPersons)));
 }
 
 /**
@@ -211,17 +212,17 @@ export async function listActionsWithShared(options?: {
     throw new Error(`Failed to list actions: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => {
+  return Promise.all((data ?? []).map(async (row) => {
     const action = row as ActionWithPersons & { profiles?: { display_name: string } };
     const isOwned = action.user_id === userId;
 
     return {
-      ...toEntity(action),
+      ...(await toEntity(action)),
       isShared: !isOwned,
       ownerId: isOwned ? undefined : action.user_id,
       ownerDisplayName: isOwned ? undefined : action.profiles?.display_name,
     };
-  });
+  }));
 }
 
 /**
@@ -243,7 +244,7 @@ export async function getActionById(id: string): Promise<ActionEntity | undefine
     throw new Error(`Failed to get action: ${error.message}`);
   }
 
-  return data ? toEntity(data as ActionWithPersons) : undefined;
+  return data ? await toEntity(data as ActionWithPersons) : undefined;
 }
 
 /**
@@ -381,5 +382,5 @@ export async function deleteAction(id: string): Promise<ActionEntity | null> {
     throw new Error(`Failed to delete action: ${error.message}`);
   }
 
-  return toEntity(existing as ActionWithPersons);
+  return await toEntity(existing as ActionWithPersons);
 }

@@ -958,7 +958,7 @@ export async function resolve(
   rawParams: Record<string, unknown>
 ): Promise<ResolvedParams> {
   // Set timezone for date resolution
-  const { getUserTimezone } = await import("../../store/users.js");
+  const { getUserTimezone } = await import("../../utils/timezone.js");
   try {
     _currentTimezone = await getUserTimezone();
   } catch {

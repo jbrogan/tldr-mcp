@@ -8,6 +8,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
+import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
 import type { Habit } from "../schemas/habit.js";
 import type { HabitEntity } from "../schemas/habit.js";
 import type { Habit as DbHabit } from "../supabase/types.js";
@@ -32,7 +33,8 @@ export interface HabitWithOwner extends HabitEntity {
 /**
  * Convert database row to entity format
  */
-function toEntity(row: HabitWithJoins): HabitEntity {
+async function toEntity(row: HabitWithJoins): Promise<HabitEntity> {
+  const tz = await getUserTimezone();
   return {
     id: row.id,
     name: row.name,
@@ -42,7 +44,7 @@ function toEntity(row: HabitWithJoins): HabitEntity {
     personIds: row.habit_persons?.map((hp) => hp.person_id) ?? [],
     frequency: row.frequency ?? undefined,
     durationMinutes: row.duration_minutes ?? undefined,
-    createdAt: row.created_at,
+    createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
 
@@ -108,7 +110,7 @@ export async function createHabit(data: Habit): Promise<HabitEntity> {
   }
 
   return {
-    ...toEntity(created),
+    ...(await toEntity(created)),
     endIds,
     personIds,
   };
@@ -134,7 +136,7 @@ export async function getHabitById(id: string): Promise<HabitEntity | undefined>
     throw new Error(`Failed to get habit: ${error.message}`);
   }
 
-  return data ? toEntity(data as HabitWithJoins) : undefined;
+  return data ? await toEntity(data as HabitWithJoins) : undefined;
 }
 
 /**
@@ -169,7 +171,7 @@ export async function listHabits(options?: {
     throw new Error(`Failed to list habits: ${error.message}`);
   }
 
-  let habits = (data ?? []).map((row) => toEntity(row as HabitWithJoins));
+  let habits = await Promise.all((data ?? []).map((row) => toEntity(row as HabitWithJoins)));
 
   // Filter by endId in memory (junction table)
   if (options?.endId) {
@@ -211,17 +213,17 @@ export async function listHabitsWithShared(options?: {
     throw new Error(`Failed to list habits: ${error.message}`);
   }
 
-  let habits: HabitWithOwner[] = (data ?? []).map((row) => {
+  let habits: HabitWithOwner[] = await Promise.all((data ?? []).map(async (row) => {
     const habit = row as HabitWithJoins & { profiles?: { display_name: string } };
     const isOwned = habit.user_id === userId;
 
     return {
-      ...toEntity(habit),
+      ...(await toEntity(habit)),
       isShared: !isOwned,
       ownerId: isOwned ? undefined : habit.user_id,
       ownerDisplayName: isOwned ? undefined : habit.profiles?.display_name,
     };
-  });
+  }));
 
   // Apply filters
   if (options?.areaId) {
@@ -269,7 +271,7 @@ export async function deleteHabit(id: string): Promise<HabitEntity | null> {
     throw new Error(`Failed to delete habit: ${error.message}`);
   }
 
-  return toEntity(existing as HabitWithJoins);
+  return await toEntity(existing as HabitWithJoins);
 }
 
 /**

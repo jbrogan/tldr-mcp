@@ -6,6 +6,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
+import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
 import type { Person, RelationshipType } from "../schemas/person.js";
 import type { PersonEntity } from "../schemas/person.js";
 import type { Person as DbPerson, PersonTeam } from "../supabase/types.js";
@@ -21,7 +22,8 @@ interface PersonWithTeams extends DbPerson {
 /**
  * Convert database row to entity format
  */
-function toEntity(row: PersonWithTeams): PersonEntity {
+async function toEntity(row: PersonWithTeams): Promise<PersonEntity> {
+  const tz = await getUserTimezone();
   return {
     id: row.id,
     firstName: row.first_name,
@@ -33,7 +35,7 @@ function toEntity(row: PersonWithTeams): PersonEntity {
     relationshipType: (row.relationship_type ?? undefined) as RelationshipType | undefined,
     teamIds: row.person_teams?.map((pt) => pt.team_id) ?? [],
     userId: row.linked_user_id ?? undefined,
-    createdAt: row.created_at,
+    createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
 
@@ -92,7 +94,7 @@ export async function createPerson(data: Person): Promise<PersonEntity> {
   }
 
   return {
-    ...toEntity(created),
+    ...(await toEntity(created)),
     teamIds,
   };
 }
@@ -123,7 +125,7 @@ export async function getPersonById(id: string): Promise<PersonEntity | undefine
     throw new Error(`Failed to get person: ${error.message}`);
   }
 
-  return data ? toEntity(data as PersonWithTeams) : undefined;
+  return data ? await toEntity(data as PersonWithTeams) : undefined;
 }
 
 /**
@@ -315,7 +317,7 @@ export async function listPersons(options?: {
     throw new Error(`Failed to list persons: ${error.message}`);
   }
 
-  let persons = (data ?? []).map((row) => toEntity(row as PersonWithTeams));
+  let persons = await Promise.all((data ?? []).map((row) => toEntity(row as PersonWithTeams)));
 
   // Filter by organization (persons in teams belonging to the org)
   if (options?.organizationId) {

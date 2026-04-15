@@ -6,17 +6,16 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
+import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
 import type { AreaEntity } from "../schemas/area.js";
 import type { Area as DbArea } from "../supabase/types.js";
 
-/**
- * Convert database row to entity format
- */
-function toEntity(row: DbArea): AreaEntity {
+async function toEntity(row: DbArea): Promise<AreaEntity> {
+  const tz = await getUserTimezone();
   return {
     id: row.id,
     name: row.name,
-    createdAt: row.created_at,
+    createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
 
@@ -38,7 +37,7 @@ export async function listAreas(): Promise<AreaEntity[]> {
     throw new Error(`Failed to list areas: ${error.message}`);
   }
 
-  return (data ?? []).map(toEntity);
+  return Promise.all((data ?? []).map(toEntity));
 }
 
 /**
@@ -65,7 +64,7 @@ export async function getAreaById(id: string): Promise<AreaEntity | undefined> {
     throw new Error(`Failed to get area: ${error.message}`);
   }
 
-  return data ? toEntity(data) : undefined;
+  return data ? await toEntity(data) : undefined;
 }
 
 /**
@@ -117,7 +116,7 @@ export async function updateArea(
     throw new Error(`Failed to update area: ${error.message}`);
   }
 
-  return data ? toEntity(data) : null;
+  return data ? await toEntity(data) : null;
 }
 
 /**
