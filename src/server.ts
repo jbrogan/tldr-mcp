@@ -21,6 +21,8 @@ import { runWithContextAsync, type StoreContext } from "./store/base.js";
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",") ?? ["http://localhost:5173"];
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const PUBLIC_URL = process.env.PUBLIC_URL ?? "https://tldr-mcp-production.up.railway.app";
+const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 
 // --- Per-session MCP server factory ---
 // McpServer only supports one transport at a time, so each session gets its own instance.
@@ -79,6 +81,38 @@ app.use(express.json());
 // Health check (no auth)
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", sessions: sessions.size });
+});
+
+// --- OAuth discovery (no auth) ---
+// RFC 9728: tells clients which authorization server(s) protect this resource.
+app.get("/.well-known/oauth-protected-resource", (_req, res) => {
+  res.json({
+    resource: PUBLIC_URL,
+    authorization_servers: [`${SUPABASE_URL}/auth/v1`],
+    bearer_methods_supported: ["header"],
+  });
+});
+
+// RFC 8414: advertises the authorization server's OAuth capabilities.
+// We proxy Supabase's metadata so Claude always sees whatever endpoints
+// Supabase currently advertises (registration_endpoint in particular).
+let cachedAuthMetadata: unknown | null = null;
+app.get("/.well-known/oauth-authorization-server", async (_req, res) => {
+  try {
+    if (!cachedAuthMetadata) {
+      const upstream = await fetch(
+        `${SUPABASE_URL}/.well-known/oauth-authorization-server/auth/v1`,
+      );
+      if (!upstream.ok) {
+        throw new Error(`Supabase metadata fetch returned ${upstream.status}`);
+      }
+      cachedAuthMetadata = await upstream.json();
+    }
+    res.json(cachedAuthMetadata);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(502).json({ error: `Failed to fetch auth server metadata: ${message}` });
+  }
 });
 
 // Helper to handle MCP requests (shared by POST, GET, DELETE)
