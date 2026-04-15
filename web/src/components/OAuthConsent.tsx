@@ -32,7 +32,8 @@ type State =
   | { kind: "missing-id" }
   | { kind: "error"; message: string }
   | { kind: "ready"; details: Details }
-  | { kind: "submitting"; details: Details };
+  | { kind: "submitting"; details: Details }
+  | { kind: "handed-off"; approved: boolean; redirectUrl: string };
 
 interface Props {
   authorizationId: string | null;
@@ -92,6 +93,9 @@ export function OAuthConsent({ authorizationId, onSignOut, userEmail }: Props) {
         return;
       }
       if (body?.redirect_url) {
+        setState({ kind: "handed-off", approved: approve, redirectUrl: body.redirect_url });
+        // Kick off the hand-off. Custom URL schemes (e.g. claude://) leave the
+        // tab on this page after the OS prompt, so we also render a "done" UI.
         window.location.href = body.redirect_url;
       }
     } catch (err) {
@@ -109,6 +113,29 @@ export function OAuthConsent({ authorizationId, onSignOut, userEmail }: Props) {
 
   if (state.kind === "error") {
     return <Centered tone="error">{state.message}</Centered>;
+  }
+
+  if (state.kind === "handed-off") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="w-full max-w-md bg-white rounded-xl shadow-md p-8 space-y-4 text-center">
+          <h1 className="text-xl font-bold text-gray-900">
+            {state.approved ? "Authorized" : "Denied"}
+          </h1>
+          <p className="text-sm text-gray-500">
+            {state.approved
+              ? "You can return to the app that requested access. This tab can be closed."
+              : "Access was denied. This tab can be closed."}
+          </p>
+          <a
+            href={state.redirectUrl}
+            className="text-xs text-blue-600 hover:text-blue-500"
+          >
+            If nothing happened, click here to continue.
+          </a>
+        </div>
+      </div>
+    );
   }
 
   const { details } = state;
