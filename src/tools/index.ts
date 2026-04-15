@@ -1350,9 +1350,15 @@ export function registerTools(server: McpServer): void {
       },
     },
     async ({ habitId, completedAt, actualDurationMinutes, notes, withPersonIds, forPersonIds }) => {
+      let completedAtISO = completedAt;
+      if (completedAt.length === 10) {
+        const { getUserTimezone, localDateToUtcAnchor } = await import("../utils/timezone.js");
+        const tz = await getUserTimezone();
+        completedAtISO = localDateToUtcAnchor(completedAt, tz);
+      }
       const action = await createAction({
         habitId,
-        completedAt,
+        completedAt: completedAtISO,
         actualDurationMinutes,
         notes,
         withPersonIds,
@@ -1477,7 +1483,15 @@ export function registerTools(server: McpServer): void {
     async ({ id, completedAt, actualDurationMinutes, notes, withPersonIds, forPersonIds }) => {
       const { updateAction } = await import("../store/actions.js");
       const updates: Record<string, unknown> = {};
-      if (completedAt !== undefined) updates.completedAt = completedAt;
+      if (completedAt !== undefined) {
+        if (completedAt.length === 10) {
+          const { getUserTimezone, localDateToUtcAnchor } = await import("../utils/timezone.js");
+          const tz = await getUserTimezone();
+          updates.completedAt = localDateToUtcAnchor(completedAt, tz);
+        } else {
+          updates.completedAt = completedAt;
+        }
+      }
       if (actualDurationMinutes !== undefined) updates.actualDurationMinutes = actualDurationMinutes;
       if (notes !== undefined) updates.notes = notes;
       if (withPersonIds !== undefined) updates.withPersonIds = withPersonIds;
