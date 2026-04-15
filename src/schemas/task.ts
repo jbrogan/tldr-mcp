@@ -14,7 +14,7 @@ export const TaskSchema = z.object({
   dueDate: z.string().optional().describe("Due date (YYYY-MM-DD)"),
   scheduledDate: z.string().optional().describe("Scheduled work date (YYYY-MM-DD)"),
   estimatedDurationMinutes: z.number().int().positive().optional().describe("Estimated time to complete (minutes)"),
-  completedAt: z.string().optional().describe("When completed (ISO string). Omit if open."),
+  completedAt: z.string().nullable().optional().describe("When completed (ISO string). Omit if open. Pass null to reopen."),
   notes: z.string().optional(),
 });
 

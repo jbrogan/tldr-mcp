@@ -536,6 +536,7 @@ program
   .option("-m, --actualDurationMinutes <min>", "Time spent when completed (minutes)")
   .option("-d, --dueDate <date>", "Due date (YYYY-MM-DD)")
   .option("-C, --complete", "Mark as completed (sets completedAt to now)")
+  .option("-R, --reopen", "Reopen task (clears completedAt)")
   .option("--notes <notes>", "Notes")
   .action(async (opts) => {
     await withClient(async (client) => {
@@ -548,6 +549,7 @@ program
       if (opts.actualDurationMinutes != null) args.actualDurationMinutes = parseInt(String(opts.actualDurationMinutes), 10);
       if (opts.dueDate !== undefined) args.dueDate = opts.dueDate;
       if (opts.complete) args.completedAt = new Date().toISOString();
+      if (opts.reopen) args.completedAt = null;
       if (opts.notes !== undefined) args.notes = opts.notes;
       const result = await client.callTool({
         name: "update_task",

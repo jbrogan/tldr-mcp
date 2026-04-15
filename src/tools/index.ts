@@ -1663,7 +1663,7 @@ export function registerTools(server: McpServer): void {
     "update_task",
     {
       title: "Update Task",
-      description: "Updates a task. Use to complete, schedule, estimate time, change details, or add with/for.",
+      description: "Updates a task. Use to complete, reopen, schedule, estimate time, change details, or add with/for.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the task to update"),
         name: z.string().min(1).optional().describe("Task name"),
@@ -1674,7 +1674,7 @@ export function registerTools(server: McpServer): void {
         dueDate: z.string().optional().describe("Due date (YYYY-MM-DD)"),
         scheduledDate: z.string().optional().describe("Scheduled work date (YYYY-MM-DD)"),
         estimatedDurationMinutes: z.number().optional().describe("Estimated time to complete (minutes)"),
-        completedAt: z.string().optional().describe("When completed (ISO). Set to mark complete."),
+        completedAt: z.string().nullable().optional().describe("When completed (ISO). Set to mark complete, null to reopen."),
         notes: z.string().optional(),
       },
     },
@@ -1702,7 +1702,7 @@ export function registerTools(server: McpServer): void {
         content: [
           {
             type: "text",
-            text: `Updated task: ${task?.name} (${id})${task?.completedAt ? " - completed" : ""}`,
+            text: `Updated task: ${task?.name} (${id})${task?.completedAt ? " - completed" : completedAt === null ? " - reopened" : ""}`,
           },
         ],
       };
