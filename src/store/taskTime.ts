@@ -5,6 +5,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
+import { getUserTimezone, localDateToUtcRange } from "../utils/timezone.js";
 import type { TaskTime } from "../schemas/taskTime.js";
 import type { TaskTimeEntity } from "../schemas/taskTime.js";
 
@@ -128,14 +129,14 @@ export async function listTaskTime(options?: {
     query = query.eq("task_id", options.taskId);
   }
 
-  if (options?.fromDate) {
-    query = query.gte("completed_at", options.fromDate);
-  }
-
-  if (options?.toDate) {
-    const endDate = new Date(options.toDate);
-    endDate.setDate(endDate.getDate() + 1);
-    query = query.lt("completed_at", endDate.toISOString().slice(0, 10));
+  if (options?.fromDate || options?.toDate) {
+    const tz = await getUserTimezone();
+    if (options?.fromDate) {
+      query = query.gte("completed_at", localDateToUtcRange(options.fromDate, tz).startUtc);
+    }
+    if (options?.toDate) {
+      query = query.lt("completed_at", localDateToUtcRange(options.toDate, tz).endUtc);
+    }
   }
 
   const { data, error } = await query;

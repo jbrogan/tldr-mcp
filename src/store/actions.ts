@@ -7,9 +7,26 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
+import { getUserTimezone, localDateToUtcRange } from "../utils/timezone.js";
 import type { Action } from "../schemas/action.js";
 import type { ActionEntity } from "../schemas/action.js";
 import type { Action as DbAction } from "../supabase/types.js";
+
+/**
+ * Resolve a user-local date range to UTC instant bounds for TIMESTAMPTZ queries.
+ * Fetches the user's timezone once per call when a filter is present.
+ */
+async function resolveDateRangeToUtc(
+  fromDate?: string,
+  toDate?: string,
+): Promise<{ fromUtc?: string; toUtcExclusive?: string }> {
+  if (!fromDate && !toDate) return {};
+  const tz = await getUserTimezone();
+  return {
+    fromUtc: fromDate ? localDateToUtcRange(fromDate, tz).startUtc : undefined,
+    toUtcExclusive: toDate ? localDateToUtcRange(toDate, tz).endUtc : undefined,
+  };
+}
 
 /**
  * Action row with person relationships joined
@@ -144,16 +161,9 @@ export async function listActions(options?: {
     query = query.eq("habit_id", options.habitId);
   }
 
-  if (options?.fromDate) {
-    query = query.gte("completed_at", options.fromDate);
-  }
-
-  if (options?.toDate) {
-    // Add one day to include the end date
-    const endDate = new Date(options.toDate);
-    endDate.setDate(endDate.getDate() + 1);
-    query = query.lt("completed_at", endDate.toISOString().slice(0, 10));
-  }
+  const { fromUtc, toUtcExclusive } = await resolveDateRangeToUtc(options?.fromDate, options?.toDate);
+  if (fromUtc) query = query.gte("completed_at", fromUtc);
+  if (toUtcExclusive) query = query.lt("completed_at", toUtcExclusive);
 
   const { data, error } = await query;
 
@@ -191,15 +201,9 @@ export async function listActionsWithShared(options?: {
     query = query.eq("habit_id", options.habitId);
   }
 
-  if (options?.fromDate) {
-    query = query.gte("completed_at", options.fromDate);
-  }
-
-  if (options?.toDate) {
-    const endDate = new Date(options.toDate);
-    endDate.setDate(endDate.getDate() + 1);
-    query = query.lt("completed_at", endDate.toISOString().slice(0, 10));
-  }
+  const { fromUtc, toUtcExclusive } = await resolveDateRangeToUtc(options?.fromDate, options?.toDate);
+  if (fromUtc) query = query.gte("completed_at", fromUtc);
+  if (toUtcExclusive) query = query.lt("completed_at", toUtcExclusive);
 
   const { data, error } = await query;
 

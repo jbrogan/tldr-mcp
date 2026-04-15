@@ -1393,23 +1393,11 @@ export function registerTools(server: McpServer): void {
       let resolvedFrom = fromDate;
       let resolvedTo = toDate;
       if (period) {
-        const now = new Date();
-        const today = now.toISOString().slice(0, 10);
-        const yesterday = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
-        if (period === "today") {
-          resolvedFrom = resolvedTo = today;
-        } else if (period === "yesterday") {
-          resolvedFrom = resolvedTo = yesterday;
-        } else if (period === "this_week") {
-          const day = now.getDay();
-          const mondayOffset = day === 0 ? -6 : 1 - day;
-          const monday = new Date(now);
-          monday.setDate(now.getDate() + mondayOffset);
-          resolvedFrom = monday.toISOString().slice(0, 10);
-          const sunday = new Date(monday);
-          sunday.setDate(monday.getDate() + 6);
-          resolvedTo = sunday.toISOString().slice(0, 10);
-        }
+        const { getUserTimezone, periodToDateRange } = await import("../utils/timezone.js");
+        const tz = await getUserTimezone();
+        const range = periodToDateRange(period, tz);
+        resolvedFrom = range.fromDate;
+        resolvedTo = range.toDate;
       }
       const actions = await listActions({ habitId, fromDate: resolvedFrom, toDate: resolvedTo });
       if (actions.length === 0) {
@@ -1755,7 +1743,12 @@ export function registerTools(server: McpServer): void {
     },
     async ({ taskId, completedAt, actualDurationMinutes, notes, withPersonIds, forPersonIds }) => {
       const { createTaskTime } = await import("../store/taskTime.js");
-      const completedAtISO = completedAt.length === 10 ? `${completedAt}T12:00:00.000Z` : completedAt;
+      let completedAtISO = completedAt;
+      if (completedAt.length === 10) {
+        const { getUserTimezone, localDateToUtcAnchor } = await import("../utils/timezone.js");
+        const tz = await getUserTimezone();
+        completedAtISO = localDateToUtcAnchor(completedAt, tz);
+      }
       const entry = await createTaskTime({ taskId, completedAt: completedAtISO, actualDurationMinutes, notes, withPersonIds, forPersonIds });
       return { content: [{ type: "text", text: `Logged task time: ${entry.id}${actualDurationMinutes ? ` (${actualDurationMinutes} min)` : ""}` }] };
     }
