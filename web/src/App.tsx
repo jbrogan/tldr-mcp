@@ -4,6 +4,7 @@ import { Login } from "./components/Login";
 import { Chat } from "./components/Chat";
 import { Sidebar } from "./components/Sidebar";
 import { DetailPanel } from "./components/DetailPanel";
+import { OAuthConsent } from "./components/OAuthConsent";
 import { connect, disconnect } from "./lib/mcp";
 import { supabase } from "./lib/supabase";
 
@@ -13,7 +14,16 @@ function App() {
   const [mcpError, setMcpError] = useState<string | null>(null);
   const connectingRef = useRef(false);
 
+  const isConsentPage =
+    typeof window !== "undefined" && window.location.pathname === "/oauth/consent";
+
   useEffect(() => {
+    // Consent page is a standalone flow — no MCP connection needed.
+    if (isConsentPage) {
+      disconnect();
+      setMcpReady(false);
+      return;
+    }
     if (!session?.access_token) {
       disconnect();
       setMcpReady(false);
@@ -57,13 +67,33 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [session?.access_token]);
+  }, [session?.access_token, isConsentPage]);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <p className="text-gray-400">Loading...</p>
       </div>
+    );
+  }
+
+  if (isConsentPage) {
+    if (!session) {
+      return (
+        <Login
+          onSignIn={signIn}
+          onSignUp={signUp}
+          onGoogleSignIn={signInWithGoogle}
+        />
+      );
+    }
+    const authorizationId = new URLSearchParams(window.location.search).get("authorization_id");
+    return (
+      <OAuthConsent
+        authorizationId={authorizationId}
+        onSignOut={signOut}
+        userEmail={session.user.email ?? ""}
+      />
     );
   }
 
