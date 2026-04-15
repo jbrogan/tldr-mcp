@@ -22,7 +22,9 @@ const PORT = parseInt(process.env.PORT || "3000", 10);
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",") ?? ["http://localhost:5173"];
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const PUBLIC_URL = process.env.PUBLIC_URL ?? "https://tldr-mcp-production.up.railway.app";
+const PUBLIC_SITE_URL = process.env.PUBLIC_SITE_URL ?? "https://tldr-mcp.vercel.app";
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
 
 // --- Per-session MCP server factory ---
 // McpServer only supports one transport at a time, so each session gets its own instance.
@@ -179,6 +181,58 @@ async function handleMcpRequest(req: express.Request, res: express.Response) {
 app.post("/mcp", authMiddleware, handleMcpRequest);
 app.get("/mcp", authMiddleware, handleMcpRequest);
 app.delete("/mcp", authMiddleware, handleMcpRequest);
+
+// --- OAuth consent proxy ---
+// Supabase's OAuth consent endpoints reject browser-side calls on
+// origin/referer mismatch (documented limitation). We proxy from the server
+// with explicit Origin/Referer headers matching the configured Site URL,
+// forwarding the caller's Bearer (Supabase JWT) through unchanged.
+async function proxyOAuthConsent(req: express.Request, res: express.Response) {
+  const rawId = req.params.authorizationId;
+  const authorizationId = Array.isArray(rawId) ? rawId[0] : rawId;
+  const bearer = req.headers.authorization;
+  if (!bearer?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Missing Authorization header" });
+    return;
+  }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    res.status(500).json({ error: "Supabase env not configured" });
+    return;
+  }
+
+  const isPost = req.method === "POST";
+  const pathSuffix = isPost ? "/consent" : "";
+  const url = `${SUPABASE_URL}/auth/v1/oauth/authorizations/${encodeURIComponent(authorizationId)}${pathSuffix}`;
+
+  const headers: Record<string, string> = {
+    Authorization: bearer,
+    apikey: SUPABASE_ANON_KEY,
+    Origin: PUBLIC_SITE_URL,
+    Referer: `${PUBLIC_SITE_URL}/oauth/consent`,
+  };
+  if (isPost) headers["Content-Type"] = "application/json";
+
+  const init: RequestInit = {
+    method: req.method,
+    headers,
+    ...(isPost && req.body ? { body: JSON.stringify(req.body) } : {}),
+  };
+
+  try {
+    const upstream = await fetch(url, init);
+    const body = await upstream.text();
+    res
+      .status(upstream.status)
+      .type(upstream.headers.get("content-type") ?? "application/json")
+      .send(body);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Upstream fetch failed";
+    res.status(502).json({ error: message });
+  }
+}
+
+app.get("/oauth/consent/:authorizationId", proxyOAuthConsent);
+app.post("/oauth/consent/:authorizationId", proxyOAuthConsent);
 
 // --- API token management ---
 // These endpoints require Supabase JWT auth (not API tokens, to prevent

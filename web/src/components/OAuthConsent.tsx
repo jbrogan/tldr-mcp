@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
+const API_BASE = (import.meta.env.VITE_MCP_URL || "http://localhost:3000/mcp").replace(
+  /\/mcp$/,
+  "",
+);
+
 type Details = {
   authorization_id: string;
   redirect_uri: string;
@@ -8,6 +13,19 @@ type Details = {
   user: { id: string; email: string };
   scope: string;
 };
+
+async function authFetch(path: string, init?: RequestInit): Promise<Response> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      ...(init?.headers || {}),
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+}
 
 type State =
   | { kind: "loading" }
@@ -34,19 +52,24 @@ export function OAuthConsent({ authorizationId, onSignOut, userEmail }: Props) {
     let cancelled = false;
 
     (async () => {
-      const { data, error } = await supabase.auth.oauth.getAuthorizationDetails(authorizationId);
-      if (cancelled) return;
-      if (error) {
-        setState({ kind: "error", message: error.message });
-        return;
-      }
-      if (data && "redirect_url" in data) {
-        // Already consented — redirect immediately.
-        window.location.href = data.redirect_url;
-        return;
-      }
-      if (data) {
-        setState({ kind: "ready", details: data as Details });
+      try {
+        const response = await authFetch(`/oauth/consent/${authorizationId}`);
+        if (cancelled) return;
+        const body = await response.json();
+        if (!response.ok) {
+          setState({ kind: "error", message: body?.error ?? `HTTP ${response.status}` });
+          return;
+        }
+        if (body && "redirect_url" in body) {
+          // Already consented — redirect immediately.
+          window.location.href = body.redirect_url;
+          return;
+        }
+        setState({ kind: "ready", details: body as Details });
+      } catch (err) {
+        if (!cancelled) {
+          setState({ kind: "error", message: err instanceof Error ? err.message : "Request failed" });
+        }
       }
     })();
 
@@ -58,16 +81,21 @@ export function OAuthConsent({ authorizationId, onSignOut, userEmail }: Props) {
   const decide = async (approve: boolean) => {
     if (!authorizationId || state.kind !== "ready") return;
     setState({ kind: "submitting", details: state.details });
-    const api = supabase.auth.oauth;
-    const { data, error } = approve
-      ? await api.approveAuthorization(authorizationId, { skipBrowserRedirect: true })
-      : await api.denyAuthorization(authorizationId, { skipBrowserRedirect: true });
-    if (error) {
-      setState({ kind: "error", message: error.message });
-      return;
-    }
-    if (data?.redirect_url) {
-      window.location.href = data.redirect_url;
+    try {
+      const response = await authFetch(`/oauth/consent/${authorizationId}`, {
+        method: "POST",
+        body: JSON.stringify({ action: approve ? "approve" : "deny" }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setState({ kind: "error", message: body?.error ?? `HTTP ${response.status}` });
+        return;
+      }
+      if (body?.redirect_url) {
+        window.location.href = body.redirect_url;
+      }
+    } catch (err) {
+      setState({ kind: "error", message: err instanceof Error ? err.message : "Request failed" });
     }
   };
 
