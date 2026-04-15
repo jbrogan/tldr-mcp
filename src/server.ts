@@ -22,7 +22,6 @@ const PORT = parseInt(process.env.PORT || "3000", 10);
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",") ?? ["http://localhost:5173"];
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const PUBLIC_URL = process.env.PUBLIC_URL ?? "https://tldr-mcp-production.up.railway.app";
-const PUBLIC_SITE_URL = process.env.PUBLIC_SITE_URL ?? "https://tldr-mcp.vercel.app";
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
 
@@ -204,11 +203,13 @@ async function proxyOAuthConsent(req: express.Request, res: express.Response) {
   const pathSuffix = isPost ? "/consent" : "";
   const url = `${SUPABASE_URL}/auth/v1/oauth/authorizations/${encodeURIComponent(authorizationId)}${pathSuffix}`;
 
+  // Supabase's validateRequestOrigin accepts empty Origin as a backend-
+  // originated request and only enforces the allow-list if Origin is present.
+  // Do NOT set Origin/Referer here — they'd be validated against the Redirect
+  // URLs allow-list (which is for OAuth client callbacks, not this domain).
   const headers: Record<string, string> = {
     Authorization: bearer,
     apikey: SUPABASE_ANON_KEY,
-    Origin: PUBLIC_SITE_URL,
-    Referer: `${PUBLIC_SITE_URL}/oauth/consent`,
   };
   if (isPost) headers["Content-Type"] = "application/json";
 
