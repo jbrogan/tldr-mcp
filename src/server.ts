@@ -235,6 +235,24 @@ async function proxyOAuthConsent(req: express.Request, res: express.Response) {
 app.get("/oauth/consent/:authorizationId", proxyOAuthConsent);
 app.post("/oauth/consent/:authorizationId", proxyOAuthConsent);
 
+// --- Chat (Agent SDK) ---
+app.post("/api/chat", authMiddleware, async (req, res) => {
+  try {
+    const { text } = req.body ?? {};
+    if (!text || typeof text !== "string") {
+      res.status(400).json({ error: "text is required" });
+      return;
+    }
+    const { ask } = await import("./services/ask.js");
+    const response = await runWithContextAsync(req.storeContext!, () => ask(text));
+    res.json({ response });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Chat failed";
+    console.error(`[chat] error: ${message}`);
+    res.status(500).json({ error: message });
+  }
+});
+
 // --- API token management ---
 // These endpoints require Supabase JWT auth (not API tokens, to prevent
 // tokens from creating or deleting themselves).

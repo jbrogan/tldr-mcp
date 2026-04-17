@@ -75,7 +75,6 @@ import {
   updateTask,
 } from "../store/tasks.js";
 import { listUsers } from "../store/users.js";
-import { interpretAndExecute } from "../services/naturalLanguage.js";
 
 async function resolveOwnerName(ownerType: string, ownerId: string): Promise<string> {
   if (ownerType === "organization") {
@@ -2151,25 +2150,6 @@ export function registerTools(server: McpServer): void {
             text: `Deleted person: ${deleted.firstName} ${deleted.lastName} (${deleted.id})`,
           },
         ],
-      };
-    }
-  );
-
-  server.registerTool(
-    "natural_language_command",
-    {
-      title: "Natural Language Command",
-      description:
-        "Interpret natural language and execute the appropriate action. Examples: 'I went to the gym today for 60 minutes', 'I want to be a better father', 'What habits would help me be a better father?', 'Create an Engineering team in Newco', 'Add my wife Jennifer, jennifer@example.com'.",
-      inputSchema: {
-        text: z.string().min(1).describe("Natural language input from the user"),
-      },
-    },
-    async ({ text }) => {
-      const result = await interpretAndExecute(text);
-      return {
-        content: [{ type: "text", text: result.message }],
-        isError: !result.success,
       };
     }
   );

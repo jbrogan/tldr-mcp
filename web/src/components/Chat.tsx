@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { useMcpTool } from "../hooks/useMcpTool";
+import { supabase } from "../lib/supabase";
 import { Settings } from "./Settings";
+
+const API_BASE = (import.meta.env.VITE_MCP_URL || "http://localhost:3000/mcp").replace(
+  /\/mcp$/,
+  "",
+);
 
 interface Message {
   id: number;
@@ -18,7 +23,7 @@ export function Chat({ onSignOut, userEmail }: ChatProps) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [showSettings, setShowSettings] = useState(false);
-  const { call, loading } = useMcpTool();
+  const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   let nextId = useRef(0);
@@ -39,16 +44,40 @@ export function Chat({ onSignOut, userEmail }: ChatProps) {
     const userMsg: Message = { id: nextId.current++, role: "user", text };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setLoading(true);
 
-    const result = await call("natural_language_command", { text });
-
-    const assistantMsg: Message = {
-      id: nextId.current++,
-      role: "assistant",
-      text: result?.text ?? "Something went wrong.",
-      isError: result?.isError,
-    };
-    setMessages((prev) => [...prev, assistantMsg]);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      const res = await fetch(`${API_BASE}/api/chat`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text }),
+      });
+      const body = await res.json();
+      const assistantMsg: Message = {
+        id: nextId.current++,
+        role: "assistant",
+        text: res.ok ? body.response : body.error ?? "Something went wrong.",
+        isError: !res.ok,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId.current++,
+          role: "assistant",
+          text: err instanceof Error ? err.message : "Request failed.",
+          isError: true,
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
