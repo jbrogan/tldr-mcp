@@ -417,6 +417,11 @@ export type EndRow = {
   name: string;
   area_id: string | null;
   portfolio_id: string | null;
+  end_type: string;
+  state: string;
+  due_date: string | null;
+  thesis: string | null;
+  resolution_notes: string | null;
   created_at: string;
 };
 
@@ -603,6 +608,11 @@ export type EndInsert = {
   name: string;
   area_id?: string | null;
   portfolio_id?: string | null;
+  end_type?: string;
+  state?: string;
+  due_date?: string | null;
+  thesis?: string | null;
+  resolution_notes?: string | null;
   created_at?: string;
 };
 

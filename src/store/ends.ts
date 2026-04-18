@@ -8,7 +8,8 @@
 import { getSupabase, getUserId } from "./base.js";
 import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
 import type { End } from "../schemas/end.js";
-import type { EndEntity } from "../schemas/end.js";
+import type { EndEntity, EndType, EndState } from "../schemas/end.js";
+import { isValidState, isValidTransition, validateEndFields } from "../schemas/end.js";
 import type { End as DbEnd, EndShare, Profile } from "../supabase/types.js";
 
 /**
@@ -44,6 +45,11 @@ async function toEntity(row: DbEnd): Promise<EndEntity> {
     name: row.name,
     areaId: row.area_id ?? undefined,
     portfolioId: row.portfolio_id ?? undefined,
+    endType: (row.end_type ?? "journey") as EndType,
+    state: (row.state ?? "active") as EndState,
+    dueDate: row.due_date ?? undefined,
+    thesis: row.thesis ?? undefined,
+    resolutionNotes: row.resolution_notes ?? undefined,
     createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
@@ -55,6 +61,20 @@ export async function createEnd(data: End): Promise<EndEntity> {
   const supabase = getSupabase();
   const userId = getUserId();
 
+  // Validate type-specific fields
+  const fieldError = validateEndFields(data.endType ?? "journey", {
+    thesis: data.thesis,
+    resolutionNotes: data.resolutionNotes,
+  });
+  if (fieldError) throw new Error(fieldError);
+
+  // Validate initial state for the type
+  const endType = data.endType ?? "journey";
+  const state = data.state ?? "active";
+  if (!isValidState(endType as EndType, state as EndState)) {
+    throw new Error(`Invalid initial state '${state}' for end type '${endType}'`);
+  }
+
   const { data: created, error } = await supabase
     .from("ends")
     .insert({
@@ -62,6 +82,10 @@ export async function createEnd(data: End): Promise<EndEntity> {
       name: data.name,
       area_id: data.areaId,
       portfolio_id: data.portfolioId,
+      end_type: endType,
+      state,
+      due_date: data.dueDate,
+      thesis: data.thesis,
     })
     .select()
     .single();
@@ -101,16 +125,65 @@ export async function getEndById(id: string): Promise<EndEntity | undefined> {
  */
 export async function updateEnd(
   id: string,
-  updates: Partial<Pick<EndEntity, "name" | "areaId" | "portfolioId">>
+  updates: Partial<
+    Pick<
+      EndEntity,
+      "name" | "areaId" | "portfolioId" | "state" | "dueDate" | "thesis" | "resolutionNotes"
+    >
+  >,
 ): Promise<EndEntity | null> {
   const supabase = getSupabase();
   const userId = getUserId();
+
+  // Fetch current end for state validation
+  const { data: current, error: getError } = await supabase
+    .from("ends")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .single();
+
+  if (getError) {
+    if (getError.code === "PGRST116") return null;
+    throw new Error(`Failed to get end: ${getError.message}`);
+  }
+  if (!current) return null;
+
+  const endType = current.end_type as EndType;
+
+  // Validate state transition
+  if (updates.state !== undefined) {
+    const fromState = current.state as EndState;
+    const toState = updates.state as EndState;
+
+    if (!isValidState(endType, toState)) {
+      throw new Error(
+        `State '${toState}' is not valid for ${endType} ends`,
+      );
+    }
+    if (!isValidTransition(endType, fromState, toState)) {
+      throw new Error(
+        `Cannot transition ${endType} end from '${fromState}' to '${toState}'`,
+      );
+    }
+  }
+
+  // Validate type-specific fields
+  const fieldError = validateEndFields(endType, {
+    thesis: updates.thesis ?? current.thesis ?? undefined,
+    resolutionNotes: updates.resolutionNotes ?? current.resolution_notes ?? undefined,
+  });
+  if (fieldError) throw new Error(fieldError);
 
   // Prepare update data
   const updateData: Record<string, unknown> = {};
   if (updates.name !== undefined) updateData.name = updates.name;
   if (updates.areaId !== undefined) updateData.area_id = updates.areaId;
   if (updates.portfolioId !== undefined) updateData.portfolio_id = updates.portfolioId;
+  if (updates.state !== undefined) updateData.state = updates.state;
+  if (updates.dueDate !== undefined) updateData.due_date = updates.dueDate;
+  if (updates.thesis !== undefined) updateData.thesis = updates.thesis;
+  if (updates.resolutionNotes !== undefined) updateData.resolution_notes = updates.resolutionNotes;
 
   if (Object.keys(updateData).length === 0) {
     return getEndById(id) as Promise<EndEntity | null>;
@@ -120,14 +193,12 @@ export async function updateEnd(
     .from("ends")
     .update(updateData)
     .eq("id", id)
-    .eq("user_id", userId) // Only owner can update
+    .eq("user_id", userId)
     .select()
     .single();
 
   if (error) {
-    if (error.code === "PGRST116") {
-      return null;
-    }
+    if (error.code === "PGRST116") return null;
     throw new Error(`Failed to update end: ${error.message}`);
   }
 
@@ -141,6 +212,8 @@ export async function updateEnd(
 export async function listEnds(options?: {
   areaId?: string;
   portfolioId?: string;
+  endType?: string;
+  state?: string;
   includeShared?: boolean;
 }): Promise<EndWithOwner[]> {
   const supabase = getSupabase();
@@ -154,6 +227,12 @@ export async function listEnds(options?: {
   }
   if (options?.portfolioId) {
     query = query.eq("portfolio_id", options.portfolioId);
+  }
+  if (options?.endType) {
+    query = query.eq("end_type", options.endType);
+  }
+  if (options?.state) {
+    query = query.eq("state", options.state);
   }
 
   const { data: ownedEnds, error: ownedError } = await query.order("name");
@@ -179,6 +258,11 @@ export async function listEnds(options?: {
           name,
           area_id,
           portfolio_id,
+          end_type,
+          state,
+          due_date,
+          thesis,
+          resolution_notes,
           created_at,
           user_id,
           profiles!ends_user_id_fkey (display_name)
@@ -198,6 +282,8 @@ export async function listEnds(options?: {
       // Apply filters to shared ends too
       if (options?.areaId && end.area_id !== options.areaId) continue;
       if (options?.portfolioId && end.portfolio_id !== options.portfolioId) continue;
+      if (options?.endType && end.end_type !== options.endType) continue;
+      if (options?.state && end.state !== options.state) continue;
 
       results.push({
         ...(await toEntity(end)),

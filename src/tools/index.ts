@@ -841,23 +841,29 @@ export function registerTools(server: McpServer): void {
     {
       title: "Create End",
       description:
-        "Creates an end - an ongoing aspiration you work toward (e.g., Be a better father, Practice guitar).",
+        "Creates an end. Three types: journey (ongoing aspiration, e.g. 'Be a great father'), destination (bounded goal, e.g. 'Launch product'), inquiry (hypothesis, e.g. 'Is this viable?').",
       inputSchema: {
         name: z.string().min(1).describe("Name of the end"),
         areaId: z.string().optional().describe("Area this end belongs to"),
         portfolioId: z.string().optional().describe("Portfolio this end belongs to"),
+        endType: z.enum(["journey", "destination", "inquiry"]).optional().describe("Type: journey (default) | destination | inquiry"),
+        dueDate: z.string().optional().describe("Target date (YYYY-MM-DD). Most relevant for destination/inquiry."),
+        thesis: z.string().optional().describe("Inquiry thesis - what is being investigated? (inquiry only)"),
       },
     },
-    async ({ name, areaId, portfolioId }) => {
-      const end = await createEnd({ name, areaId, portfolioId });
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Created end: ${end.name}\nID: ${end.id}\n${end.areaId ? `Area: ${end.areaId}\n` : ""}${end.portfolioId ? `Portfolio: ${end.portfolioId}\n` : ""}Created at: ${end.createdAt}`,
-          },
-        ],
-      };
+    async ({ name, areaId, portfolioId, endType, dueDate, thesis }) => {
+      const end = await createEnd({ name, areaId, portfolioId, endType: endType ?? "journey", dueDate, thesis });
+      const parts = [
+        `Created end: ${end.name}`,
+        `ID: ${end.id}`,
+        `Type: ${end.endType} | State: ${end.state}`,
+        end.areaId ? `Area: ${end.areaId}` : null,
+        end.portfolioId ? `Portfolio: ${end.portfolioId}` : null,
+        end.dueDate ? `Due: ${end.dueDate}` : null,
+        end.thesis ? `Thesis: ${end.thesis}` : null,
+        `Created at: ${end.createdAt}`,
+      ].filter(Boolean);
+      return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
 
@@ -865,14 +871,17 @@ export function registerTools(server: McpServer): void {
     "list_ends",
     {
       title: "List Ends",
-      description: "Lists ends. Optionally filter by area ID or portfolio ID.",
+      description: "Lists ends. Optionally filter by area, portfolio, type, or state.",
       inputSchema: {
         areaId: z.string().optional().describe("Filter by area ID"),
         portfolioId: z.string().optional().describe("Filter by portfolio ID"),
+        endType: z.enum(["journey", "destination", "inquiry"]).optional().describe("Filter by type"),
+        state: z.enum(["active", "paused", "archived", "completed", "abandoned", "resolved"]).optional().describe("Filter by state"),
       },
     },
-    async ({ areaId, portfolioId }) => {
-      const ends = await listEnds(areaId || portfolioId ? { areaId, portfolioId } : undefined);
+    async ({ areaId, portfolioId, endType, state }) => {
+      const hasFilter = areaId || portfolioId || endType || state;
+      const ends = await listEnds(hasFilter ? { areaId, portfolioId, endType, state } : undefined);
       if (ends.length === 0) {
         return { content: [{ type: "text", text: "No ends found." }] };
       }
@@ -881,7 +890,12 @@ export function registerTools(server: McpServer): void {
       const lines = ends.map((e) => {
         const area = e.areaId ? allAreas.find((a) => a.id === e.areaId) : undefined;
         const portfolio = e.portfolioId ? allPortfolios.find((c) => c.id === e.portfolioId) : undefined;
-        return `  ${e.name} (${e.id})${area ? ` - Area: ${area.name}` : ""}${portfolio ? ` - Portfolio: ${portfolio.name}` : ""}`;
+        const meta: string[] = [];
+        if (e.endType !== "journey") meta.push(e.endType);
+        if (e.state !== "active") meta.push(e.state);
+        if (e.dueDate) meta.push(`due: ${e.dueDate}`);
+        const metaStr = meta.length ? ` [${meta.join(", ")}]` : "";
+        return `  ${e.name} (${e.id})${metaStr}${area ? ` - Area: ${area.name}` : ""}${portfolio ? ` - Portfolio: ${portfolio.name}` : ""}`;
       });
       return {
         content: [
@@ -985,8 +999,12 @@ export function registerTools(server: McpServer): void {
       });
       const parts = [
         `${end.name} (${end.id})`,
+        `  Type: ${end.endType} | State: ${end.state}`,
         area && `  Area: ${area.name}`,
         portfolio && `  Portfolio: ${portfolio.name}`,
+        end.dueDate ? `  Due: ${end.dueDate}` : undefined,
+        end.thesis ? `  Thesis: ${end.thesis}` : undefined,
+        end.resolutionNotes ? `  Resolution: ${end.resolutionNotes}` : undefined,
         `  Created: ${end.createdAt}`,
         linkedBeliefs.length > 0 ? `  Beliefs:\n${beliefLines.join("\n")}` : undefined,
         myHabitLines.length > 0 ? `  Your habits:\n${myHabitLines.join("\n")}` : "  Your habits: (none)",
@@ -1003,35 +1021,44 @@ export function registerTools(server: McpServer): void {
     {
       title: "Update End",
       description:
-        "Updates an end by ID. Only provided fields are updated. Use to add an end to a portfolio, change its area, or rename it.",
+        "Updates an end by ID. Use to rename, change area/portfolio, set due date, transition state (e.g. active → completed), or add thesis/resolution notes for inquiry ends. State transitions are validated per end type.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the end to update"),
         name: z.string().min(1).optional().describe("End name"),
         areaId: z.string().optional().describe("Area this end belongs to"),
         portfolioId: z.string().optional().describe("Portfolio this end belongs to"),
+        state: z.enum(["active", "paused", "archived", "completed", "abandoned", "resolved"]).optional().describe("Transition to this state"),
+        dueDate: z.string().optional().describe("Target date (YYYY-MM-DD)"),
+        thesis: z.string().optional().describe("Inquiry thesis (inquiry ends only)"),
+        resolutionNotes: z.string().optional().describe("Resolution notes (inquiry ends only, when resolving)"),
       },
     },
-    async ({ id, name, areaId, portfolioId }) => {
-      const existing = await getEndById(id);
-      if (!existing) {
-        return {
-          content: [{ type: "text", text: `End with ID ${id} not found.` }],
-          isError: true,
-        };
-      }
+    async ({ id, name, areaId, portfolioId, state, dueDate, thesis, resolutionNotes }) => {
       const updates: Record<string, unknown> = {};
       if (name != null) updates.name = name;
       if (areaId !== undefined) updates.areaId = areaId;
       if (portfolioId !== undefined) updates.portfolioId = portfolioId;
-      const end = await updateEnd(id, updates);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Updated end: ${end?.name} (${id})${end?.portfolioId ? ` - Portfolio: ${end.portfolioId}` : ""}`,
-          },
-        ],
-      };
+      if (state !== undefined) updates.state = state;
+      if (dueDate !== undefined) updates.dueDate = dueDate;
+      if (thesis !== undefined) updates.thesis = thesis;
+      if (resolutionNotes !== undefined) updates.resolutionNotes = resolutionNotes;
+      try {
+        const end = await updateEnd(id, updates as Parameters<typeof updateEnd>[1]);
+        if (!end) {
+          return { content: [{ type: "text", text: `End with ID ${id} not found.` }], isError: true };
+        }
+        const parts = [
+          `Updated end: ${end.name} (${id})`,
+          `Type: ${end.endType} | State: ${end.state}`,
+          end.dueDate ? `Due: ${end.dueDate}` : null,
+          end.thesis ? `Thesis: ${end.thesis}` : null,
+          end.resolutionNotes ? `Resolution: ${end.resolutionNotes}` : null,
+        ].filter(Boolean);
+        return { content: [{ type: "text", text: parts.join("\n") }] };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Update failed";
+        return { content: [{ type: "text", text: message }], isError: true };
+      }
     }
   );
 
