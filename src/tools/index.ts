@@ -286,6 +286,15 @@ export function registerTools(server: McpServer): void {
       const allEnds = await listEnds();
       const allHabits = await listHabits();
 
+      function formatEndLine(e: typeof allEnds[0]): string {
+        const meta: string[] = [];
+        if (e.endType !== "journey") meta.push(e.endType);
+        if (e.state !== "active") meta.push(e.state);
+        if (e.dueDate) meta.push(`due: ${e.dueDate}`);
+        const metaStr = meta.length ? ` [${meta.join(", ")}]` : "";
+        return `  - ${e.name} (${e.id})${metaStr}`;
+      }
+
       if (portfolioId) {
         const portfolio = await getPortfolioById(portfolioId);
         if (!portfolio) {
@@ -298,7 +307,7 @@ export function registerTools(server: McpServer): void {
         const parts: string[] = [`## ${portfolio.name}`];
         for (const e of ends) {
           const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
-          parts.push(`  - ${e.name} (${e.id})`);
+          parts.push(formatEndLine(e));
           habitsForEnd.forEach((h) => parts.push(`    - ${h.name} (${h.id})`));
         }
         if (ends.length === 0) {
@@ -333,7 +342,7 @@ export function registerTools(server: McpServer): void {
         const parts: string[] = [`## ${areaName}`];
         for (const e of ends) {
           const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
-          parts.push(`  - ${e.name} (${e.id})`);
+          parts.push(formatEndLine(e));
           habitsForEnd.forEach((h) => parts.push(`    - ${h.name} (${h.id})`));
         }
         sections.push(parts.join("\n"));
@@ -344,7 +353,7 @@ export function registerTools(server: McpServer): void {
         const parts: string[] = ["## Uncategorized"];
         for (const e of uncategorizedEnds) {
           const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
-          parts.push(`  - ${e.name} (${e.id})`);
+          parts.push(formatEndLine(e));
           habitsForEnd.forEach((h) => parts.push(`    - ${h.name} (${h.id})`));
         }
         sections.push(parts.join("\n"));
