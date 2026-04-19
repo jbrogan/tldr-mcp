@@ -1036,17 +1036,19 @@ export function registerTools(server: McpServer): void {
         name: z.string().min(1).optional().describe("End name"),
         areaId: z.string().optional().describe("Area this end belongs to"),
         portfolioId: z.string().optional().describe("Portfolio this end belongs to"),
+        endType: z.enum(["journey", "destination", "inquiry"]).optional().describe("Change type. Resets state to active if current state is invalid for new type."),
         state: z.enum(["active", "paused", "archived", "completed", "abandoned", "resolved"]).optional().describe("Transition to this state"),
         dueDate: z.string().optional().describe("Target date (YYYY-MM-DD)"),
         thesis: z.string().optional().describe("Inquiry thesis (inquiry ends only)"),
         resolutionNotes: z.string().optional().describe("Resolution notes (inquiry ends only, when resolving)"),
       },
     },
-    async ({ id, name, areaId, portfolioId, state, dueDate, thesis, resolutionNotes }) => {
+    async ({ id, name, areaId, portfolioId, endType, state, dueDate, thesis, resolutionNotes }) => {
       const updates: Record<string, unknown> = {};
       if (name != null) updates.name = name;
       if (areaId !== undefined) updates.areaId = areaId;
       if (portfolioId !== undefined) updates.portfolioId = portfolioId;
+      if (endType !== undefined) updates.endType = endType;
       if (state !== undefined) updates.state = state;
       if (dueDate !== undefined) updates.dueDate = dueDate;
       if (thesis !== undefined) updates.thesis = thesis;

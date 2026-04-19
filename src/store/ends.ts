@@ -128,7 +128,7 @@ export async function updateEnd(
   updates: Partial<
     Pick<
       EndEntity,
-      "name" | "areaId" | "portfolioId" | "state" | "dueDate" | "thesis" | "resolutionNotes"
+      "name" | "areaId" | "portfolioId" | "endType" | "state" | "dueDate" | "thesis" | "resolutionNotes"
     >
   >,
 ): Promise<EndEntity | null> {
@@ -149,7 +149,19 @@ export async function updateEnd(
   }
   if (!current) return null;
 
-  const endType = current.end_type as EndType;
+  const endType = (updates.endType ?? current.end_type) as EndType;
+
+  // If changing end type, validate the current state is valid for the new type.
+  // If not, reset to 'active'. Clear inquiry-only fields when leaving inquiry.
+  if (updates.endType !== undefined && updates.endType !== current.end_type) {
+    if (!isValidState(endType, current.state as EndState)) {
+      updates.state = "active";
+    }
+    if (updates.endType !== "inquiry") {
+      updates.thesis = undefined;
+      updates.resolutionNotes = undefined;
+    }
+  }
 
   // Validate state transition
   if (updates.state !== undefined) {
@@ -180,6 +192,7 @@ export async function updateEnd(
   if (updates.name !== undefined) updateData.name = updates.name;
   if (updates.areaId !== undefined) updateData.area_id = updates.areaId;
   if (updates.portfolioId !== undefined) updateData.portfolio_id = updates.portfolioId;
+  if (updates.endType !== undefined) updateData.end_type = updates.endType;
   if (updates.state !== undefined) updateData.state = updates.state;
   if (updates.dueDate !== undefined) updateData.due_date = updates.dueDate;
   if (updates.thesis !== undefined) updateData.thesis = updates.thesis;
