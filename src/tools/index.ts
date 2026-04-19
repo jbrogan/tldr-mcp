@@ -1823,7 +1823,7 @@ export function registerTools(server: McpServer): void {
           parts.push(`with ${names.join(", ")}`);
         }
         if (e.notes) parts.push(e.notes);
-        return `  ${date}: ${task?.name ?? e.taskId}${parts.length ? ` (${parts.join(", ")})` : ""}`;
+        return `  ${date}: ${task?.name ?? e.taskId} (${e.id})${parts.length ? ` | ${parts.join(", ")}` : ""}`;
       }));
       return { content: [{ type: "text", text: `Task time:\n\n${lines.join("\n")}` }] };
     }
