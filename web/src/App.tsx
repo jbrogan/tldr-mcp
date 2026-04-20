@@ -78,18 +78,49 @@ function App() {
   }
 
   if (isConsentPage) {
-    console.log("[App] consent page render:", {
-      hasSession: !!session,
-      sessionUserId: session?.user?.id,
-      sessionEmail: session?.user?.email,
-    });
+    // Force a fresh login on every consent flow. If the user has an existing
+    // session (e.g., signed into the web app as a different account), sign them
+    // out so they explicitly authenticate as the account they intend to authorize.
+    // The sessionStorage flag prevents a sign-out loop: set before signing out,
+    // cleared after the user completes a fresh sign-in.
+    const consentAuthKey = "oauth_consent_fresh_auth";
+    if (session && !sessionStorage.getItem(consentAuthKey)) {
+      sessionStorage.setItem(consentAuthKey, "pending");
+      supabase.auth.signOut();
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <p className="text-gray-400">Preparing sign-in...</p>
+        </div>
+      );
+    }
     if (!session) {
       return (
         <Login
-          onSignIn={signIn}
-          onSignUp={signUp}
-          onGoogleSignIn={signInWithGoogle}
+          onSignIn={async (email, password) => {
+            await signIn(email, password);
+            sessionStorage.setItem(consentAuthKey, "done");
+          }}
+          onSignUp={async (email, password) => {
+            await signUp(email, password);
+            sessionStorage.setItem(consentAuthKey, "done");
+          }}
+          onGoogleSignIn={async () => {
+            sessionStorage.setItem(consentAuthKey, "done");
+            await signInWithGoogle();
+          }}
         />
+      );
+    }
+    // Fresh auth completed — clear the flag for any future consent flows in this tab.
+    if (sessionStorage.getItem(consentAuthKey) === "pending") {
+      // Session appeared without going through our wrapped login handlers
+      // (e.g., Supabase restored a session from a cookie after the sign-out).
+      // Sign out again to force explicit authentication.
+      supabase.auth.signOut();
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <p className="text-gray-400">Preparing sign-in...</p>
+        </div>
       );
     }
     const authorizationId = new URLSearchParams(window.location.search).get("authorization_id");
