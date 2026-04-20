@@ -92,6 +92,7 @@ function App() {
       <OAuthConsent
         authorizationId={authorizationId}
         onSignOut={signOut}
+        userId={session.user.id}
         userEmail={session.user.email ?? ""}
       />
     );

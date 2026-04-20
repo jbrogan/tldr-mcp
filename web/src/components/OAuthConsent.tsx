@@ -38,10 +38,11 @@ type State =
 interface Props {
   authorizationId: string | null;
   onSignOut: () => void;
+  userId: string;
   userEmail: string;
 }
 
-export function OAuthConsent({ authorizationId, onSignOut, userEmail }: Props) {
+export function OAuthConsent({ authorizationId, onSignOut, userId, userEmail }: Props) {
   const [state, setState] = useState<State>({ kind: "loading" });
 
   useEffect(() => {
@@ -66,7 +67,19 @@ export function OAuthConsent({ authorizationId, onSignOut, userEmail }: Props) {
           window.location.href = body.redirect_url;
           return;
         }
-        setState({ kind: "ready", details: body as Details });
+        // Verify the signed-in user matches the user who initiated the OAuth flow.
+        // If they signed in with a different account (e.g., wrong Google account),
+        // reject immediately rather than silently swapping identity.
+        const details = body as Details;
+        if (details.user.id !== userId) {
+          await supabase.auth.signOut();
+          setState({
+            kind: "error",
+            message: `You authenticated as ${userEmail} but this authorization belongs to ${details.user.email}. Please sign in with the correct account.`,
+          });
+          return;
+        }
+        setState({ kind: "ready", details });
       } catch (err) {
         if (!cancelled) {
           setState({ kind: "error", message: err instanceof Error ? err.message : "Request failed" });
