@@ -21,8 +21,8 @@ export type RelationshipType = z.infer<typeof RelationshipTypeSchema>;
  */
 export const PersonSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  email: z.string().email("Invalid email address"),
+  lastName: z.string().optional(),
+  email: z.string().email("Invalid email address").optional(),
   phone: z.string().optional(),
   title: z.string().optional(),
   notes: z.string().optional(),

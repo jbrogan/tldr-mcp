@@ -27,8 +27,8 @@ async function toEntity(row: PersonWithTeams): Promise<PersonEntity> {
   return {
     id: row.id,
     firstName: row.first_name,
-    lastName: row.last_name,
-    email: row.email,
+    lastName: row.last_name ?? undefined,
+    email: row.email ?? undefined,
     phone: row.phone ?? undefined,
     title: row.title ?? undefined,
     notes: row.notes ?? undefined,
@@ -42,13 +42,48 @@ async function toEntity(row: PersonWithTeams): Promise<PersonEntity> {
 /**
  * Create a new person.
  */
-export async function createPerson(data: Person): Promise<PersonEntity> {
+/**
+ * Check for existing persons with the same first name (and last name if provided).
+ * Returns matching persons for duplicate warning purposes.
+ */
+export async function findSimilarPersons(
+  firstName: string,
+  lastName?: string,
+): Promise<PersonEntity[]> {
   const supabase = getSupabase();
   const userId = getUserId();
 
+  let query = supabase
+    .from("persons")
+    .select("*, person_teams (*)")
+    .eq("user_id", userId)
+    .ilike("first_name", firstName);
+
+  if (lastName) {
+    query = query.ilike("last_name", lastName);
+  }
+
+  const { data } = await query;
+  return data ? Promise.all(data.map((r) => toEntity(r as PersonWithTeams))) : [];
+}
+
+export async function createPerson(data: Person): Promise<PersonEntity & { duplicateWarning?: string }> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  // Duplicate detection by name when no email provided
+  let duplicateWarning: string | undefined;
+  if (!data.email) {
+    const similar = await findSimilarPersons(data.firstName, data.lastName);
+    if (similar.length > 0) {
+      const names = similar.map((p) => `${p.firstName}${p.lastName ? ` ${p.lastName}` : ""} (${p.id})`).join(", ");
+      duplicateWarning = `Similar person(s) already exist: ${names}. Created anyway — use update_person if this is a duplicate.`;
+    }
+  }
+
   // Auto-match: if email matches an existing profile, link to that user
   let linkedUserId = data.userId;
-  if (!linkedUserId && data.email && data.email !== "unknown@example.com") {
+  if (!linkedUserId && data.email) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("id")
@@ -63,8 +98,8 @@ export async function createPerson(data: Person): Promise<PersonEntity> {
     .insert({
       user_id: userId,
       first_name: data.firstName,
-      last_name: data.lastName,
-      email: data.email,
+      last_name: data.lastName ?? null,
+      email: data.email ?? null,
       phone: data.phone,
       title: data.title,
       notes: data.notes,
@@ -96,6 +131,7 @@ export async function createPerson(data: Person): Promise<PersonEntity> {
   return {
     ...(await toEntity(created)),
     teamIds,
+    duplicateWarning,
   };
 }
 

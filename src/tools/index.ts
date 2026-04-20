@@ -1874,9 +1874,9 @@ export function registerTools(server: McpServer): void {
       description:
         "Creates a new person entity. Check list_people or get_person first to avoid duplicates; if the person exists, use update_person to add them to new groups instead.",
       inputSchema: {
-        firstName: z.string().min(1).describe("First name of the person"),
-        lastName: z.string().min(1).describe("Last name of the person"),
-        email: z.string().email().describe("Email address"),
+        firstName: z.string().min(1).describe("First name of the person (required)"),
+        lastName: z.string().optional().describe("Last name of the person"),
+        email: z.string().email().optional().describe("Email address"),
         phone: z.string().optional().describe("Phone number"),
         title: z.string().optional().describe("Job title or role"),
         notes: z.string().optional().describe("Additional notes about the person"),
@@ -1905,9 +1905,10 @@ export function registerTools(server: McpServer): void {
       });
 
       const summary = [
-        `Created person: ${person.firstName} ${person.lastName}`,
+        person.duplicateWarning ? `⚠ ${person.duplicateWarning}` : null,
+        `Created person: ${person.firstName}${person.lastName ? ` ${person.lastName}` : ""}`,
         `ID: ${person.id}`,
-        `Email: ${person.email}`,
+        person.email ? `Email: ${person.email}` : null,
         person.phone && `Phone: ${person.phone}`,
         person.title && `Title: ${person.title}`,
         person.notes && `Notes: ${person.notes}`,
@@ -2081,7 +2082,7 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         id: z.string().min(1).describe("ID of the person to update"),
         firstName: z.string().min(1).optional().describe("First name"),
-        lastName: z.string().min(1).optional().describe("Last name"),
+        lastName: z.string().optional().describe("Last name"),
         email: z.string().email().optional().describe("Email address"),
         phone: z.string().optional().describe("Phone number"),
         title: z.string().optional().describe("Job title or role"),

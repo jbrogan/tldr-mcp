@@ -369,8 +369,8 @@ export type PersonRow = {
   user_id: string;
   linked_user_id: string | null;
   first_name: string;
-  last_name: string;
-  email: string;
+  last_name: string | null;
+  email: string | null;
   phone: string | null;
   title: string | null;
   notes: string | null;
@@ -560,8 +560,8 @@ export type PersonInsert = {
   user_id: string;
   linked_user_id?: string | null;
   first_name: string;
-  last_name: string;
-  email: string;
+  last_name?: string | null;
+  email?: string | null;
   phone?: string | null;
   title?: string | null;
   notes?: string | null;
