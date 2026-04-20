@@ -940,14 +940,17 @@ export function registerTools(server: McpServer): void {
       const sharedHabits = allHabits.filter((h) => h.isShared);
 
       async function formatHabitLine(h: typeof allHabits[0]): Promise<string> {
+        const personLabels: string[] = [];
         const personNames: string[] = [];
         for (const pid of h.personIds ?? []) {
           const person = await getPersonById(pid);
-          personNames.push(person ? `${person.firstName} ${person.lastName}` : pid);
+          const name = person ? `${person.firstName} ${person.lastName}` : pid;
+          personNames.push(name);
+          personLabels.push(person ? `${name} (${pid})` : pid);
         }
         const meta: string[] = [];
         if (h.frequency) meta.push(h.frequency);
-        if (personNames.length) meta.push(`participants: ${personNames.join(", ")}`);
+        if (personLabels.length) meta.push(`participants: ${personLabels.join(", ")}`);
         if (h.isShared && h.ownerId) {
           const { data: ownerPerson } = await getSupabase()
             .from("persons")
@@ -969,7 +972,7 @@ export function registerTools(server: McpServer): void {
       const { listBeliefs } = await import("../store/beliefs.js");
       const allBeliefs = await listBeliefs();
       const linkedBeliefs = allBeliefs.filter((b) => b.endIds.includes(id));
-      const beliefLines = linkedBeliefs.map((b) => `    - ${b.name}`);
+      const beliefLines = linkedBeliefs.map((b) => `    - ${b.name} (${b.id})`);
 
       // Contextual sharing info
       const shares = await listMyShares();
@@ -985,7 +988,7 @@ export function registerTools(server: McpServer): void {
             .eq("linked_user_id", s.sharedWithUserId)
             .eq("relationship_type", "self")
             .single();
-          return person ? `    - ${person.first_name} ${person.last_name}` : `    - ${s.sharedWithEmail}`;
+          return person ? `    - ${person.first_name} ${person.last_name} (${s.sharedWithUserId})` : `    - ${s.sharedWithEmail} (${s.sharedWithUserId})`;
         }));
         if (sharedWithLines.length > 0) {
           sharingLine = `  Shared with:\n${sharedWithLines.join("\n")}`;
@@ -1009,8 +1012,8 @@ export function registerTools(server: McpServer): void {
       const parts = [
         `${end.name} (${end.id})`,
         `  Type: ${end.endType} | State: ${end.state}`,
-        area && `  Area: ${area.name}`,
-        portfolio && `  Portfolio: ${portfolio.name}`,
+        area && `  Area: ${area.name} (${area.id})`,
+        portfolio && `  Portfolio: ${portfolio.name} (${portfolio.id})`,
         end.dueDate ? `  Due: ${end.dueDate}` : undefined,
         end.thesis ? `  Thesis: ${end.thesis}` : undefined,
         end.resolutionNotes ? `  Resolution: ${end.resolutionNotes}` : undefined,
@@ -1185,19 +1188,19 @@ export function registerTools(server: McpServer): void {
       const allEnds = await listEnds({ includeShared: true });
       const allAreas = await listAreas();
       const lines = await Promise.all(habits.map(async (h) => {
-        const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
+        const endLabels = h.endIds.map((eid) => { const e = allEnds.find((e) => e.id === eid); return e ? `${e.name} (${eid})` : eid; }).join(", ");
         const meta: string[] = [];
         if (h.frequency) meta.push(h.frequency);
         if (h.durationMinutes != null) meta.push(`${h.durationMinutes} min`);
         if (h.areaId) {
           const area = allAreas.find((a) => a.id === h.areaId);
-          meta.push(`area: ${area?.name ?? h.areaId}`);
+          meta.push(`area: ${area?.name ?? h.areaId} (${h.areaId})`);
         }
         if (h.teamId) {
           const team = await getTeamById(h.teamId);
-          meta.push(`team: ${team?.name ?? h.teamId}`);
+          meta.push(`team: ${team?.name ?? h.teamId} (${h.teamId})`);
         }
-        return `  ${h.name} (${h.id})\n    Ends: ${endNames}${meta.length ? ` | ${meta.join(", ")}` : ""}`;
+        return `  ${h.name} (${h.id})\n    Ends: ${endLabels}${meta.length ? ` | ${meta.join(", ")}` : ""}`;
       }));
       return {
         content: [
@@ -1226,11 +1229,11 @@ export function registerTools(server: McpServer): void {
         return { content: [{ type: "text", text: `Habit with ID ${id} not found.` }], isError: true };
       }
       const ends = await listEnds({ includeShared: true });
-      const endNames = habit.endIds.map((eid) => ends.find((e) => e.id === eid)?.name ?? eid);
-      const personNames: string[] = [];
+      const endLabels = habit.endIds.map((eid) => { const e = ends.find((e) => e.id === eid); return e ? `${e.name} (${eid})` : eid; });
+      const personLabels: string[] = [];
       for (const pid of habit.personIds ?? []) {
         const person = await getPersonById(pid);
-        personNames.push(person ? `${person.firstName} ${person.lastName}` : pid);
+        personLabels.push(person ? `${person.firstName} ${person.lastName} (${pid})` : pid);
       }
       const area = habit.areaId ? await getAreaById(habit.areaId) : undefined;
       const team = habit.teamId ? await getTeamById(habit.teamId) : undefined;
@@ -1240,10 +1243,10 @@ export function registerTools(server: McpServer): void {
 
       const parts = [
         `${habit.name} (${habit.id})`,
-        `  Ends: ${endNames.join(", ")}`,
-        area && `  Area: ${area.name}`,
-        team && `  Team: ${team.name}`,
-        personNames.length > 0 && `  Participants: ${personNames.join(", ")}`,
+        `  Ends: ${endLabels.join(", ")}`,
+        area && `  Area: ${area.name} (${area.id})`,
+        team && `  Team: ${team.name} (${team.id})`,
+        personLabels.length > 0 && `  Participants: ${personLabels.join(", ")}`,
         habit.frequency && `  Frequency: ${habit.frequency}`,
         habit.durationMinutes != null && `  Duration: ${habit.durationMinutes} min`,
         `  Created: ${habit.createdAt}`,
@@ -1452,10 +1455,10 @@ export function registerTools(server: McpServer): void {
             a.actualDurationMinutes != null ? `${a.actualDurationMinutes} min` : null,
             a.notes ? a.notes : null,
             a.withPersonIds?.length
-              ? `with: ${(await Promise.all(a.withPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName}` : pid; }))).join(", ")}`
+              ? `with: ${(await Promise.all(a.withPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName} (${pid})` : pid; }))).join(", ")}`
               : null,
             a.forPersonIds?.length
-              ? `for: ${(await Promise.all(a.forPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName}` : pid; }))).join(", ")}`
+              ? `for: ${(await Promise.all(a.forPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName} (${pid})` : pid; }))).join(", ")}`
               : null,
           ].filter(Boolean);
           return parts.join(" | ");
@@ -1488,12 +1491,18 @@ export function registerTools(server: McpServer): void {
         return { content: [{ type: "text", text: `Action with ID ${id} not found.` }], isError: true };
       }
       const habit = await getHabitById(action.habitId);
+      const withNames = action.withPersonIds?.length
+        ? await Promise.all(action.withPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName} (${pid})` : pid; }))
+        : [];
+      const forNames = action.forPersonIds?.length
+        ? await Promise.all(action.forPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName} (${pid})` : pid; }))
+        : [];
       const parts = [
-        `${habit?.name ?? action.habitId} — ${action.completedAt.slice(0, 10)} (${action.id})`,
+        `${habit?.name ?? action.habitId} (habit: ${action.habitId}) — ${action.completedAt.slice(0, 10)} (${action.id})`,
         action.actualDurationMinutes != null && `  Duration: ${action.actualDurationMinutes} min`,
         action.notes && `  Notes: ${action.notes}`,
-        action.withPersonIds?.length && `  With: ${action.withPersonIds.join(", ")}`,
-        action.forPersonIds?.length && `  For: ${action.forPersonIds.join(", ")}`,
+        withNames.length > 0 && `  With: ${withNames.join(", ")}`,
+        forNames.length > 0 && `  For: ${forNames.join(", ")}`,
         `  Created: ${action.createdAt}`,
       ].filter(Boolean);
       return { content: [{ type: "text", text: parts.join("\n") }] };
@@ -1628,19 +1637,19 @@ export function registerTools(server: McpServer): void {
         const withNames = t.withPersonIds?.length
           ? await Promise.all(t.withPersonIds.map(async (pid) => {
               const p = await getPersonById(pid);
-              return p ? `${p.firstName} ${p.lastName}` : pid;
+              return p ? `${p.firstName} ${p.lastName} (${pid})` : pid;
             }))
           : undefined;
         const forNames = t.forPersonIds?.length
           ? await Promise.all(t.forPersonIds.map(async (pid) => {
               const p = await getPersonById(pid);
-              return p ? `${p.firstName} ${p.lastName}` : pid;
+              return p ? `${p.firstName} ${p.lastName} (${pid})` : pid;
             }))
           : undefined;
         const parts = [
           `  ${t.name} (${t.id}) [${status}]`,
-          end ? `end: ${end.name}` : null,
-          area ? `area: ${area.name}` : null,
+          end ? `end: ${end.name} (${end.id})` : null,
+          area ? `area: ${area.name} (${area.id})` : null,
           t.dueDate ? `due: ${t.dueDate}` : null,
           t.scheduledDate ? `scheduled: ${t.scheduledDate}` : null,
           t.estimatedDurationMinutes != null ? `est: ${t.estimatedDurationMinutes} min` : null,
@@ -1676,14 +1685,22 @@ export function registerTools(server: McpServer): void {
       }
       const area = task.areaId ? await getAreaById(task.areaId) : undefined;
       const end = task.endId ? await getEndById(task.endId) : undefined;
+      const withNames = task.withPersonIds?.length
+        ? await Promise.all(task.withPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName} (${pid})` : pid; }))
+        : [];
+      const forNames = task.forPersonIds?.length
+        ? await Promise.all(task.forPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName} (${pid})` : pid; }))
+        : [];
       const parts = [
         `${task.name} (${task.id})`,
         task.completedAt ? `  Status: completed ${task.completedAt.slice(0, 10)}` : "  Status: open",
-        end && `  End: ${end.name}`,
-        area && `  Area: ${area.name}`,
+        end && `  End: ${end.name} (${end.id})`,
+        area && `  Area: ${area.name} (${area.id})`,
         task.dueDate && `  Due: ${task.dueDate}`,
         task.scheduledDate && `  Scheduled: ${task.scheduledDate}`,
         task.estimatedDurationMinutes != null && `  Estimated: ${task.estimatedDurationMinutes} min`,
+        withNames.length > 0 && `  With: ${withNames.join(", ")}`,
+        forNames.length > 0 && `  For: ${forNames.join(", ")}`,
         task.notes && `  Notes: ${task.notes}`,
         `  Created: ${task.createdAt}`,
       ].filter(Boolean);
@@ -1820,12 +1837,12 @@ export function registerTools(server: McpServer): void {
         if (e.withPersonIds?.length) {
           const names = await Promise.all(e.withPersonIds.map(async (pid) => {
             const p = await getPersonById(pid);
-            return p ? `${p.firstName} ${p.lastName}` : pid;
+            return p ? `${p.firstName} ${p.lastName} (${pid})` : pid;
           }));
           parts.push(`with ${names.join(", ")}`);
         }
         if (e.notes) parts.push(e.notes);
-        return `  ${date}: ${task?.name ?? e.taskId} (${e.id})${parts.length ? ` | ${parts.join(", ")}` : ""}`;
+        return `  ${date}: ${task?.name ?? e.taskId} (task: ${e.taskId}) (${e.id})${parts.length ? ` | ${parts.join(", ")}` : ""}`;
       }));
       return { content: [{ type: "text", text: `Task time:\n\n${lines.join("\n")}` }] };
     }

@@ -53,8 +53,7 @@ User (Supabase Auth profile)
 - `src/store/base.ts` - Store context management (user + Supabase client)
 - `src/store/*.ts` - Supabase-based persistence for each entity type
 - `src/tools/index.ts` - All 40+ MCP tool registrations (largest file)
-- `src/services/naturalLanguage.ts` - Intent routing & LLM orchestration
-- `src/llm/` - Pluggable LLM provider abstraction (Anthropic/OpenAI)
+- `src/services/ask.ts` - Agent SDK chat (web app, uses same tools as MCP server)
 - `src/cli.ts` - Commander.js CLI client
 - `supabase/migrations/` - SQL migration files for database schema
 
@@ -63,6 +62,8 @@ User (Supabase Auth profile)
 **Logging**: Always use `console.error()` for logs. `console.log()` breaks the JSON-RPC protocol since stdout is reserved for MCP communication.
 
 **Adding tools**: Register in `src/tools/index.ts` following the existing CRUD pattern (create_*, update_*, delete_*, get_*, list_*).
+
+**Tool response ID principle**: Every related entity referenced in a tool response MUST include its ID alongside the display name (e.g. `Area: Health (uuid)`). This enables LLM callers to chain tool calls without intermediate lookup round trips. Apply to all new tools and maintain in existing ones.
 
 **Store pattern**: Each store module uses `getSupabase()` and `getUserId()` from `base.ts` for context. RLS automatically filters results to the current user's data.
 
