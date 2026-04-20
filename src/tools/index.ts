@@ -1451,7 +1451,7 @@ export function registerTools(server: McpServer): void {
         actions.map(async (a) => {
           const habit = await getHabitById(a.habitId);
           const parts = [
-            `  ${habit?.name ?? a.habitId} - ${a.completedAt.slice(0, 10)} (${a.id})`,
+            `  ${habit?.name ?? a.habitId} (habit: ${a.habitId}) - ${a.completedAt.slice(0, 10)} (${a.id})`,
             a.actualDurationMinutes != null ? `${a.actualDurationMinutes} min` : null,
             a.notes ? a.notes : null,
             a.withPersonIds?.length
