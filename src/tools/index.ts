@@ -1447,23 +1447,34 @@ export function registerTools(server: McpServer): void {
         const periodLabel = period ? ` for ${period.replace("_", " ")}` : "";
         return { content: [{ type: "text", text: `No actions found${periodLabel}.` }] };
       }
-      const lines = await Promise.all(
-        actions.map(async (a) => {
-          const habit = await getHabitById(a.habitId);
-          const parts = [
-            `  ${habit?.name ?? a.habitId} (habit: ${a.habitId}) - ${a.completedAt.slice(0, 10)} (${a.id})`,
-            a.actualDurationMinutes != null ? `${a.actualDurationMinutes} min` : null,
-            a.notes ? a.notes : null,
-            a.withPersonIds?.length
-              ? `with: ${(await Promise.all(a.withPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName} (${pid})` : pid; }))).join(", ")}`
-              : null,
-            a.forPersonIds?.length
-              ? `for: ${(await Promise.all(a.forPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName} (${pid})` : pid; }))).join(", ")}`
-              : null,
-          ].filter(Boolean);
-          return parts.join(" | ");
-        })
-      );
+      // Preload habits, ends, and persons in bulk — O(3) queries instead of O(N) per action.
+      const allHabits = await listHabits();
+      const habitsMap = new Map(allHabits.map((h) => [h.id, h]));
+      const allEnds = await listEnds();
+      const endsMap = new Map(allEnds.map((e) => [e.id, e]));
+      const allPersons = await listPersons();
+      const personsMap = new Map(allPersons.map((p) => [p.id, p]));
+
+      const lines = actions.map((a) => {
+        const habit = habitsMap.get(a.habitId);
+        const endLabels = habit?.endIds
+          .map((eid) => { const e = endsMap.get(eid); return e ? `${e.name} (${eid})` : null; })
+          .filter(Boolean)
+          .join(", ");
+        const formatPerson = (pid: string) => {
+          const p = personsMap.get(pid);
+          return p ? `${p.firstName}${p.lastName ? ` ${p.lastName}` : ""} (${pid})` : pid;
+        };
+        const parts = [
+          `  ${habit?.name ?? a.habitId} (habit: ${a.habitId}) - ${a.completedAt.slice(0, 10)} (${a.id})`,
+          endLabels ? `end: ${endLabels}` : null,
+          a.actualDurationMinutes != null ? `${a.actualDurationMinutes} min` : null,
+          a.notes ? a.notes : null,
+          a.withPersonIds?.length ? `with: ${a.withPersonIds.map(formatPerson).join(", ")}` : null,
+          a.forPersonIds?.length ? `for: ${a.forPersonIds.map(formatPerson).join(", ")}` : null,
+        ].filter(Boolean);
+        return parts.join(" | ");
+      });
       return {
         content: [
           {
