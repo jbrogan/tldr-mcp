@@ -78,6 +78,11 @@ function App() {
   }
 
   if (isConsentPage) {
+    console.log("[App] consent page render:", {
+      hasSession: !!session,
+      sessionUserId: session?.user?.id,
+      sessionEmail: session?.user?.email,
+    });
     if (!session) {
       return (
         <Login

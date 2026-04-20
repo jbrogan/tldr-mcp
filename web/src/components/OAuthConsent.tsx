@@ -71,6 +71,13 @@ export function OAuthConsent({ authorizationId, onSignOut, userId, userEmail }: 
         // If they signed in with a different account (e.g., wrong Google account),
         // reject immediately rather than silently swapping identity.
         const details = body as Details;
+        console.log("[OAuthConsent] identity check:", {
+          expectedUserId: details.user.id,
+          expectedEmail: details.user.email,
+          sessionUserId: userId,
+          sessionEmail: userEmail,
+          match: details.user.id === userId,
+        });
         if (details.user.id !== userId) {
           await supabase.auth.signOut();
           setState({
