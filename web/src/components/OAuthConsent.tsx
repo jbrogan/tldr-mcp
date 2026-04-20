@@ -59,7 +59,10 @@ export function OAuthConsent({ authorizationId, onSignOut, userId, userEmail }: 
         if (cancelled) return;
         const body = await response.json();
         if (!response.ok) {
-          setState({ kind: "error", message: body?.error ?? `HTTP ${response.status}` });
+          const message = response.status === 404
+            ? "This authorization was not found. It may have expired, or you may be signed in with the wrong account. Try signing out and back in with the account that initiated the connection."
+            : body?.error ?? `HTTP ${response.status}`;
+          setState({ kind: "error", message });
           return;
         }
         if (body && "redirect_url" in body) {
