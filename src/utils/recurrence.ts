@@ -1,20 +1,43 @@
 /**
- * Server-side recurrence computation — fallback for when the LLM caller
- * doesn't provide nextDueAt. Parses common natural language recurrence
- * strings and computes the next due date from a reference timestamp.
+ * Server-side recurrence computation.
  *
- * This is intentionally simple. The LLM is the primary compute path;
- * this catches the common cases as a safety net.
+ * Two-tier approach:
+ * 1. Fast regex parser for common patterns (free, instant).
+ * 2. LLM fallback for anything the regex can't handle (e.g. "second tuesday",
+ *    "twice a week", "every other month").
+ *
+ * The MCP tool caller (Claude/etc.) is the primary compute path for nextDueAt.
+ * This module is the server-side safety net — belts and suspenders.
  */
+
+import Anthropic from "@anthropic-ai/sdk";
 
 /**
  * Compute the next due date from a recurrence string and a reference date.
- * Returns an ISO string, or null if the recurrence string can't be parsed.
+ * Tries the fast regex parser first; falls back to an LLM call for
+ * unusual patterns.
  *
  * @param recurrence - Natural language frequency (e.g. "weekly", "every 6 weeks")
  * @param fromDate - Reference date as ISO string (completion date or created_at)
+ * @returns ISO string of the next due date, or null if computation fails
  */
-export function computeNextDueAt(recurrence: string, fromDate: string): string | null {
+export async function computeNextDueAt(
+  recurrence: string,
+  fromDate: string,
+): Promise<string | null> {
+  // Try fast regex parser first
+  const fast = computeNextDueAtFast(recurrence, fromDate);
+  if (fast) return fast;
+
+  // Fall back to LLM for complex patterns
+  return computeNextDueAtWithLLM(recurrence, fromDate);
+}
+
+/**
+ * Fast regex-based parser for common recurrence patterns.
+ * Returns null if the pattern isn't recognized.
+ */
+function computeNextDueAtFast(recurrence: string, fromDate: string): string | null {
   const from = new Date(fromDate);
   if (isNaN(from.getTime())) return null;
 
@@ -40,8 +63,52 @@ export function computeNextDueAt(recurrence: string, fromDate: string): string |
     if (unit === "year") return addMonths(from, n * 12);
   }
 
-  // Couldn't parse — return null (caller should handle)
   return null;
+}
+
+/**
+ * LLM-based recurrence computation for patterns the regex can't handle.
+ * Makes a single focused API call to interpret the recurrence string.
+ */
+async function computeNextDueAtWithLLM(
+  recurrence: string,
+  fromDate: string,
+): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    console.error("[recurrence] ANTHROPIC_API_KEY not set, cannot compute nextDueAt via LLM");
+    return null;
+  }
+
+  try {
+    const refDate = fromDate.slice(0, 10); // YYYY-MM-DD for clarity
+    const client = new Anthropic({ apiKey });
+    const response = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 50,
+      messages: [
+        {
+          role: "user",
+          content: `Given the recurrence "${recurrence}" and the reference date ${refDate}, what is the next occurrence date? Return ONLY the date in YYYY-MM-DD format, nothing else.`,
+        },
+      ],
+    });
+
+    const text =
+      response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
+    const match = text.match(/^\d{4}-\d{2}-\d{2}$/);
+    if (!match) {
+      console.error(`[recurrence] LLM returned unparseable date: "${text}"`);
+      return null;
+    }
+
+    // Convert YYYY-MM-DD to a UTC noon anchor (consistent with other date handling)
+    return `${match[0]}T12:00:00.000Z`;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[recurrence] LLM computation failed: ${msg}`);
+    return null;
+  }
 }
 
 function addDays(date: Date, days: number): string {

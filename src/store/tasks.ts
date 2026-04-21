@@ -66,7 +66,7 @@ export async function createTask(data: Task): Promise<TaskEntity> {
   let lastCompletedAt: string | null = null;
   if (data.recurrence && !nextDueAt) {
     const refDate = data.completedAt ?? new Date().toISOString();
-    nextDueAt = computeNextDueAt(data.recurrence, refDate);
+    nextDueAt = await computeNextDueAt(data.recurrence, refDate);
   }
   if (data.recurrence && data.completedAt) {
     lastCompletedAt = data.completedAt;
@@ -227,7 +227,7 @@ export async function updateTask(
       // Recurring task completion: set last_completed_at, compute next_due_at, reopen
       updateData.last_completed_at = updates.completedAt;
       updateData.next_due_at = updates.nextDueAt
-        ?? computeNextDueAt(recurrenceStr, updates.completedAt);
+        ?? await computeNextDueAt(recurrenceStr, updates.completedAt);
       updateData.completed_at = null; // reopen
     } else {
       // Non-recurring or explicit reopen (null)
@@ -244,7 +244,7 @@ export async function updateTask(
   if (updates.recurrence !== undefined && !("next_due_at" in updateData)) {
     if (updates.recurrence) {
       const refDate = existingRow.last_completed_at ?? existingRow.created_at;
-      updateData.next_due_at = computeNextDueAt(updates.recurrence, refDate);
+      updateData.next_due_at = await computeNextDueAt(updates.recurrence, refDate);
     } else {
       // Recurrence removed — clear recurring fields
       updateData.next_due_at = null;
