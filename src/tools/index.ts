@@ -1587,20 +1587,35 @@ export function registerTools(server: McpServer): void {
     {
       title: "Create Task",
       description:
-        "Creates an ad-hoc task (e.g., Call mom this week, Get oil changed). Use withPersonIds/forPersonIds for reflection.",
+        "Creates a task — one-off or recurring. For recurring tasks, set `recurrence` (e.g. 'weekly', 'every 6 weeks'). When `recurrence` is provided and `nextDueAt` is not, compute `nextDueAt` from the recurrence string and `completedAt` (or today if not provided) before calling this tool. Server also computes as fallback.",
       inputSchema: {
         name: z.string().min(1).describe("Task name"),
         endId: z.string().optional().describe("End this task supports"),
         areaId: z.string().optional().describe("Area this task belongs to"),
         withPersonIds: z.array(z.string()).optional().describe("Person IDs - did it with"),
         forPersonIds: z.array(z.string()).optional().describe("Person IDs - did it for"),
-        dueDate: z.string().optional().describe("Due date (YYYY-MM-DD)"),
+        dueDate: z.string().optional().describe("Due date (YYYY-MM-DD) for one-off tasks"),
         scheduledDate: z.string().optional().describe("Scheduled work date (YYYY-MM-DD)"),
         estimatedDurationMinutes: z.number().optional().describe("Estimated time to complete (minutes)"),
+        recurrence: z.string().optional().describe("Natural language frequency (e.g. 'weekly', 'monthly', 'every 6 weeks'). Makes this a recurring task."),
+        completedAt: z.string().optional().describe("For recurring tasks created retroactively: the last completion date. Sets last_completed_at and computes next_due_at from it."),
+        nextDueAt: z.string().optional().describe("Override computed next due date (ISO). Recurrence logic resumes on next completion."),
         notes: z.string().optional(),
       },
     },
-    async ({ name, endId, areaId, withPersonIds, forPersonIds, dueDate, scheduledDate, estimatedDurationMinutes, notes }) => {
+    async ({ name, endId, areaId, withPersonIds, forPersonIds, dueDate, scheduledDate, estimatedDurationMinutes, recurrence, completedAt, nextDueAt, notes }) => {
+      let resolvedCompletedAt = completedAt;
+      let resolvedNextDueAt = nextDueAt;
+      if (completedAt) {
+        const { getUserTimezone, resolveCompletedAt: resolve } = await import("../utils/timezone.js");
+        const tz = await getUserTimezone();
+        resolvedCompletedAt = resolve(completedAt, tz);
+      }
+      if (nextDueAt) {
+        const { getUserTimezone, resolveCompletedAt: resolve } = await import("../utils/timezone.js");
+        const tz = await getUserTimezone();
+        resolvedNextDueAt = resolve(nextDueAt, tz);
+      }
       const task = await createTask({
         name,
         endId,
@@ -1610,16 +1625,22 @@ export function registerTools(server: McpServer): void {
         dueDate,
         scheduledDate,
         estimatedDurationMinutes,
+        recurrence,
+        completedAt: resolvedCompletedAt,
+        nextDueAt: resolvedNextDueAt,
         notes,
       });
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Created task: ${task.name} (${task.id})\n${endId ? `End: ${endId}\n` : ""}${areaId ? `Area: ${areaId}\n` : ""}${dueDate ? `Due: ${dueDate}\n` : ""}Created at: ${task.createdAt}`,
-          },
-        ],
-      };
+      const parts = [
+        `Created task: ${task.name} (${task.id})`,
+        endId ? `End: ${endId}` : null,
+        areaId ? `Area: ${areaId}` : null,
+        dueDate ? `Due: ${dueDate}` : null,
+        task.recurrence ? `Recurrence: ${task.recurrence}` : null,
+        task.nextDueAt ? `Next due: ${task.nextDueAt}` : null,
+        task.lastCompletedAt ? `Last completed: ${task.lastCompletedAt}` : null,
+        `Created at: ${task.createdAt}`,
+      ].filter(Boolean);
+      return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
 
@@ -1627,15 +1648,16 @@ export function registerTools(server: McpServer): void {
     "list_tasks",
     {
       title: "List Tasks",
-      description: "Lists tasks. Filter by end, area, or completion status.",
+      description: "Lists tasks. Filter by end, area, or completion status. Recurring tasks with next_due_at in the future are excluded from open task queries unless dueBy is specified.",
       inputSchema: {
         endId: z.string().optional().describe("Filter by end ID"),
         areaId: z.string().optional().describe("Filter by area ID"),
         completed: z.boolean().optional().describe("Filter: true = completed only, false = open only"),
+        dueBy: z.string().optional().describe("Include recurring tasks due by this date (YYYY-MM-DD). Without this, only currently-due recurring tasks are shown."),
       },
     },
-    async ({ endId, areaId, completed }) => {
-      const tasks = await listTasks({ endId, areaId, completed });
+    async ({ endId, areaId, completed, dueBy }) => {
+      const tasks = await listTasks({ endId, areaId, completed, dueBy });
       if (tasks.length === 0) {
         return { content: [{ type: "text", text: "No tasks found." }] };
       }
@@ -1662,6 +1684,9 @@ export function registerTools(server: McpServer): void {
           end ? `end: ${end.name} (${end.id})` : null,
           area ? `area: ${area.name} (${area.id})` : null,
           t.dueDate ? `due: ${t.dueDate}` : null,
+          t.recurrence ? `recurrence: ${t.recurrence}` : null,
+          t.nextDueAt ? `next due: ${t.nextDueAt.slice(0, 10)}` : null,
+          t.lastCompletedAt ? `last completed: ${t.lastCompletedAt.slice(0, 10)}` : null,
           t.scheduledDate ? `scheduled: ${t.scheduledDate}` : null,
           t.estimatedDurationMinutes != null ? `est: ${t.estimatedDurationMinutes} min` : null,
           withNames?.length ? `with: ${withNames.join(", ")}` : null,
@@ -1708,6 +1733,9 @@ export function registerTools(server: McpServer): void {
         end && `  End: ${end.name} (${end.id})`,
         area && `  Area: ${area.name} (${area.id})`,
         task.dueDate && `  Due: ${task.dueDate}`,
+        task.recurrence && `  Recurrence: ${task.recurrence}`,
+        task.nextDueAt && `  Next due: ${task.nextDueAt}`,
+        task.lastCompletedAt && `  Last completed: ${task.lastCompletedAt}`,
         task.scheduledDate && `  Scheduled: ${task.scheduledDate}`,
         task.estimatedDurationMinutes != null && `  Estimated: ${task.estimatedDurationMinutes} min`,
         withNames.length > 0 && `  With: ${withNames.join(", ")}`,
@@ -1723,7 +1751,8 @@ export function registerTools(server: McpServer): void {
     "update_task",
     {
       title: "Update Task",
-      description: "Updates a task. Use to complete, reopen, schedule, estimate time, change details, or add with/for.",
+      description:
+        "Updates a task. Use to complete, reopen, schedule, estimate time, change details, set recurrence, or add with/for. When completing a recurring task (one with a `recurrence` value), compute `nextDueAt` from the recurrence string and `completedAt` before calling this tool. When `recurrence` changes and `nextDueAt` is not provided, recompute `nextDueAt` from the new recurrence string and `lastCompletedAt` (or `createdAt` if never completed). When `nextDueAt` is provided directly, it's a one-cycle override — recurrence logic resumes on next completion. Server enforces all of this as fallback.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the task to update"),
         name: z.string().min(1).optional().describe("Task name"),
@@ -1731,21 +1760,16 @@ export function registerTools(server: McpServer): void {
         areaId: z.string().optional().describe("Area ID"),
         withPersonIds: z.array(z.string()).optional().describe("Person IDs - did it with"),
         forPersonIds: z.array(z.string()).optional().describe("Person IDs - did it for"),
-        dueDate: z.string().optional().describe("Due date (YYYY-MM-DD)"),
+        dueDate: z.string().optional().describe("Due date (YYYY-MM-DD) for one-off tasks"),
         scheduledDate: z.string().optional().describe("Scheduled work date (YYYY-MM-DD)"),
         estimatedDurationMinutes: z.number().optional().describe("Estimated time to complete (minutes)"),
-        completedAt: z.string().nullable().optional().describe("When completed (ISO). Set to mark complete, null to reopen."),
+        completedAt: z.string().nullable().optional().describe("When completed: 'today' | 'yesterday' | YYYY-MM-DD | ISO. Set to mark complete, null to reopen. Recurring tasks auto-reopen."),
+        recurrence: z.string().optional().describe("Natural language frequency (e.g. 'weekly', 'every 6 weeks'). Set to make/change recurrence, empty string to remove."),
+        nextDueAt: z.string().optional().describe("Override next due date (ISO or YYYY-MM-DD). One-cycle override; recurrence logic resumes on next completion."),
         notes: z.string().optional(),
       },
     },
-    async ({ id, name, endId, areaId, withPersonIds, forPersonIds, dueDate, scheduledDate, estimatedDurationMinutes, completedAt, notes }) => {
-      const existing = await getTaskById(id);
-      if (!existing) {
-        return {
-          content: [{ type: "text", text: `Task with ID ${id} not found.` }],
-          isError: true,
-        };
-      }
+    async ({ id, name, endId, areaId, withPersonIds, forPersonIds, dueDate, scheduledDate, estimatedDurationMinutes, completedAt, recurrence, nextDueAt, notes }) => {
       const updates: Record<string, unknown> = {};
       if (name != null) updates.name = name;
       if (endId !== undefined) updates.endId = endId;
@@ -1755,17 +1779,37 @@ export function registerTools(server: McpServer): void {
       if (dueDate !== undefined) updates.dueDate = dueDate;
       if (scheduledDate !== undefined) updates.scheduledDate = scheduledDate;
       if (estimatedDurationMinutes !== undefined) updates.estimatedDurationMinutes = estimatedDurationMinutes;
-      if (completedAt !== undefined) updates.completedAt = completedAt;
       if (notes !== undefined) updates.notes = notes;
+      if (recurrence !== undefined) updates.recurrence = recurrence || null;
+
+      // Resolve completedAt and nextDueAt through timezone helpers
+      if (completedAt !== undefined) {
+        if (completedAt !== null) {
+          const { getUserTimezone, resolveCompletedAt: resolve } = await import("../utils/timezone.js");
+          const tz = await getUserTimezone();
+          updates.completedAt = resolve(completedAt, tz);
+        } else {
+          updates.completedAt = null;
+        }
+      }
+      if (nextDueAt !== undefined) {
+        const { getUserTimezone, resolveCompletedAt: resolve } = await import("../utils/timezone.js");
+        const tz = await getUserTimezone();
+        updates.nextDueAt = resolve(nextDueAt, tz);
+      }
+
       const task = await updateTask(id, updates as Parameters<typeof updateTask>[1]);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Updated task: ${task?.name} (${id})${task?.completedAt ? " - completed" : completedAt === null ? " - reopened" : ""}`,
-          },
-        ],
-      };
+      if (!task) {
+        return { content: [{ type: "text", text: `Task with ID ${id} not found.` }], isError: true };
+      }
+      const parts = [
+        `Updated task: ${task.name} (${id})`,
+        task.completedAt ? `Status: completed ${task.completedAt.slice(0, 10)}` : "Status: open",
+        task.recurrence ? `Recurrence: ${task.recurrence}` : null,
+        task.nextDueAt ? `Next due: ${task.nextDueAt.slice(0, 10)}` : null,
+        task.lastCompletedAt ? `Last completed: ${task.lastCompletedAt.slice(0, 10)}` : null,
+      ].filter(Boolean);
+      return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
 
