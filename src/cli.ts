@@ -349,7 +349,7 @@ program
   .option("-a, --areaId <id>", "Area ID")
   .option("-t, --teamId <id>", "Team ID")
   .option("-p, --personIds <ids>", "Comma-separated person IDs who participate in the habit")
-  .option("-f, --frequency <freq>", "e.g. daily, weekly, 3x/week")
+  .option("-f, --recurrence <freq>", "e.g. daily, weekly, 3x/week")
   .option("-m, --durationMinutes <min>", "Estimated time in minutes")
   .action(async (opts) => {
     await withClient(async (client) => {
@@ -360,7 +360,7 @@ program
       if (opts.areaId) args.areaId = opts.areaId;
       if (opts.teamId) args.teamId = opts.teamId;
       if (opts.personIds) args.personIds = opts.personIds.split(",").map((s: string) => s.trim());
-      if (opts.frequency) args.frequency = opts.frequency;
+      if (opts.recurrence) args.recurrence = opts.recurrence;
       const mins = opts.durationMinutes != null ? parseInt(String(opts.durationMinutes), 10) : NaN;
       if (!isNaN(mins)) args.durationMinutes = mins;
       const result = await client.callTool({

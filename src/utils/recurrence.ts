@@ -17,7 +17,7 @@ import Anthropic from "@anthropic-ai/sdk";
  * Tries the fast regex parser first; falls back to an LLM call for
  * unusual patterns.
  *
- * @param recurrence - Natural language frequency (e.g. "weekly", "every 6 weeks")
+ * @param recurrence - Natural language recurrence (e.g. "weekly", "every 6 weeks")
  * @param fromDate - Reference date as ISO string (completion date or created_at)
  * @returns ISO string of the next due date, or null if computation fails
  */

@@ -42,7 +42,7 @@ async function toEntity(row: HabitWithJoins): Promise<HabitEntity> {
     areaId: row.area_id ?? undefined,
     teamId: row.team_id ?? undefined,
     personIds: row.habit_persons?.map((hp) => hp.person_id) ?? [],
-    frequency: row.frequency ?? undefined,
+    recurrence: row.recurrence ?? undefined,
     durationMinutes: row.duration_minutes ?? undefined,
     createdAt: formatInstantForUser(row.created_at, tz),
   };
@@ -69,7 +69,7 @@ export async function createHabit(data: Habit): Promise<HabitEntity> {
       name: data.name,
       area_id: data.areaId,
       team_id: data.teamId,
-      frequency: data.frequency,
+      recurrence: data.recurrence,
       duration_minutes: data.durationMinutes,
     })
     .select()
@@ -279,7 +279,7 @@ export async function deleteHabit(id: string): Promise<HabitEntity | null> {
  */
 export async function updateHabit(
   id: string,
-  updates: { name?: string; frequency?: string; durationMinutes?: number }
+  updates: { name?: string; recurrence?: string; durationMinutes?: number }
 ): Promise<HabitEntity | null> {
   const supabase = getSupabase();
   const userId = getUserId();
@@ -289,7 +289,7 @@ export async function updateHabit(
 
   const updateData: Record<string, unknown> = {};
   if (updates.name !== undefined) updateData.name = updates.name;
-  if (updates.frequency !== undefined) updateData.frequency = updates.frequency;
+  if (updates.recurrence !== undefined) updateData.recurrence = updates.recurrence;
   if (updates.durationMinutes !== undefined) updateData.duration_minutes = updates.durationMinutes;
 
   if (Object.keys(updateData).length > 0) {

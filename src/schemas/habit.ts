@@ -9,7 +9,7 @@ export const HabitSchema = z.object({
   areaId: z.string().optional(),
   teamId: z.string().optional(),
   personIds: z.array(z.string()).optional().describe("People who participate in the habit"),
-  frequency: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
+  recurrence: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
   durationMinutes: z.number().int().positive().optional().describe("Estimated time in minutes to perform the habit"),
 });
 

@@ -20,7 +20,7 @@ export const TaskSchema = z.object({
   scheduledDate: z.string().optional().describe("Scheduled work date (YYYY-MM-DD)"),
   estimatedDurationMinutes: z.number().int().positive().optional().describe("Estimated time to complete (minutes)"),
   completedAt: z.string().nullable().optional().describe("When completed (ISO string). Omit if open. Pass null to reopen."),
-  recurrence: z.string().optional().describe("Natural language frequency (e.g. 'weekly', 'every 6 weeks', 'monthly')"),
+  recurrence: z.string().optional().describe("Natural language recurrence (e.g. 'weekly', 'every 6 weeks', 'monthly')"),
   nextDueAt: z.string().optional().describe("Next due date for recurring tasks (ISO). Computed from recurrence; user-settable for one-cycle overrides."),
   notes: z.string().optional(),
 });

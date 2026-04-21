@@ -949,7 +949,7 @@ export function registerTools(server: McpServer): void {
           personLabels.push(person ? `${name} (${pid})` : pid);
         }
         const meta: string[] = [];
-        if (h.frequency) meta.push(h.frequency);
+        if (h.recurrence) meta.push(h.recurrence);
         if (personLabels.length) meta.push(`participants: ${personLabels.join(", ")}`);
         if (h.isShared && h.ownerId) {
           const { data: ownerPerson } = await getSupabase()
@@ -1116,18 +1116,18 @@ export function registerTools(server: McpServer): void {
         areaId: z.string().optional(),
         teamId: z.string().optional(),
         personIds: z.array(z.string()).optional().describe("IDs of people who participate in the habit"),
-        frequency: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
+        recurrence: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
         durationMinutes: z.number().int().positive().optional().describe("Estimated time in minutes"),
       },
     },
-    async ({ name, endIds, areaId, teamId, personIds, frequency, durationMinutes }) => {
+    async ({ name, endIds, areaId, teamId, personIds, recurrence, durationMinutes }) => {
       const habit = await createHabit({
         name,
         endIds,
         areaId,
         teamId,
         personIds,
-        frequency,
+        recurrence,
         durationMinutes,
       });
       const parts = [
@@ -1137,7 +1137,7 @@ export function registerTools(server: McpServer): void {
         habit.areaId && `Area: ${habit.areaId}`,
         habit.teamId && `Team: ${habit.teamId}`,
         habit.personIds?.length && `Participants: ${habit.personIds.join(", ")}`,
-        habit.frequency && `Frequency: ${habit.frequency}`,
+        habit.recurrence && `Recurrence: ${habit.recurrence}`,
         habit.durationMinutes != null && `Duration: ${habit.durationMinutes} min`,
         `Created at: ${habit.createdAt}`,
       ].filter(Boolean);
@@ -1190,7 +1190,7 @@ export function registerTools(server: McpServer): void {
       const lines = await Promise.all(habits.map(async (h) => {
         const endLabels = h.endIds.map((eid) => { const e = allEnds.find((e) => e.id === eid); return e ? `${e.name} (${eid})` : eid; }).join(", ");
         const meta: string[] = [];
-        if (h.frequency) meta.push(h.frequency);
+        if (h.recurrence) meta.push(h.recurrence);
         if (h.durationMinutes != null) meta.push(`${h.durationMinutes} min`);
         if (h.areaId) {
           const area = allAreas.find((a) => a.id === h.areaId);
@@ -1218,7 +1218,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Get Habit",
       description:
-        "Gets a single habit by ID with full details: ends, area, team, participants, frequency, and recent actions.",
+        "Gets a single habit by ID with full details: ends, area, team, participants, recurrence, and recent actions.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the habit to fetch"),
       },
@@ -1247,7 +1247,7 @@ export function registerTools(server: McpServer): void {
         area && `  Area: ${area.name} (${area.id})`,
         team && `  Team: ${team.name} (${team.id})`,
         personLabels.length > 0 && `  Participants: ${personLabels.join(", ")}`,
-        habit.frequency && `  Frequency: ${habit.frequency}`,
+        habit.recurrence && `  Recurrence: ${habit.recurrence}`,
         habit.durationMinutes != null && `  Duration: ${habit.durationMinutes} min`,
         `  Created: ${habit.createdAt}`,
       ].filter(Boolean);
@@ -1272,11 +1272,11 @@ export function registerTools(server: McpServer): void {
     {
       title: "Update Habit",
       description:
-        "Updates a habit's name, frequency, or duration. Supports adding/removing participants and linking/unlinking/moving ends.",
+        "Updates a habit's name, recurrence, or duration. Supports adding/removing participants and linking/unlinking/moving ends.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the habit to update"),
         name: z.string().optional().describe("New name"),
-        frequency: z.string().optional().describe("New frequency (daily, weekly, monthly, etc.)"),
+        recurrence: z.string().optional().describe("New recurrence (daily, weekly, monthly, etc.)"),
         durationMinutes: z.number().optional().describe("New expected duration in minutes"),
         personIdsToAdd: z.array(z.string()).optional().describe("Person IDs to add as participants"),
         personIdsToRemove: z.array(z.string()).optional().describe("Person IDs to remove as participants"),
@@ -1285,7 +1285,7 @@ export function registerTools(server: McpServer): void {
         endIdsToReplace: z.array(z.string()).optional().describe("Replace all end links with this list"),
       },
     },
-    async ({ id, name, frequency, durationMinutes, personIdsToAdd, personIdsToRemove, endIdToAdd, endIdToRemove, endIdsToReplace }) => {
+    async ({ id, name, recurrence, durationMinutes, personIdsToAdd, personIdsToRemove, endIdToAdd, endIdToRemove, endIdsToReplace }) => {
       const existing = await getHabitById(id);
       if (!existing) {
         return {
@@ -1294,14 +1294,14 @@ export function registerTools(server: McpServer): void {
         };
       }
       const details: string[] = [];
-      const fieldUpdates: { name?: string; frequency?: string; durationMinutes?: number } = {};
+      const fieldUpdates: { name?: string; recurrence?: string; durationMinutes?: number } = {};
       if (name != null) fieldUpdates.name = name;
-      if (frequency != null) fieldUpdates.frequency = frequency;
+      if (recurrence != null) fieldUpdates.recurrence = recurrence;
       if (durationMinutes != null) fieldUpdates.durationMinutes = durationMinutes;
       if (Object.keys(fieldUpdates).length > 0) {
         await updateHabit(id, fieldUpdates);
         if (name) details.push(`renamed to "${name}"`);
-        if (frequency) details.push(`frequency: ${frequency}`);
+        if (recurrence) details.push(`recurrence: ${recurrence}`);
         if (durationMinutes != null) details.push(`duration: ${durationMinutes} min`);
       }
       if (personIdsToAdd?.length) {
@@ -1597,7 +1597,7 @@ export function registerTools(server: McpServer): void {
         dueDate: z.string().optional().describe("Due date (YYYY-MM-DD) for one-off tasks"),
         scheduledDate: z.string().optional().describe("Scheduled work date (YYYY-MM-DD)"),
         estimatedDurationMinutes: z.number().optional().describe("Estimated time to complete (minutes)"),
-        recurrence: z.string().optional().describe("Natural language frequency (e.g. 'weekly', 'monthly', 'every 6 weeks'). Makes this a recurring task."),
+        recurrence: z.string().optional().describe("Natural language recurrence (e.g. 'weekly', 'monthly', 'every 6 weeks'). Makes this a recurring task."),
         completedAt: z.string().optional().describe("For recurring tasks created retroactively: the last completion date. Sets last_completed_at and computes next_due_at from it."),
         nextDueAt: z.string().optional().describe("Override computed next due date (ISO). Recurrence logic resumes on next completion."),
         notes: z.string().optional(),
@@ -1764,7 +1764,7 @@ export function registerTools(server: McpServer): void {
         scheduledDate: z.string().optional().describe("Scheduled work date (YYYY-MM-DD)"),
         estimatedDurationMinutes: z.number().optional().describe("Estimated time to complete (minutes)"),
         completedAt: z.string().nullable().optional().describe("When completed: 'today' | 'yesterday' | YYYY-MM-DD | ISO. Set to mark complete, null to reopen. Recurring tasks auto-reopen."),
-        recurrence: z.string().optional().describe("Natural language frequency (e.g. 'weekly', 'every 6 weeks'). Set to make/change recurrence, empty string to remove."),
+        recurrence: z.string().optional().describe("Natural language recurrence (e.g. 'weekly', 'every 6 weeks'). Set to make/change recurrence, empty string to remove."),
         nextDueAt: z.string().optional().describe("Override next due date (ISO or YYYY-MM-DD). One-cycle override; recurrence logic resumes on next completion."),
         notes: z.string().optional(),
       },

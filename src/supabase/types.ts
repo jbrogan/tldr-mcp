@@ -439,7 +439,7 @@ export type HabitRow = {
   name: string;
   area_id: string | null;
   team_id: string | null;
-  frequency: string | null;
+  recurrence: string | null;
   duration_minutes: number | null;
   created_at: string;
 };
@@ -633,7 +633,7 @@ export type HabitInsert = {
   name: string;
   area_id?: string | null;
   team_id?: string | null;
-  frequency?: string | null;
+  recurrence?: string | null;
   duration_minutes?: number | null;
   created_at?: string;
 };
