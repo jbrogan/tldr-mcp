@@ -25,13 +25,27 @@ const PUBLIC_URL = process.env.PUBLIC_URL ?? "https://tldr-mcp-production.up.rai
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
 
+// --- Skill instructions (loaded once at startup) ---
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+let skillInstructions: string | undefined;
+try {
+  skillInstructions = readFileSync(resolve(import.meta.dirname ?? ".", "../SKILL.md"), "utf8");
+} catch {
+  console.error("Warning: SKILL.md not found, MCP instructions will be empty");
+}
+
 // --- Per-session MCP server factory ---
 // McpServer only supports one transport at a time, so each session gets its own instance.
 
 function createMcpServer(): McpServer {
   const server = new McpServer(
     { name: "tldr-mcp", version: "0.1.0" },
-    { capabilities: { tools: {}, resources: {}, prompts: {} } }
+    {
+      capabilities: { tools: {}, resources: {}, prompts: {} },
+      instructions: skillInstructions,
+    }
   );
   registerTools(server);
   registerResources(server);
