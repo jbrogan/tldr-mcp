@@ -1688,9 +1688,9 @@ export function registerTools(server: McpServer): void {
           `due: ${t.dueDate ?? "—"}`,
           `scheduled: ${t.scheduledDate ?? "—"}`,
           `est: ${t.estimatedDurationMinutes != null ? `${t.estimatedDurationMinutes} min` : "—"}`,
-          t.recurrence ? `recurrence: ${t.recurrence}` : null,
-          t.nextDueAt ? `next due: ${t.nextDueAt.slice(0, 10)}` : null,
-          t.lastCompletedAt ? `last completed: ${t.lastCompletedAt.slice(0, 10)}` : null,
+          `recurrence: ${t.recurrence ?? "—"}`,
+          `next due: ${t.nextDueAt ? t.nextDueAt.slice(0, 10) : "—"}`,
+          `last completed: ${t.lastCompletedAt ? t.lastCompletedAt.slice(0, 10) : "—"}`,
           withNames?.length ? `with: ${withNames.join(", ")}` : null,
           forNames?.length ? `for: ${forNames.join(", ")}` : null,
         ].filter(Boolean);
