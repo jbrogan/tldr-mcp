@@ -367,23 +367,24 @@ export async function listTasks(options?: {
     throw new Error(`Failed to list tasks: ${error.message}`);
   }
 
-  let results = await Promise.all((data ?? []).map((row) => toEntity(row as TaskWithPersons)));
+  const results = await Promise.all((data ?? []).map((row) => toEntity(row as TaskWithPersons)));
 
-  // For open-task queries (completed === false or undefined):
-  // Exclude recurring tasks whose next_due_at is in the future — they aren't
-  // actionable yet. Include them if a dueBy window is specified and they fall within it.
-  if (options?.completed !== true) {
-    const now = new Date();
-    results = results.filter((t) => {
-      if (!t.recurrence || !t.nextDueAt) return true; // non-recurring or no next_due
-      const nextDue = new Date(t.nextDueAt);
-      if (options?.dueBy) {
-        // Include if next_due_at <= dueBy
-        const dueByDate = new Date(options.dueBy + "T23:59:59Z");
-        return nextDue <= dueByDate;
+  // Optional dueBy filter: when specified, include only tasks where
+  // due_date or next_due_at falls within the window.
+  if (options?.dueBy) {
+    const dueByDate = new Date(options.dueBy + "T23:59:59Z");
+    return results.filter((t) => {
+      // Non-recurring: check due_date
+      if (t.dueDate) {
+        if (new Date(t.dueDate + "T23:59:59Z") <= dueByDate) return true;
       }
-      // Default: only include if next_due_at <= now
-      return nextDue <= now;
+      // Recurring: check next_due_at
+      if (t.nextDueAt) {
+        if (new Date(t.nextDueAt) <= dueByDate) return true;
+      }
+      // No date info: include (don't hide tasks just because they lack dates)
+      if (!t.dueDate && !t.nextDueAt) return true;
+      return false;
     });
   }
 

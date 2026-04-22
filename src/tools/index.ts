@@ -1650,12 +1650,12 @@ export function registerTools(server: McpServer): void {
     "list_tasks",
     {
       title: "List Tasks",
-      description: "Lists tasks. Filter by end, area, or completion status. Recurring tasks with next_due_at in the future are excluded from open task queries unless dueBy is specified.",
+      description: "Lists tasks. Filter by end, area, or completion status. Use dueBy to narrow to tasks due by a specific date (checks both due_date and next_due_at for recurring tasks).",
       inputSchema: {
         endId: z.string().optional().describe("Filter by end ID"),
         areaId: z.string().optional().describe("Filter by area ID"),
         completed: z.boolean().optional().describe("Filter: true = completed only, false = open only"),
-        dueBy: z.string().optional().describe("Include recurring tasks due by this date (YYYY-MM-DD). Without this, only currently-due recurring tasks are shown."),
+        dueBy: z.string().optional().describe("Only show tasks due by this date (YYYY-MM-DD). Checks both due_date and next_due_at."),
       },
     },
     async ({ endId, areaId, completed, dueBy }) => {

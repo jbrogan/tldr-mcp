@@ -73,7 +73,7 @@ Recompute `nextDueAt` from the new recurrence string and `lastCompletedAt` (or `
 
 **nextDueAt override:** When `nextDueAt` is provided directly by the user, pass as-is — it's a one-cycle override. Recurrence logic resumes on next completion.
 
-**Query behavior:** Recurring tasks with `next_due_at` in the future are excluded from default `list_tasks` open queries. Use `dueBy` parameter to include upcoming recurring tasks within a date window.
+**Query behavior:** All open tasks (including recurring tasks not yet due) appear in default `list_tasks` queries. Use `dueBy` to narrow to tasks due by a specific date — this checks both `dueDate` (one-off) and `next_due_at` (recurring).
 
 ## Date and Timezone Rules
 
@@ -91,7 +91,8 @@ Recompute `nextDueAt` from the new recurrence string and `lastCompletedAt` (or `
 | "I finished [task]" | `update_task` | completedAt (recurring: + nextDueAt) |
 | "Create a task to check tire pressure every 6 weeks" | `create_task` | recurrence, nextDueAt |
 | "What did I do this week?" | `list_actions` | period: "this_week" |
-| "What's due?" | `list_tasks` | completed: false |
+| "What's due?" | `list_tasks` | completed: false, dueBy: today's date |
+| "Show all open tasks" | `list_tasks` | completed: false |
 | "What's coming up this month?" | `list_tasks` | dueBy: end-of-month date |
 | "I want to be a better father" | `create_end` | endType: "journey" |
 | "Launch the product by June" | `create_end` | endType: "destination", dueDate |
