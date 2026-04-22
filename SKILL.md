@@ -111,7 +111,13 @@ When advising on what to focus on, surface gaps in this order:
 
 ## Tool Response Format
 
-All tool responses include IDs alongside display names for related entities. Use these IDs for follow-up tool calls without intermediate lookups.
+All tool responses return structured JSON:
+- **List tools**: `{ <plural>: [...], count: N }` — e.g. `{ beliefs: [{id, name, ...}], count: 3 }`
+- **Single-entity tools** (get/create/update): `{ <singular>: {id, name, ...} }`
+- **Delete tools**: `{ deleted: {id, name} }`
+- **Errors**: plain text with `isError: true`
+
+Related entities are included inline with `{id, name}` — use these for follow-up tool calls without intermediate lookups. All fields are present with `null` for unset values (no ambiguity from omission).
 
 ## Sharing
 

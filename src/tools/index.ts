@@ -1,8 +1,8 @@
 /**
  * MCP Tools - Functions callable by the LLM
  *
- * Add your tool implementations here. Each tool receives validated
- * arguments and returns content for the client.
+ * All tool responses return structured JSON via jsonResponse().
+ * The LLM handles presentation; tools are the data layer.
  */
 
 import { z } from "zod";
@@ -76,6 +76,22 @@ import {
 } from "../store/tasks.js";
 import { listUsers } from "../store/users.js";
 
+/**
+ * Wrap a data object as an MCP JSON tool response.
+ */
+function jsonResponse(data: unknown) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(data) }],
+  };
+}
+
+function errorResponse(message: string) {
+  return {
+    content: [{ type: "text" as const, text: message }],
+    isError: true,
+  };
+}
+
 async function resolveOwnerName(ownerType: string, ownerId: string): Promise<string> {
   if (ownerType === "organization") {
     const org = await getOrganizationById(ownerId);
@@ -105,16 +121,20 @@ export function registerTools(server: McpServer): void {
     async () => {
       const { listBeliefs } = await import("../store/beliefs.js");
       const beliefs = await listBeliefs();
-      if (beliefs.length === 0) {
-        return { content: [{ type: "text", text: "No beliefs found." }] };
-      }
       const allEnds = await listEnds();
-      const lines = beliefs.map((b) => {
-        const endNames = b.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid);
-        const endsPart = endNames.length > 0 ? `\n    Linked ends: ${endNames.join(", ")}` : "";
-        return `  ${b.name} (${b.id})${endsPart}`;
+      return jsonResponse({
+        beliefs: beliefs.map((b) => ({
+          id: b.id,
+          name: b.name,
+          description: b.description ?? null,
+          linkedEnds: b.endIds.map((eid) => {
+            const e = allEnds.find((e) => e.id === eid);
+            return e ? { id: e.id, name: e.name } : { id: eid, name: null };
+          }),
+          createdAt: b.createdAt,
+        })),
+        count: beliefs.length,
       });
-      return { content: [{ type: "text", text: `Beliefs:\n\n${lines.join("\n")}` }] };
     }
   );
 
@@ -131,17 +151,21 @@ export function registerTools(server: McpServer): void {
       const { getBeliefById } = await import("../store/beliefs.js");
       const belief = await getBeliefById(id);
       if (!belief) {
-        return { content: [{ type: "text", text: `Belief with ID ${id} not found.` }], isError: true };
+        return errorResponse(`Belief with ID ${id} not found.`);
       }
       const allEnds = await listEnds();
-      const endNames = belief.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid);
-      const parts = [
-        `${belief.name} (${belief.id})`,
-        belief.description && `  Description: ${belief.description}`,
-        `  Created: ${belief.createdAt}`,
-        endNames.length > 0 ? `  Linked ends:\n${endNames.map((n) => `    - ${n}`).join("\n")}` : "  Linked ends: (none)",
-      ].filter(Boolean);
-      return { content: [{ type: "text", text: parts.join("\n") }] };
+      return jsonResponse({
+        belief: {
+          id: belief.id,
+          name: belief.name,
+          description: belief.description ?? null,
+          createdAt: belief.createdAt,
+          linkedEnds: belief.endIds.map((eid) => {
+            const e = allEnds.find((e) => e.id === eid);
+            return e ? { id: e.id, name: e.name } : { id: eid, name: null };
+          }),
+        },
+      });
     }
   );
 
@@ -163,9 +187,15 @@ export function registerTools(server: McpServer): void {
       if (description !== undefined) updates.description = description;
       const belief = await updateBelief(id, updates);
       if (!belief) {
-        return { content: [{ type: "text", text: `Belief with ID ${id} not found.` }], isError: true };
+        return errorResponse(`Belief with ID ${id} not found.`);
       }
-      return { content: [{ type: "text", text: `Updated belief: ${belief.name}` }] };
+      return jsonResponse({
+        belief: {
+          id: belief.id,
+          name: belief.name,
+          description: belief.description ?? null,
+        },
+      });
     }
   );
 
@@ -182,7 +212,14 @@ export function registerTools(server: McpServer): void {
     async ({ name, description }) => {
       const { createBelief } = await import("../store/beliefs.js");
       const belief = await createBelief({ name, description });
-      return { content: [{ type: "text", text: `Created belief: ${belief.name} (${belief.id})` }] };
+      return jsonResponse({
+        belief: {
+          id: belief.id,
+          name: belief.name,
+          description: belief.description ?? null,
+          createdAt: belief.createdAt,
+        },
+      });
     }
   );
 
@@ -199,9 +236,9 @@ export function registerTools(server: McpServer): void {
       const { deleteBelief } = await import("../store/beliefs.js");
       const belief = await deleteBelief(id);
       if (!belief) {
-        return { content: [{ type: "text", text: `Belief with ID ${id} not found.` }], isError: true };
+        return errorResponse(`Belief with ID ${id} not found.`);
       }
-      return { content: [{ type: "text", text: `Deleted belief: ${belief.name}` }] };
+      return jsonResponse({ deleted: { id: belief.id, name: belief.name } });
     }
   );
 
@@ -218,7 +255,7 @@ export function registerTools(server: McpServer): void {
     async ({ beliefId, endId }) => {
       const { linkEndToBelief } = await import("../store/beliefs.js");
       await linkEndToBelief(beliefId, endId);
-      return { content: [{ type: "text", text: `Linked end ${endId} to belief ${beliefId}` }] };
+      return jsonResponse({ linked: { beliefId, endId } });
     }
   );
 
@@ -235,7 +272,7 @@ export function registerTools(server: McpServer): void {
     async ({ beliefId, endId }) => {
       const { unlinkEndFromBelief } = await import("../store/beliefs.js");
       await unlinkEndFromBelief(beliefId, endId);
-      return { content: [{ type: "text", text: `Unlinked end ${endId} from belief ${beliefId}` }] };
+      return jsonResponse({ unlinked: { beliefId, endId } });
     }
   );
 
@@ -251,15 +288,10 @@ export function registerTools(server: McpServer): void {
     },
     async () => {
       const areas = await listAreas();
-      const lines = areas.map((a) => `  ${a.name} (${a.id})`);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Areas:\n\n${lines.join("\n")}`,
-          },
-        ],
-      };
+      return jsonResponse({
+        areas: areas.map((a) => ({ id: a.id, name: a.name })),
+        count: areas.length,
+      });
     }
   );
 
@@ -276,48 +308,36 @@ export function registerTools(server: McpServer): void {
     },
     async ({ areaId, portfolioId }) => {
       if (areaId && portfolioId) {
-        return {
-          content: [{ type: "text", text: "Provide areaId OR portfolioId, not both." }],
-          isError: true,
-        };
+        return errorResponse("Provide areaId OR portfolioId, not both.");
       }
 
       const areas = await listAreas();
       const allEnds = await listEnds();
       const allHabits = await listHabits();
 
-      function formatEndLine(e: typeof allEnds[0]): string {
-        const meta: string[] = [];
-        if (e.endType !== "journey") meta.push(e.endType);
-        if (e.state !== "active") meta.push(e.state);
-        if (e.dueDate) meta.push(`due: ${e.dueDate}`);
-        const metaStr = meta.length ? ` [${meta.join(", ")}]` : "";
-        return `  - ${e.name} (${e.id})${metaStr}`;
+      function formatEndObj(e: typeof allEnds[0]) {
+        const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
+        return {
+          id: e.id,
+          name: e.name,
+          endType: e.endType,
+          state: e.state,
+          dueDate: e.dueDate ?? null,
+          habits: habitsForEnd.map((h) => ({ id: h.id, name: h.name })),
+        };
       }
 
       if (portfolioId) {
         const portfolio = await getPortfolioById(portfolioId);
         if (!portfolio) {
-          return {
-            content: [{ type: "text", text: `Portfolio with ID ${portfolioId} not found.` }],
-            isError: true,
-          };
+          return errorResponse(`Portfolio with ID ${portfolioId} not found.`);
         }
         const ends = allEnds.filter((e) => e.portfolioId === portfolioId);
-        const parts: string[] = [`## ${portfolio.name}`];
-        for (const e of ends) {
-          const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
-          parts.push(formatEndLine(e));
-          habitsForEnd.forEach((h) => parts.push(`    - ${h.name} (${h.id})`));
-        }
-        if (ends.length === 0) {
-          return {
-            content: [{ type: "text", text: `No ends or habits in portfolio "${portfolio.name}".` }],
-          };
-        }
-        return {
-          content: [{ type: "text", text: parts.join("\n") }],
-        };
+        return jsonResponse({
+          portfolio: { id: portfolio.id, name: portfolio.name },
+          ends: ends.map(formatEndObj),
+          count: ends.length,
+        });
       }
 
       const areaIdsToShow = areaId
@@ -325,49 +345,30 @@ export function registerTools(server: McpServer): void {
         : areas.map((a) => a.id);
 
       if (areaId && areaIdsToShow.length === 0) {
-        return {
-          content: [{ type: "text", text: `Area with ID ${areaId} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`Area with ID ${areaId} not found.`);
       }
 
-      const sections: string[] = [];
+      const sections: { area: { id: string; name: string } | null; ends: ReturnType<typeof formatEndObj>[] }[] = [];
 
       for (const aId of areaIdsToShow) {
         const area = areas.find((a) => a.id === aId);
-        const areaName = area?.name ?? aId;
         const ends = allEnds.filter((e) => e.areaId === aId);
         if (ends.length === 0) continue;
-
-        const parts: string[] = [`## ${areaName}`];
-        for (const e of ends) {
-          const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
-          parts.push(formatEndLine(e));
-          habitsForEnd.forEach((h) => parts.push(`    - ${h.name} (${h.id})`));
-        }
-        sections.push(parts.join("\n"));
+        sections.push({
+          area: area ? { id: area.id, name: area.name } : { id: aId, name: aId },
+          ends: ends.map(formatEndObj),
+        });
       }
 
       const uncategorizedEnds = allEnds.filter((e) => !e.areaId);
       if (uncategorizedEnds.length > 0) {
-        const parts: string[] = ["## Uncategorized"];
-        for (const e of uncategorizedEnds) {
-          const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
-          parts.push(formatEndLine(e));
-          habitsForEnd.forEach((h) => parts.push(`    - ${h.name} (${h.id})`));
-        }
-        sections.push(parts.join("\n"));
+        sections.push({
+          area: null,
+          ends: uncategorizedEnds.map(formatEndObj),
+        });
       }
 
-      if (sections.length === 0) {
-        return {
-          content: [{ type: "text", text: areaId ? "No ends or habits found for this area." : "No ends or habits found." }],
-        };
-      }
-
-      return {
-        content: [{ type: "text", text: sections.join("\n\n") }],
-      };
+      return jsonResponse({ sections, count: sections.reduce((sum, s) => sum + s.ends.length, 0) });
     }
   );
 
@@ -383,14 +384,9 @@ export function registerTools(server: McpServer): void {
     },
     async ({ name }) => {
       const org = await createOrganization({ name });
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Created organization: ${org.name}\nID: ${org.id}\nCreated at: ${org.createdAt}`,
-          },
-        ],
-      };
+      return jsonResponse({
+        organization: { id: org.id, name: org.name, createdAt: org.createdAt },
+      });
     }
   );
 
@@ -406,46 +402,25 @@ export function registerTools(server: McpServer): void {
     },
     async ({ expand }) => {
       const orgs = await listOrganizations();
-      if (orgs.length === 0) {
-        return {
-          content: [{ type: "text", text: "No organizations found." }],
-        };
-      }
       if (!expand) {
-        const lines = orgs.map((o) => `  ${o.name} (${o.id})`);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Found ${orgs.length} organization(s):\n\n${lines.join("\n")}`,
-            },
-          ],
-        };
+        return jsonResponse({
+          organizations: orgs.map((o) => ({ id: o.id, name: o.name })),
+          count: orgs.length,
+        });
       }
-      const sections: string[] = [];
-      for (const org of orgs) {
+      const expanded = await Promise.all(orgs.map(async (org) => {
         const teams = await listTeams(org.id);
-        const parts: string[] = [`  ${org.name} (${org.id})`, "    Teams:"];
-        if (teams.length === 0) {
-          parts.push("      (no teams)");
-        } else {
-          for (const t of teams) {
-            const people = await listPersons({ teamId: t.id });
-            const peopleNames = people.map((p) => `${p.firstName} ${p.lastName}`).join(", ");
-            parts.push(`      - ${t.name} (${t.id})`);
-            parts.push(`        ${peopleNames || "(no members)"}`);
-          }
-        }
-        sections.push(parts.join("\n"));
-      }
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Found ${orgs.length} organization(s):\n\n${sections.join("\n\n")}`,
-          },
-        ],
-      };
+        const teamsWithMembers = await Promise.all(teams.map(async (t) => {
+          const people = await listPersons({ teamId: t.id });
+          return {
+            id: t.id,
+            name: t.name,
+            members: people.map((p) => ({ id: p.id, firstName: p.firstName, lastName: p.lastName })),
+          };
+        }));
+        return { id: org.id, name: org.name, teams: teamsWithMembers };
+      }));
+      return jsonResponse({ organizations: expanded, count: orgs.length });
     }
   );
 
@@ -463,9 +438,9 @@ export function registerTools(server: McpServer): void {
       const { updateOrganization } = await import("../store/organizations.js");
       const org = await updateOrganization(id, { name });
       if (!org) {
-        return { content: [{ type: "text", text: `Organization with ID ${id} not found.` }], isError: true };
+        return errorResponse(`Organization with ID ${id} not found.`);
       }
-      return { content: [{ type: "text", text: `Updated organization: ${org.name}` }] };
+      return jsonResponse({ organization: { id: org.id, name: org.name } });
     }
   );
 
@@ -482,10 +457,7 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const org = await getOrganizationById(id);
       if (!org) {
-        return {
-          content: [{ type: "text", text: `Organization with ID ${id} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`Organization with ID ${id} not found.`);
       }
       const teams = await listTeams(id);
       for (const t of teams) {
@@ -493,14 +465,7 @@ export function registerTools(server: McpServer): void {
       }
       await deleteTeamsByOrganizationId(id);
       await deleteOrganization(id);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Deleted organization: ${org.name} (${org.id})`,
-          },
-        ],
-      };
+      return jsonResponse({ deleted: { id: org.id, name: org.name } });
     }
   );
 
@@ -517,14 +482,9 @@ export function registerTools(server: McpServer): void {
     },
     async ({ name, organizationId }) => {
       const team = await createTeam({ name, organizationId });
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Created team: ${team.name}\nID: ${team.id}\nOrganization ID: ${team.organizationId}\nCreated at: ${team.createdAt}`,
-          },
-        ],
-      };
+      return jsonResponse({
+        team: { id: team.id, name: team.name, organizationId: team.organizationId, createdAt: team.createdAt },
+      });
     }
   );
 
@@ -544,40 +504,20 @@ export function registerTools(server: McpServer): void {
       if (personId) {
         const person = await getPersonById(personId);
         if (!person) {
-          return {
-            content: [{ type: "text", text: `Person with ID ${personId} not found.` }],
-            isError: true,
-          };
+          return errorResponse(`Person with ID ${personId} not found.`);
         }
         const memberTeamIds = new Set(person.teamIds ?? []);
         teams = teams.filter((t) => memberTeamIds.has(t.id));
       }
-      if (teams.length === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: personId
-                ? "No teams found for this person."
-                : organizationId
-                  ? "No teams found for this organization."
-                  : "No teams found.",
-            },
-          ],
-        };
-      }
-      const lines = await Promise.all(teams.map(async (t) => {
+      const teamObjs = await Promise.all(teams.map(async (t) => {
         const org = await getOrganizationById(t.organizationId);
-        return `  ${t.name} (${t.id}) - Organization: ${org?.name ?? t.organizationId}`;
+        return {
+          id: t.id,
+          name: t.name,
+          organization: org ? { id: org.id, name: org.name } : { id: t.organizationId, name: null },
+        };
       }));
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Found ${teams.length} team(s):\n\n${lines.join("\n")}`,
-          },
-        ],
-      };
+      return jsonResponse({ teams: teamObjs, count: teams.length });
     }
   );
 
@@ -594,23 +534,25 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const team = await getTeamById(id);
       if (!team) {
-        return { content: [{ type: "text", text: `Team with ID ${id} not found.` }], isError: true };
+        return errorResponse(`Team with ID ${id} not found.`);
       }
       const org = await getOrganizationById(team.organizationId);
       const members = await listPersons({ teamId: id });
-      const memberLines = members.map((p) => {
-        const meta: string[] = [];
-        if (p.relationshipType) meta.push(p.relationshipType);
-        if (p.userId) meta.push("linked account");
-        return `    - ${p.firstName} ${p.lastName}${meta.length ? ` [${meta.join(", ")}]` : ""}`;
+      return jsonResponse({
+        team: {
+          id: team.id,
+          name: team.name,
+          organization: org ? { id: org.id, name: org.name } : { id: team.organizationId, name: null },
+          createdAt: team.createdAt,
+          members: members.map((p) => ({
+            id: p.id,
+            firstName: p.firstName,
+            lastName: p.lastName,
+            relationshipType: p.relationshipType ?? null,
+            linkedAccount: !!p.userId,
+          })),
+        },
       });
-      const parts = [
-        `${team.name} (${team.id})`,
-        org && `  Organization: ${org.name}`,
-        `  Created: ${team.createdAt}`,
-        members.length > 0 ? `  Members:\n${memberLines.join("\n")}` : "  Members: (none)",
-      ].filter(Boolean);
-      return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
 
@@ -628,9 +570,9 @@ export function registerTools(server: McpServer): void {
       const { updateTeam } = await import("../store/teams.js");
       const team = await updateTeam(id, { name });
       if (!team) {
-        return { content: [{ type: "text", text: `Team with ID ${id} not found.` }], isError: true };
+        return errorResponse(`Team with ID ${id} not found.`);
       }
-      return { content: [{ type: "text", text: `Updated team: ${team.name}` }] };
+      return jsonResponse({ team: { id: team.id, name: team.name } });
     }
   );
 
@@ -647,21 +589,11 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const team = await getTeamById(id);
       if (!team) {
-        return {
-          content: [{ type: "text", text: `Team with ID ${id} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`Team with ID ${id} not found.`);
       }
       await removeTeamFromAllPersons(id);
       await deleteTeam(id);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Deleted team: ${team.name} (${team.id})`,
-          },
-        ],
-      };
+      return jsonResponse({ deleted: { id: team.id, name: team.name } });
     }
   );
 
@@ -692,14 +624,17 @@ export function registerTools(server: McpServer): void {
         portfolioType,
         description,
       });
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Created portfolio: ${portfolio.name}\nID: ${portfolio.id}\nOwner: ${portfolio.ownerType} ${portfolio.ownerId}\n${portfolio.portfolioType ? `Type: ${portfolio.portfolioType}\n` : ""}${portfolio.description ? `Description: ${portfolio.description}\n` : ""}Created at: ${portfolio.createdAt}`,
-          },
-        ],
-      };
+      return jsonResponse({
+        portfolio: {
+          id: portfolio.id,
+          name: portfolio.name,
+          ownerType: portfolio.ownerType,
+          ownerId: portfolio.ownerId,
+          portfolioType: portfolio.portfolioType ?? null,
+          description: portfolio.description ?? null,
+          createdAt: portfolio.createdAt,
+        },
+      });
     }
   );
 
@@ -727,21 +662,17 @@ export function registerTools(server: McpServer): void {
           ? { ownerType, ownerId, portfolioType }
           : undefined
       );
-      if (portfolios.length === 0) {
-        return { content: [{ type: "text", text: "No portfolios found." }] };
-      }
-      const lines = await Promise.all(portfolios.map(async (c) => {
+      const portfolioObjs = await Promise.all(portfolios.map(async (c) => {
         const ownerName = await resolveOwnerName(c.ownerType, c.ownerId);
-        return `  ${c.name} (${c.id}) - ${c.ownerType}: ${ownerName}${c.portfolioType ? ` [${c.portfolioType}]` : ""}`;
+        return {
+          id: c.id,
+          name: c.name,
+          ownerType: c.ownerType,
+          owner: { id: c.ownerId, name: ownerName },
+          portfolioType: c.portfolioType ?? null,
+        };
       }));
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Found ${portfolios.length} portfolio(s):\n\n${lines.join("\n")}`,
-          },
-        ],
-      };
+      return jsonResponse({ portfolios: portfolioObjs, count: portfolios.length });
     }
   );
 
@@ -758,21 +689,23 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const portfolio = await getPortfolioById(id);
       if (!portfolio) {
-        return { content: [{ type: "text", text: `Portfolio with ID ${id} not found.` }], isError: true };
+        return errorResponse(`Portfolio with ID ${id} not found.`);
       }
       const ownerName = await resolveOwnerName(portfolio.ownerType, portfolio.ownerId);
       const allEnds = await listEnds();
       const ends = allEnds.filter((e) => e.portfolioId === id);
-      const endLines = ends.map((e) => `    - ${e.name} (${e.id})`);
-      const parts = [
-        `${portfolio.name} (${portfolio.id})`,
-        `  Owner: ${ownerName} (${portfolio.ownerType})`,
-        portfolio.portfolioType && `  Type: ${portfolio.portfolioType}`,
-        portfolio.description && `  Description: ${portfolio.description}`,
-        `  Created: ${portfolio.createdAt}`,
-        ends.length > 0 ? `  Ends:\n${endLines.join("\n")}` : "  Ends: (none)",
-      ].filter(Boolean);
-      return { content: [{ type: "text", text: parts.join("\n") }] };
+      return jsonResponse({
+        portfolio: {
+          id: portfolio.id,
+          name: portfolio.name,
+          ownerType: portfolio.ownerType,
+          owner: { id: portfolio.ownerId, name: ownerName },
+          portfolioType: portfolio.portfolioType ?? null,
+          description: portfolio.description ?? null,
+          createdAt: portfolio.createdAt,
+          ends: ends.map((e) => ({ id: e.id, name: e.name })),
+        },
+      });
     }
   );
 
@@ -794,24 +727,21 @@ export function registerTools(server: McpServer): void {
     async ({ id, name, portfolioType, description }) => {
       const existing = await getPortfolioById(id);
       if (!existing) {
-        return {
-          content: [{ type: "text", text: `Portfolio with ID ${id} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`Portfolio with ID ${id} not found.`);
       }
       const updates: Record<string, unknown> = {};
       if (name != null) updates.name = name;
       if (portfolioType !== undefined) updates.portfolioType = portfolioType;
       if (description !== undefined) updates.description = description;
       const portfolio = await updatePortfolio(id, updates);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Updated portfolio: ${portfolio?.name} (${id})`,
-          },
-        ],
-      };
+      return jsonResponse({
+        portfolio: {
+          id,
+          name: portfolio?.name ?? null,
+          portfolioType: portfolio?.portfolioType ?? null,
+          description: portfolio?.description ?? null,
+        },
+      });
     }
   );
 
@@ -828,20 +758,10 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const portfolio = await getPortfolioById(id);
       if (!portfolio) {
-        return {
-          content: [{ type: "text", text: `Portfolio with ID ${id} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`Portfolio with ID ${id} not found.`);
       }
       await deletePortfolio(id);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Deleted portfolio: ${portfolio.name} (${id})`,
-          },
-        ],
-      };
+      return jsonResponse({ deleted: { id, name: portfolio.name } });
     }
   );
 
@@ -862,17 +782,19 @@ export function registerTools(server: McpServer): void {
     },
     async ({ name, areaId, portfolioId, endType, dueDate, thesis }) => {
       const end = await createEnd({ name, areaId, portfolioId, endType: endType ?? "journey", dueDate, thesis });
-      const parts = [
-        `Created end: ${end.name}`,
-        `ID: ${end.id}`,
-        `Type: ${end.endType} | State: ${end.state}`,
-        end.areaId ? `Area: ${end.areaId}` : null,
-        end.portfolioId ? `Portfolio: ${end.portfolioId}` : null,
-        end.dueDate ? `Due: ${end.dueDate}` : null,
-        end.thesis ? `Thesis: ${end.thesis}` : null,
-        `Created at: ${end.createdAt}`,
-      ].filter(Boolean);
-      return { content: [{ type: "text", text: parts.join("\n") }] };
+      return jsonResponse({
+        end: {
+          id: end.id,
+          name: end.name,
+          endType: end.endType,
+          state: end.state,
+          areaId: end.areaId ?? null,
+          portfolioId: end.portfolioId ?? null,
+          dueDate: end.dueDate ?? null,
+          thesis: end.thesis ?? null,
+          createdAt: end.createdAt,
+        },
+      });
     }
   );
 
@@ -891,29 +813,24 @@ export function registerTools(server: McpServer): void {
     async ({ areaId, portfolioId, endType, state }) => {
       const hasFilter = areaId || portfolioId || endType || state;
       const ends = await listEnds(hasFilter ? { areaId, portfolioId, endType, state } : undefined);
-      if (ends.length === 0) {
-        return { content: [{ type: "text", text: "No ends found." }] };
-      }
       const allAreas = await listAreas();
       const allPortfolios = await listPortfolios();
-      const lines = ends.map((e) => {
-        const area = e.areaId ? allAreas.find((a) => a.id === e.areaId) : undefined;
-        const portfolio = e.portfolioId ? allPortfolios.find((c) => c.id === e.portfolioId) : undefined;
-        const meta: string[] = [];
-        if (e.endType !== "journey") meta.push(e.endType);
-        if (e.state !== "active") meta.push(e.state);
-        if (e.dueDate) meta.push(`due: ${e.dueDate}`);
-        const metaStr = meta.length ? ` [${meta.join(", ")}]` : "";
-        return `  ${e.name} (${e.id})${metaStr}${area ? ` - Area: ${area.name}` : ""}${portfolio ? ` - Portfolio: ${portfolio.name}` : ""}`;
+      return jsonResponse({
+        ends: ends.map((e) => {
+          const area = e.areaId ? allAreas.find((a) => a.id === e.areaId) : undefined;
+          const portfolio = e.portfolioId ? allPortfolios.find((c) => c.id === e.portfolioId) : undefined;
+          return {
+            id: e.id,
+            name: e.name,
+            endType: e.endType,
+            state: e.state,
+            dueDate: e.dueDate ?? null,
+            area: area ? { id: area.id, name: area.name } : null,
+            portfolio: portfolio ? { id: portfolio.id, name: portfolio.name } : null,
+          };
+        }),
+        count: ends.length,
       });
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Found ${ends.length} end(s):\n\n${lines.join("\n")}`,
-          },
-        ],
-      };
     }
   );
 
@@ -930,7 +847,7 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const end = await getEndById(id);
       if (!end) {
-        return { content: [{ type: "text", text: `End with ID ${id} not found.` }], isError: true };
+        return errorResponse(`End with ID ${id} not found.`);
       }
       const area = end.areaId ? await getAreaById(end.areaId) : undefined;
       const portfolios = await listPortfolios();
@@ -939,18 +856,20 @@ export function registerTools(server: McpServer): void {
       const myHabits = allHabits.filter((h) => !h.isShared);
       const sharedHabits = allHabits.filter((h) => h.isShared);
 
-      async function formatHabitLine(h: typeof allHabits[0]): Promise<string> {
-        const personLabels: string[] = [];
+      async function formatHabitObj(h: typeof allHabits[0]) {
+        const participants: { id: string; firstName: string; lastName: string }[] = [];
         const personNames: string[] = [];
         for (const pid of h.personIds ?? []) {
           const person = await getPersonById(pid);
-          const name = person ? `${person.firstName} ${person.lastName}` : pid;
-          personNames.push(name);
-          personLabels.push(person ? `${name} (${pid})` : pid);
+          if (person) {
+            participants.push({ id: person.id, firstName: person.firstName, lastName: person.lastName ?? "" });
+            personNames.push(`${person.firstName} ${person.lastName ?? ""}`);
+          } else {
+            participants.push({ id: pid, firstName: pid, lastName: "" });
+            personNames.push(pid);
+          }
         }
-        const meta: string[] = [];
-        if (h.recurrence) meta.push(h.recurrence);
-        if (personLabels.length) meta.push(`participants: ${personLabels.join(", ")}`);
+        let sharedBy: string | null = null;
         if (h.isShared && h.ownerId) {
           const { data: ownerPerson } = await getSupabase()
             .from("persons")
@@ -959,72 +878,84 @@ export function registerTools(server: McpServer): void {
             .eq("relationship_type", "self")
             .single();
           const ownerName = ownerPerson ? `${ownerPerson.first_name} ${ownerPerson.last_name}` : h.ownerDisplayName ?? "unknown";
-          // Only show "by" if owner isn't already in the participants list
           if (!personNames.includes(ownerName)) {
-            meta.push(`by ${ownerName}`);
+            sharedBy = ownerName;
           }
         }
-        return `    - ${h.name} (${h.id})${meta.length ? ` [${meta.join(", ")}]` : ""}`;
+        return {
+          id: h.id,
+          name: h.name,
+          recurrence: h.recurrence ?? null,
+          participants,
+          isShared: h.isShared ?? false,
+          sharedBy,
+        };
       }
 
-      const myHabitLines = await Promise.all(myHabits.map(formatHabitLine));
-      const sharedHabitLines = await Promise.all(sharedHabits.map(formatHabitLine));
+      const myHabitObjs = await Promise.all(myHabits.map(formatHabitObj));
+      const sharedHabitObjs = await Promise.all(sharedHabits.map(formatHabitObj));
       const { listBeliefs } = await import("../store/beliefs.js");
       const allBeliefs = await listBeliefs();
       const linkedBeliefs = allBeliefs.filter((b) => b.endIds.includes(id));
-      const beliefLines = linkedBeliefs.map((b) => `    - ${b.name} (${b.id})`);
 
       // Contextual sharing info
       const shares = await listMyShares();
       const endShares = shares.filter((s) => s.endId === id);
       const isOwner = endShares.length > 0;
-      let sharingLine: string | undefined;
+      let sharing: { type: "owner"; sharedWith: { userId: string; name: string | null; email: string }[] } | { type: "shared"; sharedBy: string } | null = null;
 
       if (isOwner) {
-        const sharedWithLines = await Promise.all(endShares.map(async (s) => {
+        const sharedWith = await Promise.all(endShares.map(async (s) => {
           const { data: person } = await getSupabase()
             .from("persons")
             .select("first_name, last_name")
             .eq("linked_user_id", s.sharedWithUserId)
             .eq("relationship_type", "self")
             .single();
-          return person ? `    - ${person.first_name} ${person.last_name} (${s.sharedWithUserId})` : `    - ${s.sharedWithEmail} (${s.sharedWithUserId})`;
+          return {
+            userId: s.sharedWithUserId,
+            name: person ? `${person.first_name} ${person.last_name}` : null,
+            email: s.sharedWithEmail,
+          };
         }));
-        if (sharedWithLines.length > 0) {
-          sharingLine = `  Shared with:\n${sharedWithLines.join("\n")}`;
+        if (sharedWith.length > 0) {
+          sharing = { type: "owner", sharedWith };
         }
       } else {
         const sharedEnds = await listSharedEnds();
         const sharedEnd = sharedEnds.find((e) => e.id === id);
         if (sharedEnd?.ownerDisplayName) {
-          sharingLine = `  Shared by: ${sharedEnd.ownerDisplayName}`;
+          sharing = { type: "shared", sharedBy: sharedEnd.ownerDisplayName };
         }
       }
       const { listTasksForEnd } = await import("../store/tasks.js");
       const tasks = await listTasksForEnd(id, { completed: false });
-      const isSharedEnd = sharingLine !== undefined;
-      const taskLines = tasks.map((t) => {
-        const meta: string[] = [];
-        if (t.dueDate) meta.push(`due: ${t.dueDate}`);
-        if (isSharedEnd && t.ownerDisplayName) meta.push(`by ${t.ownerDisplayName}`);
-        return `    - ${t.name} (${t.id})${meta.length ? ` [${meta.join(", ")}]` : ""}`;
+      const isSharedEnd = sharing !== null;
+
+      return jsonResponse({
+        end: {
+          id: end.id,
+          name: end.name,
+          endType: end.endType,
+          state: end.state,
+          area: area ? { id: area.id, name: area.name } : null,
+          portfolio: portfolio ? { id: portfolio.id, name: portfolio.name } : null,
+          dueDate: end.dueDate ?? null,
+          thesis: end.thesis ?? null,
+          resolutionNotes: end.resolutionNotes ?? null,
+          createdAt: end.createdAt,
+          beliefs: linkedBeliefs.map((b) => ({ id: b.id, name: b.name })),
+          habits: myHabitObjs,
+          sharedHabits: sharedHabitObjs,
+          openTasks: tasks.map((t) => ({
+            id: t.id,
+            name: t.name,
+            dueDate: t.dueDate ?? null,
+            ownerDisplayName: isSharedEnd ? (t.ownerDisplayName ?? null) : null,
+          })),
+          sharing,
+        },
       });
-      const parts = [
-        `${end.name} (${end.id})`,
-        `  Type: ${end.endType} | State: ${end.state}`,
-        area && `  Area: ${area.name} (${area.id})`,
-        portfolio && `  Portfolio: ${portfolio.name} (${portfolio.id})`,
-        end.dueDate ? `  Due: ${end.dueDate}` : undefined,
-        end.thesis ? `  Thesis: ${end.thesis}` : undefined,
-        end.resolutionNotes ? `  Resolution: ${end.resolutionNotes}` : undefined,
-        `  Created: ${end.createdAt}`,
-        linkedBeliefs.length > 0 ? `  Beliefs:\n${beliefLines.join("\n")}` : undefined,
-        myHabitLines.length > 0 ? `  Your habits:\n${myHabitLines.join("\n")}` : "  Your habits: (none)",
-        sharedHabitLines.length > 0 ? `  Shared habits:\n${sharedHabitLines.join("\n")}` : undefined,
-        taskLines.length > 0 ? `  Open tasks:\n${taskLines.join("\n")}` : undefined,
-        sharingLine,
-      ].filter(Boolean);
-      return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
 
@@ -1059,19 +990,24 @@ export function registerTools(server: McpServer): void {
       try {
         const end = await updateEnd(id, updates as Parameters<typeof updateEnd>[1]);
         if (!end) {
-          return { content: [{ type: "text", text: `End with ID ${id} not found.` }], isError: true };
+          return errorResponse(`End with ID ${id} not found.`);
         }
-        const parts = [
-          `Updated end: ${end.name} (${id})`,
-          `Type: ${end.endType} | State: ${end.state}`,
-          end.dueDate ? `Due: ${end.dueDate}` : null,
-          end.thesis ? `Thesis: ${end.thesis}` : null,
-          end.resolutionNotes ? `Resolution: ${end.resolutionNotes}` : null,
-        ].filter(Boolean);
-        return { content: [{ type: "text", text: parts.join("\n") }] };
+        return jsonResponse({
+          end: {
+            id: end.id,
+            name: end.name,
+            endType: end.endType,
+            state: end.state,
+            areaId: end.areaId ?? null,
+            portfolioId: end.portfolioId ?? null,
+            dueDate: end.dueDate ?? null,
+            thesis: end.thesis ?? null,
+            resolutionNotes: end.resolutionNotes ?? null,
+          },
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Update failed";
-        return { content: [{ type: "text", text: message }], isError: true };
+        return errorResponse(message);
       }
     }
   );
@@ -1088,19 +1024,9 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const deleted = await deleteEnd(id);
       if (!deleted) {
-        return {
-          content: [{ type: "text", text: `End with ID ${id} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`End with ID ${id} not found.`);
       }
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Deleted end: ${deleted.name} (${deleted.id})`,
-          },
-        ],
-      };
+      return jsonResponse({ deleted: { id: deleted.id, name: deleted.name } });
     }
   );
 
@@ -1130,20 +1056,19 @@ export function registerTools(server: McpServer): void {
         recurrence,
         durationMinutes,
       });
-      const parts = [
-        `Created habit: ${habit.name}`,
-        `ID: ${habit.id}`,
-        `Ends: ${habit.endIds.join(", ")}`,
-        habit.areaId && `Area: ${habit.areaId}`,
-        habit.teamId && `Team: ${habit.teamId}`,
-        habit.personIds?.length && `Participants: ${habit.personIds.join(", ")}`,
-        habit.recurrence && `Recurrence: ${habit.recurrence}`,
-        habit.durationMinutes != null && `Duration: ${habit.durationMinutes} min`,
-        `Created at: ${habit.createdAt}`,
-      ].filter(Boolean);
-      return {
-        content: [{ type: "text", text: parts.join("\n") }],
-      };
+      return jsonResponse({
+        habit: {
+          id: habit.id,
+          name: habit.name,
+          endIds: habit.endIds,
+          areaId: habit.areaId ?? null,
+          teamId: habit.teamId ?? null,
+          personIds: habit.personIds ?? [],
+          recurrence: habit.recurrence ?? null,
+          durationMinutes: habit.durationMinutes ?? null,
+          createdAt: habit.createdAt,
+        },
+      });
     }
   );
 
@@ -1182,34 +1107,26 @@ export function registerTools(server: McpServer): void {
         }
       }
 
-      if (habits.length === 0) {
-        return { content: [{ type: "text", text: "No habits found." }] };
-      }
       const allEnds = await listEnds({ includeShared: true });
       const allAreas = await listAreas();
-      const lines = await Promise.all(habits.map(async (h) => {
-        const endLabels = h.endIds.map((eid) => { const e = allEnds.find((e) => e.id === eid); return e ? `${e.name} (${eid})` : eid; }).join(", ");
-        const meta: string[] = [];
-        if (h.recurrence) meta.push(h.recurrence);
-        if (h.durationMinutes != null) meta.push(`${h.durationMinutes} min`);
-        if (h.areaId) {
-          const area = allAreas.find((a) => a.id === h.areaId);
-          meta.push(`area: ${area?.name ?? h.areaId} (${h.areaId})`);
-        }
-        if (h.teamId) {
-          const team = await getTeamById(h.teamId);
-          meta.push(`team: ${team?.name ?? h.teamId} (${h.teamId})`);
-        }
-        return `  ${h.name} (${h.id})\n    Ends: ${endLabels}${meta.length ? ` | ${meta.join(", ")}` : ""}`;
+      const habitObjs = await Promise.all(habits.map(async (h) => {
+        const ends = h.endIds.map((eid) => {
+          const e = allEnds.find((e) => e.id === eid);
+          return e ? { id: e.id, name: e.name } : { id: eid, name: null };
+        });
+        const area = h.areaId ? allAreas.find((a) => a.id === h.areaId) : undefined;
+        const team = h.teamId ? await getTeamById(h.teamId) : undefined;
+        return {
+          id: h.id,
+          name: h.name,
+          ends,
+          recurrence: h.recurrence ?? null,
+          durationMinutes: h.durationMinutes ?? null,
+          area: area ? { id: area.id, name: area.name } : h.areaId ? { id: h.areaId, name: null } : null,
+          team: team ? { id: team.id, name: team.name } : h.teamId ? { id: h.teamId, name: null } : null,
+        };
       }));
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Found ${habits.length} habit(s):\n\n${lines.join("\n\n")}`,
-          },
-        ],
-      };
+      return jsonResponse({ habits: habitObjs, count: habits.length });
     }
   );
 
@@ -1226,14 +1143,17 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const habit = await getHabitById(id);
       if (!habit) {
-        return { content: [{ type: "text", text: `Habit with ID ${id} not found.` }], isError: true };
+        return errorResponse(`Habit with ID ${id} not found.`);
       }
       const ends = await listEnds({ includeShared: true });
-      const endLabels = habit.endIds.map((eid) => { const e = ends.find((e) => e.id === eid); return e ? `${e.name} (${eid})` : eid; });
-      const personLabels: string[] = [];
+      const endObjs = habit.endIds.map((eid) => {
+        const e = ends.find((e) => e.id === eid);
+        return e ? { id: e.id, name: e.name } : { id: eid, name: null };
+      });
+      const participants: { id: string; firstName: string; lastName: string }[] = [];
       for (const pid of habit.personIds ?? []) {
         const person = await getPersonById(pid);
-        personLabels.push(person ? `${person.firstName} ${person.lastName} (${pid})` : pid);
+        participants.push(person ? { id: person.id, firstName: person.firstName, lastName: person.lastName ?? "" } : { id: pid, firstName: pid, lastName: "" });
       }
       const area = habit.areaId ? await getAreaById(habit.areaId) : undefined;
       const team = habit.teamId ? await getTeamById(habit.teamId) : undefined;
@@ -1241,29 +1161,26 @@ export function registerTools(server: McpServer): void {
       const actions = await listActionsWithShared({ habitId: id });
       const recentActions = actions.slice(0, 5);
 
-      const parts = [
-        `${habit.name} (${habit.id})`,
-        `  Ends: ${endLabels.join(", ")}`,
-        area && `  Area: ${area.name} (${area.id})`,
-        team && `  Team: ${team.name} (${team.id})`,
-        personLabels.length > 0 && `  Participants: ${personLabels.join(", ")}`,
-        habit.recurrence && `  Recurrence: ${habit.recurrence}`,
-        habit.durationMinutes != null && `  Duration: ${habit.durationMinutes} min`,
-        `  Created: ${habit.createdAt}`,
-      ].filter(Boolean);
-
-      if (recentActions.length > 0) {
-        parts.push("  Recent actions:");
-        for (const a of recentActions) {
-          const extra = a.actualDurationMinutes != null ? ` (${a.actualDurationMinutes} min)` : "";
-          const byLine = a.isShared && a.ownerDisplayName ? ` — by ${a.ownerDisplayName}` : "";
-          parts.push(`    - ${a.completedAt.slice(0, 10)}${extra}${byLine}`);
-        }
-      } else {
-        parts.push("  Recent actions: (none)");
-      }
-
-      return { content: [{ type: "text", text: parts.join("\n") }] };
+      return jsonResponse({
+        habit: {
+          id: habit.id,
+          name: habit.name,
+          ends: endObjs,
+          area: area ? { id: area.id, name: area.name } : null,
+          team: team ? { id: team.id, name: team.name } : null,
+          participants,
+          recurrence: habit.recurrence ?? null,
+          durationMinutes: habit.durationMinutes ?? null,
+          createdAt: habit.createdAt,
+          recentActions: recentActions.map((a) => ({
+            id: a.id,
+            completedAt: a.completedAt,
+            actualDurationMinutes: a.actualDurationMinutes ?? null,
+            isShared: a.isShared ?? false,
+            ownerDisplayName: (a.isShared && a.ownerDisplayName) ? a.ownerDisplayName : null,
+          })),
+        },
+      });
     }
   );
 
@@ -1288,58 +1205,58 @@ export function registerTools(server: McpServer): void {
     async ({ id, name, recurrence, durationMinutes, personIdsToAdd, personIdsToRemove, endIdToAdd, endIdToRemove, endIdsToReplace }) => {
       const existing = await getHabitById(id);
       if (!existing) {
-        return {
-          content: [{ type: "text", text: `Habit with ID ${id} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`Habit with ID ${id} not found.`);
       }
-      const details: string[] = [];
+      const changes: string[] = [];
       const fieldUpdates: { name?: string; recurrence?: string; durationMinutes?: number } = {};
       if (name != null) fieldUpdates.name = name;
       if (recurrence != null) fieldUpdates.recurrence = recurrence;
       if (durationMinutes != null) fieldUpdates.durationMinutes = durationMinutes;
       if (Object.keys(fieldUpdates).length > 0) {
         await updateHabit(id, fieldUpdates);
-        if (name) details.push(`renamed to "${name}"`);
-        if (recurrence) details.push(`recurrence: ${recurrence}`);
-        if (durationMinutes != null) details.push(`duration: ${durationMinutes} min`);
+        if (name) changes.push(`renamed`);
+        if (recurrence) changes.push(`recurrence`);
+        if (durationMinutes != null) changes.push(`duration`);
       }
       if (personIdsToAdd?.length) {
         await addHabitPersons(id, personIdsToAdd);
-        details.push(`added ${personIdsToAdd.length} participant(s)`);
+        changes.push(`addedParticipants`);
       }
       if (personIdsToRemove?.length) {
         await removeHabitPersons(id, personIdsToRemove);
-        details.push(`removed ${personIdsToRemove.length} participant(s)`);
+        changes.push(`removedParticipants`);
       }
       if (endIdsToReplace) {
         await updateHabitEnds(id, endIdsToReplace);
-        details.push(`replaced end links`);
+        changes.push(`replacedEnds`);
       } else {
         if (endIdToAdd) {
           const current = await getHabitById(id);
           const currentIds = current?.endIds ?? [];
           if (!currentIds.includes(endIdToAdd)) {
             await updateHabitEnds(id, [...currentIds, endIdToAdd]);
-            details.push(`linked end ${endIdToAdd}`);
+            changes.push(`linkedEnd`);
           }
         }
         if (endIdToRemove) {
           const current = await getHabitById(id);
           const currentIds = current?.endIds ?? [];
           await updateHabitEnds(id, currentIds.filter((eid) => eid !== endIdToRemove));
-          details.push(`unlinked end ${endIdToRemove}`);
+          changes.push(`unlinkedEnd`);
         }
       }
       const habit = await getHabitById(id);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Updated habit: ${habit?.name ?? id}${details.length ? ` — ${details.join(", ")}` : ""}`,
-          },
-        ],
-      };
+      return jsonResponse({
+        habit: {
+          id,
+          name: habit?.name ?? null,
+          endIds: habit?.endIds ?? [],
+          personIds: habit?.personIds ?? [],
+          recurrence: habit?.recurrence ?? null,
+          durationMinutes: habit?.durationMinutes ?? null,
+          changes,
+        },
+      });
     }
   );
 
@@ -1356,21 +1273,11 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const habit = await getHabitById(id);
       if (!habit) {
-        return {
-          content: [{ type: "text", text: `Habit with ID ${id} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`Habit with ID ${id} not found.`);
       }
       const actionsDeleted = await deleteActionsByHabitId(id);
       await deleteHabit(id);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Deleted habit: ${habit.name} (${habit.id})${actionsDeleted > 0 ? ` and ${actionsDeleted} action(s)` : ""}`,
-          },
-        ],
-      };
+      return jsonResponse({ deleted: { id: habit.id, name: habit.name, actionsDeleted } });
     }
   );
 
@@ -1402,17 +1309,18 @@ export function registerTools(server: McpServer): void {
         forPersonIds,
       });
       const habit = await getHabitById(habitId);
-      const extras: string[] = [];
-      if (withPersonIds?.length) extras.push(`With: ${withPersonIds.join(", ")}`);
-      if (forPersonIds?.length) extras.push(`For: ${forPersonIds.join(", ")}`);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Recorded action: ${habit?.name ?? habitId} on ${completedAt.slice(0, 10)}\nID: ${action.id}\n${actualDurationMinutes != null ? `Actual duration: ${actualDurationMinutes} min\n` : ""}${notes ? `Notes: ${notes}\n` : ""}${extras.length ? extras.join("\n") + "\n" : ""}Created at: ${action.createdAt}`,
-          },
-        ],
-      };
+      return jsonResponse({
+        action: {
+          id: action.id,
+          habit: habit ? { id: habit.id, name: habit.name } : { id: habitId, name: null },
+          completedAt: action.completedAt,
+          actualDurationMinutes: actualDurationMinutes ?? null,
+          notes: notes ?? null,
+          withPersonIds: withPersonIds ?? [],
+          forPersonIds: forPersonIds ?? [],
+          createdAt: action.createdAt,
+        },
+      });
     }
   );
 
@@ -1443,10 +1351,6 @@ export function registerTools(server: McpServer): void {
         resolvedTo = range.toDate;
       }
       const actions = await listActions({ habitId, fromDate: resolvedFrom, toDate: resolvedTo });
-      if (actions.length === 0) {
-        const periodLabel = period ? ` for ${period.replace("_", " ")}` : "";
-        return { content: [{ type: "text", text: `No actions found${periodLabel}.` }] };
-      }
       // Preload habits, ends, and persons in bulk — O(3) queries instead of O(N) per action.
       const allHabits = await listHabits();
       const habitsMap = new Map(allHabits.map((h) => [h.id, h]));
@@ -1455,34 +1359,30 @@ export function registerTools(server: McpServer): void {
       const allPersons = await listPersons();
       const personsMap = new Map(allPersons.map((p) => [p.id, p]));
 
-      const lines = actions.map((a) => {
-        const habit = habitsMap.get(a.habitId);
-        const endLabels = habit?.endIds
-          .map((eid) => { const e = endsMap.get(eid); return e ? `${e.name} (${eid})` : null; })
-          .filter(Boolean)
-          .join(", ");
-        const formatPerson = (pid: string) => {
-          const p = personsMap.get(pid);
-          return p ? `${p.firstName}${p.lastName ? ` ${p.lastName}` : ""} (${pid})` : pid;
-        };
-        const parts = [
-          `  ${habit?.name ?? a.habitId} (habit: ${a.habitId}) - ${a.completedAt.slice(0, 10)} (${a.id})`,
-          endLabels ? `end: ${endLabels}` : null,
-          a.actualDurationMinutes != null ? `${a.actualDurationMinutes} min` : null,
-          a.notes ? a.notes : null,
-          a.withPersonIds?.length ? `with: ${a.withPersonIds.map(formatPerson).join(", ")}` : null,
-          a.forPersonIds?.length ? `for: ${a.forPersonIds.map(formatPerson).join(", ")}` : null,
-        ].filter(Boolean);
-        return parts.join(" | ");
-      });
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Found ${actions.length} action(s):\n\n${lines.join("\n")}`,
-          },
-        ],
+      const formatPerson = (pid: string) => {
+        const p = personsMap.get(pid);
+        return p ? { id: p.id, firstName: p.firstName, lastName: p.lastName } : { id: pid, firstName: pid, lastName: "" };
       };
+
+      return jsonResponse({
+        actions: actions.map((a) => {
+          const habit = habitsMap.get(a.habitId);
+          const ends = habit?.endIds
+            .map((eid) => { const e = endsMap.get(eid); return e ? { id: e.id, name: e.name } : null; })
+            .filter(Boolean) ?? [];
+          return {
+            id: a.id,
+            habit: habit ? { id: habit.id, name: habit.name } : { id: a.habitId, name: null },
+            completedAt: a.completedAt,
+            ends,
+            actualDurationMinutes: a.actualDurationMinutes ?? null,
+            notes: a.notes ?? null,
+            withPersons: a.withPersonIds?.map(formatPerson) ?? [],
+            forPersons: a.forPersonIds?.map(formatPerson) ?? [],
+          };
+        }),
+        count: actions.length,
+      });
     }
   );
 
@@ -1499,24 +1399,27 @@ export function registerTools(server: McpServer): void {
       const { getActionById } = await import("../store/actions.js");
       const action = await getActionById(id);
       if (!action) {
-        return { content: [{ type: "text", text: `Action with ID ${id} not found.` }], isError: true };
+        return errorResponse(`Action with ID ${id} not found.`);
       }
       const habit = await getHabitById(action.habitId);
-      const withNames = action.withPersonIds?.length
-        ? await Promise.all(action.withPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName} (${pid})` : pid; }))
+      const withPersons = action.withPersonIds?.length
+        ? await Promise.all(action.withPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? { id: p.id, firstName: p.firstName, lastName: p.lastName } : { id: pid, firstName: pid, lastName: "" }; }))
         : [];
-      const forNames = action.forPersonIds?.length
-        ? await Promise.all(action.forPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName} (${pid})` : pid; }))
+      const forPersons = action.forPersonIds?.length
+        ? await Promise.all(action.forPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? { id: p.id, firstName: p.firstName, lastName: p.lastName } : { id: pid, firstName: pid, lastName: "" }; }))
         : [];
-      const parts = [
-        `${habit?.name ?? action.habitId} (habit: ${action.habitId}) — ${action.completedAt.slice(0, 10)} (${action.id})`,
-        action.actualDurationMinutes != null && `  Duration: ${action.actualDurationMinutes} min`,
-        action.notes && `  Notes: ${action.notes}`,
-        withNames.length > 0 && `  With: ${withNames.join(", ")}`,
-        forNames.length > 0 && `  For: ${forNames.join(", ")}`,
-        `  Created: ${action.createdAt}`,
-      ].filter(Boolean);
-      return { content: [{ type: "text", text: parts.join("\n") }] };
+      return jsonResponse({
+        action: {
+          id: action.id,
+          habit: habit ? { id: habit.id, name: habit.name } : { id: action.habitId, name: null },
+          completedAt: action.completedAt,
+          actualDurationMinutes: action.actualDurationMinutes ?? null,
+          notes: action.notes ?? null,
+          withPersons,
+          forPersons,
+          createdAt: action.createdAt,
+        },
+      });
     }
   );
 
@@ -1548,9 +1451,19 @@ export function registerTools(server: McpServer): void {
       if (forPersonIds !== undefined) updates.forPersonIds = forPersonIds;
       const action = await updateAction(id, updates);
       if (!action) {
-        return { content: [{ type: "text", text: `Action with ID ${id} not found.` }], isError: true };
+        return errorResponse(`Action with ID ${id} not found.`);
       }
-      return { content: [{ type: "text", text: `Updated action ${id}` }] };
+      return jsonResponse({
+        action: {
+          id: action.id,
+          habitId: action.habitId,
+          completedAt: action.completedAt,
+          actualDurationMinutes: action.actualDurationMinutes ?? null,
+          notes: action.notes ?? null,
+          withPersonIds: action.withPersonIds ?? [],
+          forPersonIds: action.forPersonIds ?? [],
+        },
+      });
     }
   );
 
@@ -1566,19 +1479,9 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const deleted = await deleteAction(id);
       if (!deleted) {
-        return {
-          content: [{ type: "text", text: `Action with ID ${id} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`Action with ID ${id} not found.`);
       }
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Deleted action (${deleted.id})`,
-          },
-        ],
-      };
+      return jsonResponse({ deleted: { id: deleted.id } });
     }
   );
 
@@ -1634,20 +1537,24 @@ export function registerTools(server: McpServer): void {
       const area = task.areaId
         ? await getAreaById(task.areaId)
         : end?.areaId ? await getAreaById(end.areaId) : undefined;
-      const areaSource = task.areaId ? "" : area ? " (via end)" : "";
-      const parts = [
-        `Created task: ${task.name} (${task.id})`,
-        end ? `End: ${end.name} (${end.id})` : "End: none",
-        area ? `Area: ${area.name} (${area.id})${areaSource}` : "Area: none",
-        `Due: ${task.dueDate ?? "none"}`,
-        `Scheduled: ${task.scheduledDate ?? "none"}`,
-        `Estimated: ${task.estimatedDurationMinutes != null ? `${task.estimatedDurationMinutes} min` : "none"}`,
-        `Recurrence: ${task.recurrence ?? "none"}`,
-        `Next due: ${task.nextDueAt ?? "none"}`,
-        `Last completed: ${task.lastCompletedAt ?? "none"}`,
-        `Created at: ${task.createdAt}`,
-      ];
-      return { content: [{ type: "text", text: parts.join("\n") }] };
+      const areaSource: "direct" | "via_end" | null = task.areaId ? "direct" : area ? "via_end" : null;
+      return jsonResponse({
+        task: {
+          id: task.id,
+          name: task.name,
+          end: end ? { id: end.id, name: end.name } : null,
+          area: area ? { id: area.id, name: area.name } : null,
+          areaSource,
+          dueDate: task.dueDate ?? null,
+          scheduledDate: task.scheduledDate ?? null,
+          estimatedDurationMinutes: task.estimatedDurationMinutes ?? null,
+          recurrence: task.recurrence ?? null,
+          nextDueAt: task.nextDueAt ?? null,
+          lastCompletedAt: task.lastCompletedAt ?? null,
+          completedAt: task.completedAt ?? null,
+          createdAt: task.createdAt,
+        },
+      });
     }
   );
 
@@ -1665,50 +1572,40 @@ export function registerTools(server: McpServer): void {
     },
     async ({ endId, areaId, completed, dueBy }) => {
       const tasks = await listTasks({ endId, areaId, completed, dueBy });
-      if (tasks.length === 0) {
-        return { content: [{ type: "text", text: "No tasks found." }] };
-      }
       const allAreas = await listAreas();
       const allEnds = await listEnds();
-      const lines = await Promise.all(tasks.map(async (t) => {
-        const status = t.completedAt ? `✓ ${t.completedAt.slice(0, 10)}` : "open";
+      const taskObjs = await Promise.all(tasks.map(async (t) => {
         const end = t.endId ? allEnds.find((e) => e.id === t.endId) : undefined;
         const area = t.areaId ? allAreas.find((a) => a.id === t.areaId) : undefined;
-        const withNames = t.withPersonIds?.length
+        const withPersons = t.withPersonIds?.length
           ? await Promise.all(t.withPersonIds.map(async (pid) => {
               const p = await getPersonById(pid);
-              return p ? `${p.firstName} ${p.lastName} (${pid})` : pid;
+              return p ? { id: p.id, firstName: p.firstName, lastName: p.lastName } : { id: pid, firstName: pid, lastName: "" };
             }))
-          : undefined;
-        const forNames = t.forPersonIds?.length
+          : [];
+        const forPersons = t.forPersonIds?.length
           ? await Promise.all(t.forPersonIds.map(async (pid) => {
               const p = await getPersonById(pid);
-              return p ? `${p.firstName} ${p.lastName} (${pid})` : pid;
+              return p ? { id: p.id, firstName: p.firstName, lastName: p.lastName } : { id: pid, firstName: pid, lastName: "" };
             }))
-          : undefined;
-        const parts = [
-          `  ${t.name} (${t.id}) [${status}]`,
-          end ? `end: ${end.name} (${end.id})` : null,
-          area ? `area: ${area.name} (${area.id})` : null,
-          `due: ${t.dueDate ?? "—"}`,
-          `scheduled: ${t.scheduledDate ?? "—"}`,
-          `est: ${t.estimatedDurationMinutes != null ? `${t.estimatedDurationMinutes} min` : "—"}`,
-          `recurrence: ${t.recurrence ?? "—"}`,
-          `next due: ${t.nextDueAt ? t.nextDueAt.slice(0, 10) : "—"}`,
-          `last completed: ${t.lastCompletedAt ? t.lastCompletedAt.slice(0, 10) : "—"}`,
-          withNames?.length ? `with: ${withNames.join(", ")}` : null,
-          forNames?.length ? `for: ${forNames.join(", ")}` : null,
-        ].filter(Boolean);
-        return parts.join(" | ");
+          : [];
+        return {
+          id: t.id,
+          name: t.name,
+          completedAt: t.completedAt ?? null,
+          end: end ? { id: end.id, name: end.name } : null,
+          area: area ? { id: area.id, name: area.name } : null,
+          dueDate: t.dueDate ?? null,
+          scheduledDate: t.scheduledDate ?? null,
+          estimatedDurationMinutes: t.estimatedDurationMinutes ?? null,
+          recurrence: t.recurrence ?? null,
+          nextDueAt: t.nextDueAt ?? null,
+          lastCompletedAt: t.lastCompletedAt ?? null,
+          withPersons,
+          forPersons,
+        };
       }));
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Found ${tasks.length} task(s):\n\n${lines.join("\n")}`,
-          },
-        ],
-      };
+      return jsonResponse({ tasks: taskObjs, count: tasks.length });
     }
   );
 
@@ -1724,36 +1621,39 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const task = await getTaskById(id);
       if (!task) {
-        return { content: [{ type: "text", text: `Task with ID ${id} not found.` }], isError: true };
+        return errorResponse(`Task with ID ${id} not found.`);
       }
       const end = task.endId ? await getEndById(task.endId) : undefined;
       const area = task.areaId
         ? await getAreaById(task.areaId)
         : end?.areaId ? await getAreaById(end.areaId) : undefined;
-      const areaSource = task.areaId ? "" : area ? " (via end)" : "";
-      const withNames = task.withPersonIds?.length
-        ? await Promise.all(task.withPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName} (${pid})` : pid; }))
+      const areaSource: "direct" | "via_end" | null = task.areaId ? "direct" : area ? "via_end" : null;
+      const withPersons = task.withPersonIds?.length
+        ? await Promise.all(task.withPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? { id: p.id, firstName: p.firstName, lastName: p.lastName } : { id: pid, firstName: pid, lastName: "" }; }))
         : [];
-      const forNames = task.forPersonIds?.length
-        ? await Promise.all(task.forPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? `${p.firstName} ${p.lastName} (${pid})` : pid; }))
+      const forPersons = task.forPersonIds?.length
+        ? await Promise.all(task.forPersonIds.map(async (pid) => { const p = await getPersonById(pid); return p ? { id: p.id, firstName: p.firstName, lastName: p.lastName } : { id: pid, firstName: pid, lastName: "" }; }))
         : [];
-      const parts = [
-        `${task.name} (${task.id})`,
-        task.completedAt ? `  Status: completed ${task.completedAt.slice(0, 10)}` : "  Status: open",
-        end ? `  End: ${end.name} (${end.id})` : "  End: none",
-        area ? `  Area: ${area.name} (${area.id})${areaSource}` : "  Area: none",
-        `  Due: ${task.dueDate ?? "none"}`,
-        `  Scheduled: ${task.scheduledDate ?? "none"}`,
-        `  Estimated: ${task.estimatedDurationMinutes != null ? `${task.estimatedDurationMinutes} min` : "none"}`,
-        `  Recurrence: ${task.recurrence ?? "none"}`,
-        `  Next due: ${task.nextDueAt ?? "none"}`,
-        `  Last completed: ${task.lastCompletedAt ?? "none"}`,
-        withNames.length > 0 ? `  With: ${withNames.join(", ")}` : "  With: none",
-        forNames.length > 0 ? `  For: ${forNames.join(", ")}` : "  For: none",
-        `  Notes: ${task.notes ?? "none"}`,
-        `  Created: ${task.createdAt}`,
-      ];
-      return { content: [{ type: "text", text: parts.join("\n") }] };
+      return jsonResponse({
+        task: {
+          id: task.id,
+          name: task.name,
+          completedAt: task.completedAt ?? null,
+          end: end ? { id: end.id, name: end.name } : null,
+          area: area ? { id: area.id, name: area.name } : null,
+          areaSource,
+          dueDate: task.dueDate ?? null,
+          scheduledDate: task.scheduledDate ?? null,
+          estimatedDurationMinutes: task.estimatedDurationMinutes ?? null,
+          recurrence: task.recurrence ?? null,
+          nextDueAt: task.nextDueAt ?? null,
+          lastCompletedAt: task.lastCompletedAt ?? null,
+          withPersons,
+          forPersons,
+          notes: task.notes ?? null,
+          createdAt: task.createdAt,
+        },
+      });
     }
   );
 
@@ -1810,26 +1710,29 @@ export function registerTools(server: McpServer): void {
 
       const task = await updateTask(id, updates as Parameters<typeof updateTask>[1]);
       if (!task) {
-        return { content: [{ type: "text", text: `Task with ID ${id} not found.` }], isError: true };
+        return errorResponse(`Task with ID ${id} not found.`);
       }
       const end = task.endId ? await getEndById(task.endId) : undefined;
       const area = task.areaId
         ? await getAreaById(task.areaId)
         : end?.areaId ? await getAreaById(end.areaId) : undefined;
-      const areaSource = task.areaId ? "" : area ? " (via end)" : "";
-      const parts = [
-        `Updated task: ${task.name} (${id})`,
-        task.completedAt ? `Status: completed ${task.completedAt.slice(0, 10)}` : "Status: open",
-        end ? `End: ${end.name} (${end.id})` : "End: none",
-        area ? `Area: ${area.name} (${area.id})${areaSource}` : "Area: none",
-        `Due: ${task.dueDate ?? "none"}`,
-        `Scheduled: ${task.scheduledDate ?? "none"}`,
-        `Estimated: ${task.estimatedDurationMinutes != null ? `${task.estimatedDurationMinutes} min` : "none"}`,
-        `Recurrence: ${task.recurrence ?? "none"}`,
-        `Next due: ${task.nextDueAt ?? "none"}`,
-        `Last completed: ${task.lastCompletedAt ?? "none"}`,
-      ];
-      return { content: [{ type: "text", text: parts.join("\n") }] };
+      const areaSource: "direct" | "via_end" | null = task.areaId ? "direct" : area ? "via_end" : null;
+      return jsonResponse({
+        task: {
+          id: task.id,
+          name: task.name,
+          completedAt: task.completedAt ?? null,
+          end: end ? { id: end.id, name: end.name } : null,
+          area: area ? { id: area.id, name: area.name } : null,
+          areaSource,
+          dueDate: task.dueDate ?? null,
+          scheduledDate: task.scheduledDate ?? null,
+          estimatedDurationMinutes: task.estimatedDurationMinutes ?? null,
+          recurrence: task.recurrence ?? null,
+          nextDueAt: task.nextDueAt ?? null,
+          lastCompletedAt: task.lastCompletedAt ?? null,
+        },
+      });
     }
   );
 
@@ -1845,19 +1748,9 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const deleted = await deleteTask(id);
       if (!deleted) {
-        return {
-          content: [{ type: "text", text: `Task with ID ${id} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`Task with ID ${id} not found.`);
       }
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Deleted task: ${deleted.name} (${id})`,
-          },
-        ],
-      };
+      return jsonResponse({ deleted: { id, name: deleted.name } });
     }
   );
 
@@ -1883,7 +1776,17 @@ export function registerTools(server: McpServer): void {
       const tz = await getUserTimezone();
       const completedAtISO = resolveCompletedAt(completedAt, tz);
       const entry = await createTaskTime({ taskId, completedAt: completedAtISO, actualDurationMinutes, notes, withPersonIds, forPersonIds });
-      return { content: [{ type: "text", text: `Logged task time: ${entry.id}${actualDurationMinutes ? ` (${actualDurationMinutes} min)` : ""}` }] };
+      return jsonResponse({
+        taskTime: {
+          id: entry.id,
+          taskId: entry.taskId,
+          completedAt: entry.completedAt,
+          actualDurationMinutes: entry.actualDurationMinutes ?? null,
+          notes: entry.notes ?? null,
+          withPersonIds: entry.withPersonIds ?? [],
+          forPersonIds: entry.forPersonIds ?? [],
+        },
+      });
     }
   );
 
@@ -1901,25 +1804,24 @@ export function registerTools(server: McpServer): void {
     async ({ taskId, fromDate, toDate }) => {
       const { listTaskTime } = await import("../store/taskTime.js");
       const entries = await listTaskTime({ taskId, fromDate, toDate });
-      if (entries.length === 0) {
-        return { content: [{ type: "text", text: "No task time entries found." }] };
-      }
-      const lines = await Promise.all(entries.map(async (e) => {
+      const entryObjs = await Promise.all(entries.map(async (e) => {
         const task = await getTaskById(e.taskId);
-        const date = e.completedAt.slice(0, 10);
-        const parts: string[] = [];
-        if (e.actualDurationMinutes != null) parts.push(`${e.actualDurationMinutes} min`);
-        if (e.withPersonIds?.length) {
-          const names = await Promise.all(e.withPersonIds.map(async (pid) => {
-            const p = await getPersonById(pid);
-            return p ? `${p.firstName} ${p.lastName} (${pid})` : pid;
-          }));
-          parts.push(`with ${names.join(", ")}`);
-        }
-        if (e.notes) parts.push(e.notes);
-        return `  ${date}: ${task?.name ?? e.taskId} (task: ${e.taskId}) (${e.id})${parts.length ? ` | ${parts.join(", ")}` : ""}`;
+        const withPersons = e.withPersonIds?.length
+          ? await Promise.all(e.withPersonIds.map(async (pid) => {
+              const p = await getPersonById(pid);
+              return p ? { id: p.id, firstName: p.firstName, lastName: p.lastName } : { id: pid, firstName: pid, lastName: "" };
+            }))
+          : [];
+        return {
+          id: e.id,
+          task: task ? { id: task.id, name: task.name } : { id: e.taskId, name: null },
+          completedAt: e.completedAt,
+          actualDurationMinutes: e.actualDurationMinutes ?? null,
+          notes: e.notes ?? null,
+          withPersons,
+        };
       }));
-      return { content: [{ type: "text", text: `Task time:\n\n${lines.join("\n")}` }] };
+      return jsonResponse({ taskTimeEntries: entryObjs, count: entries.length });
     }
   );
 
@@ -1936,9 +1838,9 @@ export function registerTools(server: McpServer): void {
       const { deleteTaskTime } = await import("../store/taskTime.js");
       const entry = await deleteTaskTime(id);
       if (!entry) {
-        return { content: [{ type: "text", text: `Task time entry ${id} not found.` }], isError: true };
+        return errorResponse(`Task time entry ${id} not found.`);
       }
-      return { content: [{ type: "text", text: `Deleted task time entry ${id}` }] };
+      return jsonResponse({ deleted: { id } });
     }
   );
 
@@ -1979,29 +1881,21 @@ export function registerTools(server: McpServer): void {
         userId,
       });
 
-      const summary = [
-        person.duplicateWarning ? `⚠ ${person.duplicateWarning}` : null,
-        `Created person: ${person.firstName}${person.lastName ? ` ${person.lastName}` : ""}`,
-        `ID: ${person.id}`,
-        person.email ? `Email: ${person.email}` : null,
-        person.phone && `Phone: ${person.phone}`,
-        person.title && `Title: ${person.title}`,
-        person.notes && `Notes: ${person.notes}`,
-        person.relationshipType && `Relationship: ${person.relationshipType}`,
-        person.teamIds?.length && `Teams: ${person.teamIds.join(", ")}`,
-        `Created at: ${person.createdAt}`,
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: summary,
-          },
-        ],
-      };
+      return jsonResponse({
+        person: {
+          id: person.id,
+          firstName: person.firstName,
+          lastName: person.lastName ?? null,
+          email: person.email ?? null,
+          phone: person.phone ?? null,
+          title: person.title ?? null,
+          notes: person.notes ?? null,
+          relationshipType: person.relationshipType ?? null,
+          teamIds: person.teamIds ?? [],
+          createdAt: person.createdAt,
+          duplicateWarning: person.duplicateWarning ?? null,
+        },
+      });
     }
   );
 
@@ -2018,28 +1912,26 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const person = await getPersonById(id);
       if (!person) {
-        return {
-          content: [{ type: "text", text: `Person with ID ${id} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`Person with ID ${id} not found.`);
       }
-      const teamNames: string[] = [];
+      const teams: { id: string; name: string | null }[] = [];
       for (const tId of person.teamIds ?? []) {
         const team = await getTeamById(tId);
-        teamNames.push(team?.name ?? tId);
+        teams.push(team ? { id: team.id, name: team.name } : { id: tId, name: null });
       }
-      const parts = [
-        `${person.firstName} ${person.lastName} (${person.id})`,
-        `  Email: ${person.email}`,
-        person.phone && `  Phone: ${person.phone}`,
-        person.title && `  Title: ${person.title}`,
-        person.relationshipType && `  Relationship: ${person.relationshipType}`,
-        teamNames.length > 0 && `  Teams: ${teamNames.join(", ")}`,
-        `  Created: ${person.createdAt}`,
-      ].filter(Boolean);
-      return {
-        content: [{ type: "text", text: parts.join("\n") }],
-      };
+      return jsonResponse({
+        person: {
+          id: person.id,
+          firstName: person.firstName,
+          lastName: person.lastName ?? null,
+          email: person.email ?? null,
+          phone: person.phone ?? null,
+          title: person.title ?? null,
+          relationshipType: person.relationshipType ?? null,
+          teams,
+          createdAt: person.createdAt,
+        },
+      });
     }
   );
 
@@ -2061,41 +1953,29 @@ export function registerTools(server: McpServer): void {
     async ({ organizationId, teamId, relationshipType }) => {
       const people = await listPersons({ organizationId, teamId, relationshipType });
 
-      if (people.length === 0) {
-        return {
-          content: [{ type: "text", text: "No people found." }],
-        };
-      }
-
-      const lines = await Promise.all(
+      const personObjs = await Promise.all(
         people.map(async (p) => {
-          const teamNames: string[] = [];
+          const teams: { id: string; name: string | null }[] = [];
           for (const tId of p.teamIds ?? []) {
             const team = await getTeamById(tId);
-            teamNames.push(team?.name ?? tId);
+            teams.push(team ? { id: team.id, name: team.name } : { id: tId, name: null });
           }
-          const parts = [
-            `${p.firstName} ${p.lastName} (${p.id})`,
-            `  Email: ${p.email}`,
-            p.userId && `  User ID: ${p.userId}`,
-            p.phone && `  Phone: ${p.phone}`,
-            p.title && `  Title: ${p.title}`,
-            p.relationshipType && `  Relationship: ${p.relationshipType}`,
-            teamNames.length > 0 && `  Teams: ${teamNames.join(", ")}`,
-            `  Created: ${p.createdAt}`,
-          ].filter(Boolean);
-          return parts.join("\n");
+          return {
+            id: p.id,
+            firstName: p.firstName,
+            lastName: p.lastName ?? null,
+            email: p.email ?? null,
+            userId: p.userId ?? null,
+            phone: p.phone ?? null,
+            title: p.title ?? null,
+            relationshipType: p.relationshipType ?? null,
+            teams,
+            createdAt: p.createdAt,
+          };
         })
       );
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Found ${people.length} person(s):\n\n${lines.join("\n\n")}`,
-          },
-        ],
-      };
+      return jsonResponse({ people: personObjs, count: people.length });
     }
   );
 
@@ -2113,11 +1993,11 @@ export function registerTools(server: McpServer): void {
       try {
         Intl.DateTimeFormat(undefined, { timeZone: timezone });
       } catch {
-        return { content: [{ type: "text", text: `Invalid timezone: "${timezone}". Use IANA format like America/New_York.` }], isError: true };
+        return errorResponse(`Invalid timezone: "${timezone}". Use IANA format like America/New_York.`);
       }
       const { updateUserTimezone } = await import("../store/users.js");
       await updateUserTimezone(timezone);
-      return { content: [{ type: "text", text: `Timezone set to ${timezone}` }] };
+      return jsonResponse({ timezone });
     }
   );
 
@@ -2131,20 +2011,10 @@ export function registerTools(server: McpServer): void {
     },
     async () => {
       const users = await listUsers();
-      if (users.length === 0) {
-        return {
-          content: [{ type: "text", text: "No users found." }],
-        };
-      }
-      const lines = users.map((u) => `  ${u.displayName} (${u.id}) - ${u.email}`);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Found ${users.length} user(s):\n\n${lines.join("\n")}`,
-          },
-        ],
-      };
+      return jsonResponse({
+        users: users.map((u) => ({ id: u.id, displayName: u.displayName, email: u.email })),
+        count: users.length,
+      });
     }
   );
 
@@ -2174,10 +2044,7 @@ export function registerTools(server: McpServer): void {
     async ({ id, firstName, lastName, email, phone, title, notes, teamIds, teamIdsToAdd, relationshipType, userId }) => {
       const existing = await getPersonById(id);
       if (!existing) {
-        return {
-          content: [{ type: "text", text: `Person with ID ${id} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`Person with ID ${id} not found.`);
       }
       const updates: Record<string, unknown> = {};
       if (firstName != null) updates.firstName = firstName;
@@ -2192,23 +2059,21 @@ export function registerTools(server: McpServer): void {
       if (userId !== undefined) updates.userId = userId;
       const person = await updatePerson(id, updates as Parameters<typeof updatePerson>[1]);
       if (!person) {
-        return {
-          content: [{ type: "text", text: `Person with ID ${id} not found.` }],
-          isError: true,
-        };
+        return errorResponse(`Person with ID ${id} not found.`);
       }
-      const summary = [
-        `Updated person: ${person.firstName} ${person.lastName}`,
-        `ID: ${person.id}`,
-        person.phone && `Phone: ${person.phone}`,
-        person.title && `Title: ${person.title}`,
-        person.notes && `Notes: ${person.notes}`,
-        person.relationshipType && `Relationship: ${person.relationshipType}`,
-        person.teamIds?.length && `Teams: ${person.teamIds.join(", ")}`,
-      ].filter(Boolean).join("\n");
-      return {
-        content: [{ type: "text", text: summary }],
-      };
+      return jsonResponse({
+        person: {
+          id: person.id,
+          firstName: person.firstName,
+          lastName: person.lastName ?? null,
+          email: person.email ?? null,
+          phone: person.phone ?? null,
+          title: person.title ?? null,
+          notes: person.notes ?? null,
+          relationshipType: person.relationshipType ?? null,
+          teamIds: person.teamIds ?? [],
+        },
+      });
     }
   );
 
@@ -2225,14 +2090,14 @@ export function registerTools(server: McpServer): void {
     async ({ personId, emailOverride }) => {
       const person = await getPersonById(personId);
       if (!person) {
-        return { content: [{ type: "text", text: `Person not found.` }], isError: true };
+        return errorResponse(`Person not found.`);
       }
       if (person.userId) {
-        return { content: [{ type: "text", text: `${person.firstName} ${person.lastName} is already linked to an account.` }] };
+        return jsonResponse({ linked: { personId, userId: person.userId, alreadyLinked: true } });
       }
       const lookupEmail = emailOverride ?? person.email;
       if (!lookupEmail || lookupEmail === "unknown@example.com") {
-        return { content: [{ type: "text", text: `${person.firstName} ${person.lastName} has no email on file.` }], isError: true };
+        return errorResponse(`${person.firstName} ${person.lastName} has no email on file.`);
       }
       if (emailOverride && emailOverride !== person.email) {
         await updatePerson(personId, { email: emailOverride });
@@ -2245,10 +2110,17 @@ export function registerTools(server: McpServer): void {
         .eq("email", lookupEmail)
         .single();
       if (!profile) {
-        return { content: [{ type: "text", text: `No user account found for ${lookupEmail}.` }], isError: true };
+        return errorResponse(`No user account found for ${lookupEmail}.`);
       }
       await updatePerson(personId, { userId: profile.id });
-      return { content: [{ type: "text", text: `Linked ${person.firstName} ${person.lastName} to ${lookupEmail}.` }] };
+      return jsonResponse({
+        linked: {
+          personId,
+          userId: profile.id,
+          email: lookupEmail,
+          person: { id: person.id, firstName: person.firstName, lastName: person.lastName },
+        },
+      });
     }
   );
 
@@ -2264,24 +2136,9 @@ export function registerTools(server: McpServer): void {
     async ({ id }) => {
       const deleted = await deletePerson(id);
       if (!deleted) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Person with ID ${id} not found.`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResponse(`Person with ID ${id} not found.`);
       }
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Deleted person: ${deleted.firstName} ${deleted.lastName} (${deleted.id})`,
-          },
-        ],
-      };
+      return jsonResponse({ deleted: { id: deleted.id, firstName: deleted.firstName, lastName: deleted.lastName } });
     }
   );
 
@@ -2303,24 +2160,16 @@ export function registerTools(server: McpServer): void {
     async ({ endId, sharedWithUserId }) => {
       try {
         const share = await shareEnd(endId, sharedWithUserId);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Shared "${share.endName}" with ${share.sharedWithEmail}`,
-            },
-          ],
-        };
+        return jsonResponse({
+          shared: {
+            endId,
+            endName: share.endName,
+            sharedWithUserId,
+            sharedWithEmail: share.sharedWithEmail,
+          },
+        });
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Failed to share: ${(error as Error).message}`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResponse(`Failed to share: ${(error as Error).message}`);
       }
     }
   );
@@ -2340,25 +2189,12 @@ export function registerTools(server: McpServer): void {
       try {
         const removed = await unshareEnd(endId, userId);
         if (removed) {
-          return {
-            content: [{ type: "text", text: "Sharing removed successfully." }],
-          };
+          return jsonResponse({ unshared: { endId, userId } });
         } else {
-          return {
-            content: [{ type: "text", text: "Share not found." }],
-            isError: true,
-          };
+          return errorResponse("Share not found.");
         }
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Failed to unshare: ${(error as Error).message}`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResponse(`Failed to unshare: ${(error as Error).message}`);
       }
     }
   );
@@ -2373,27 +2209,14 @@ export function registerTools(server: McpServer): void {
     },
     async () => {
       const ends = await listSharedEnds();
-      if (ends.length === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "No ends have been shared with you.",
-            },
-          ],
-        };
-      }
-      const lines = ends.map(
-        (e) => `  ${e.name} (${e.id}) - shared by ${e.ownerDisplayName ?? "Unknown"}`
-      );
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Ends shared with you:\n\n${lines.join("\n")}`,
-          },
-        ],
-      };
+      return jsonResponse({
+        sharedEnds: ends.map((e) => ({
+          id: e.id,
+          name: e.name,
+          ownerDisplayName: e.ownerDisplayName ?? null,
+        })),
+        count: ends.length,
+      });
     }
   );
 
@@ -2407,15 +2230,19 @@ export function registerTools(server: McpServer): void {
     async () => {
       const habits = await listHabitsWithShared();
       const shared = habits.filter((h) => h.isShared);
-      if (shared.length === 0) {
-        return { content: [{ type: "text", text: "No shared habits found." }] };
-      }
       const allEnds = await listEnds({ includeShared: true });
-      const lines = shared.map((h) => {
-        const endNames = h.endIds.map((eid) => allEnds.find((e) => e.id === eid)?.name ?? eid).join(", ");
-        return `  ${h.name} (${h.id}) → serves: ${endNames} — shared by ${h.ownerDisplayName ?? "Unknown"}`;
+      return jsonResponse({
+        sharedHabits: shared.map((h) => ({
+          id: h.id,
+          name: h.name,
+          ends: h.endIds.map((eid) => {
+            const e = allEnds.find((e) => e.id === eid);
+            return e ? { id: e.id, name: e.name } : { id: eid, name: null };
+          }),
+          ownerDisplayName: h.ownerDisplayName ?? null,
+        })),
+        count: shared.length,
       });
-      return { content: [{ type: "text", text: `Shared habits:\n\n${lines.join("\n")}` }] };
     }
   );
 
@@ -2428,28 +2255,15 @@ export function registerTools(server: McpServer): void {
     },
     async () => {
       const shares = await listMyShares();
-      if (shares.length === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "You haven't shared any ends with others.",
-            },
-          ],
-        };
-      }
-      const lines = shares.map(
-        (s) =>
-          `  ${s.endName} (${s.endId}) — shared with ${s.sharedWithEmail}`
-      );
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Your shared ends:\n\n${lines.join("\n")}`,
-          },
-        ],
-      };
+      return jsonResponse({
+        shares: shares.map((s) => ({
+          endId: s.endId,
+          endName: s.endName,
+          sharedWithUserId: s.sharedWithUserId,
+          sharedWithEmail: s.sharedWithEmail,
+        })),
+        count: shares.length,
+      });
     }
   );
 }

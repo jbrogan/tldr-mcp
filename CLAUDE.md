@@ -73,13 +73,26 @@ User (Supabase Auth profile, with timezone)
 - `src/cli.ts` - Commander.js CLI client
 - `supabase/migrations/` - SQL migration files for database schema
 
+## MCP Tool Design Principle: Belts and Suspenders for LLM-Computed Fields
+
+When a tool involves fields that require LLM interpretation or computation (e.g. computing a date from a natural language recurrence string), apply the following pattern:
+
+**1. Tool description instructs the calling LLM.**
+Include explicit computation instructions in the tool's description field. Example:
+> "When `recurrence` is provided and `nextDueAt` is not, compute `nextDueAt` from the recurrence string and `completedAt` (or today if not provided) before calling this tool."
+
+**2. Server enforces the same invariant as a fallback.**
+The MCP server independently computes or validates the field if not provided by the caller. This ensures correctness regardless of which LLM, client, or direct API call is used.
+
+This pattern makes invariants robust to caller variability without trusting any single caller. Apply it to all tools where computed, interpreted, or validated fields exist — including end_type state machine validation, recurrence-based date computation, and any future LLM-interpreted fields.
+
 ### Key Patterns
 
 **Logging**: Always use `console.error()` for logs. `console.log()` breaks the JSON-RPC protocol since stdout is reserved for MCP communication.
 
 **Adding tools**: Register in `src/tools/index.ts` following the existing CRUD pattern (create_*, update_*, delete_*, get_*, list_*).
 
-**Tool response ID principle**: Every related entity referenced in a tool response MUST include its ID alongside the display name (e.g. `Area: Health (uuid)`). This enables LLM callers to chain tool calls without intermediate lookup round trips. Apply to all new tools and maintain in existing ones.
+**Tool response format**: All tool responses return structured JSON via `jsonResponse()` helper. List tools return `{ <entity>s: [...], count: N }`. Single-entity tools return `{ <entity>: {...} }`. Related entities are included inline with id and name. Errors stay as plain text with `isError: true`. The LLM handles presentation; tools are the data layer.
 
 **Store pattern**: Each store module uses `getSupabase()` and `getUserId()` from `base.ts` for context. RLS automatically filters results to the current user's data.
 

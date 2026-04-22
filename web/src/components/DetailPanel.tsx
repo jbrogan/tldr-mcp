@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { callTool } from "../lib/mcp";
+import { callToolJson } from "../lib/mcp";
 
 interface DetailPanelProps {
   section: string;
@@ -85,10 +85,10 @@ export function DetailPanel({ section, itemId, itemName, onClose }: DetailPanelP
 
     (async () => {
       try {
-        const result = await callTool(config.tool, config.args);
+        const { data, isError } = await callToolJson(config.tool, config.args);
         if (!cancelled) {
-          setContent(result.text);
-          if (result.isError) setError(result.text);
+          setContent(JSON.stringify(data, null, 2));
+          if (isError) setError(typeof data === "object" && data && "error" in data ? String((data as Record<string, unknown>).error) : "Error loading details");
         }
       } catch (err) {
         if (!cancelled) {

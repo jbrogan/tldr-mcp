@@ -49,6 +49,10 @@ export interface ToolResult {
   isError: boolean;
 }
 
+/**
+ * Call an MCP tool and return the raw text result.
+ * For JSON responses, use callToolJson() instead.
+ */
 export async function callTool(
   name: string,
   args: Record<string, unknown> = {}
@@ -68,4 +72,23 @@ export async function callTool(
     .join("\n");
 
   return { text, isError: result.isError ?? false };
+}
+
+/**
+ * Call an MCP tool and parse the JSON response.
+ * Falls back to { text } if the response isn't valid JSON.
+ */
+export async function callToolJson<T = unknown>(
+  name: string,
+  args: Record<string, unknown> = {}
+): Promise<{ data: T; isError: boolean }> {
+  const result = await callTool(name, args);
+  if (result.isError) {
+    return { data: { error: result.text } as T, isError: true };
+  }
+  try {
+    return { data: JSON.parse(result.text) as T, isError: false };
+  } catch {
+    return { data: { text: result.text } as T, isError: false };
+  }
 }

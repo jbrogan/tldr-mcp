@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { callTool } from "../lib/mcp";
+import { callToolJson } from "../lib/mcp";
 
 interface SidebarItem {
   id: string;
@@ -7,12 +7,14 @@ interface SidebarItem {
   subtitle?: string;
 }
 
+type JsonExtractor = (data: Record<string, unknown>) => SidebarItem[];
+
 interface SidebarSection {
   key: string;
   label: string;
   tool?: string;
   args?: Record<string, unknown>;
-  parse?: (text: string) => SidebarItem[];
+  extract?: JsonExtractor;
   staticItems?: SidebarItem[];
 }
 
@@ -21,82 +23,76 @@ interface SidebarProps {
   selectedId?: string;
 }
 
-/** Parse lines like "  Name (uuid)" or "  Name (uuid) - extra" */
-function parseNameIdLines(text: string): SidebarItem[] {
-  const items: SidebarItem[] = [];
-  for (const line of text.split("\n")) {
-    const match = line.match(/^\s+(.+?)\s+\(([0-9a-f-]{36})\)(.*)$/i);
-    if (match) {
-      items.push({
-        id: match[2],
-        name: match[1].trim(),
-        subtitle: match[3].replace(/^\s*-\s*/, "").trim() || undefined,
-      });
-    }
-  }
-  return items;
+// --- JSON extractors per entity type ---
+
+function extractSimple(field: string): JsonExtractor {
+  return (data) => {
+    const items = data[field] as Array<{ id: string; name: string }> | undefined;
+    return (items ?? []).map((item) => ({ id: item.id, name: item.name }));
+  };
 }
 
-/** Parse people with multi-line details */
-function parsePeople(text: string): SidebarItem[] {
-  const items: SidebarItem[] = [];
-  const blocks = text.split("\n\n");
-  for (const block of blocks) {
-    const match = block.match(/(.+?)\s+\(([0-9a-f-]{36})\)/i);
-    if (match) {
-      const relMatch = block.match(/Relationship:\s*(\w+)/);
-      items.push({
-        id: match[2],
-        name: match[1].trim(),
-        subtitle: relMatch?.[1],
-      });
-    }
-  }
-  return items;
-}
+const extractEnds: JsonExtractor = (data) => {
+  const items = data.ends as Array<{ id: string; name: string; endType?: string; state?: string }> | undefined;
+  return (items ?? []).map((e) => {
+    const meta: string[] = [];
+    if (e.endType && e.endType !== "journey") meta.push(e.endType);
+    if (e.state && e.state !== "active") meta.push(e.state);
+    return { id: e.id, name: e.name, subtitle: meta.length ? meta.join(", ") : undefined };
+  });
+};
 
-/** Parse lines like "  Name (uuid) → serves: X — shared by Y" */
-function parseSharedLines(text: string): SidebarItem[] {
-  const items: SidebarItem[] = [];
-  for (const line of text.split("\n")) {
-    const match = line.match(/^\s+(.+?)\s+\(([0-9a-f-]{36})\)(.*)$/i);
-    if (match) {
-      const sharedBy = match[3].match(/shared by\s+(.+)/i);
-      items.push({
-        id: match[2],
-        name: match[1].trim(),
-        subtitle: sharedBy ? `by ${sharedBy[1].trim()}` : undefined,
-      });
-    }
-  }
-  return items;
-}
+const extractTasks: JsonExtractor = (data) => {
+  const items = data.tasks as Array<{ id: string; name: string; dueDate?: string | null; recurrence?: string | null }> | undefined;
+  return (items ?? []).map((t) => {
+    const meta: string[] = [];
+    if (t.dueDate) meta.push(`due: ${t.dueDate}`);
+    if (t.recurrence) meta.push(t.recurrence);
+    return { id: t.id, name: t.name, subtitle: meta.length ? meta.join(", ") : undefined };
+  });
+};
+
+const extractPeople: JsonExtractor = (data) => {
+  const items = data.persons as Array<{ id: string; firstName: string; lastName?: string; relationshipType?: string }> | undefined;
+  return (items ?? []).map((p) => ({
+    id: p.id,
+    name: `${p.firstName}${p.lastName ? ` ${p.lastName}` : ""}`,
+    subtitle: p.relationshipType,
+  }));
+};
+
+const extractSharedEnds: JsonExtractor = (data) => {
+  const items = data.sharedEnds as Array<{ id: string; name: string; ownerDisplayName?: string }> | undefined;
+  return (items ?? []).map((e) => ({
+    id: e.id,
+    name: e.name,
+    subtitle: e.ownerDisplayName ? `by ${e.ownerDisplayName}` : undefined,
+  }));
+};
+
+const extractSharedHabits: JsonExtractor = (data) => {
+  const items = data.sharedHabits as Array<{ id: string; name: string; ownerDisplayName?: string }> | undefined;
+  return (items ?? []).map((h) => ({
+    id: h.id,
+    name: h.name,
+    subtitle: h.ownerDisplayName ? `by ${h.ownerDisplayName}` : undefined,
+  }));
+};
+
+const extractMyShares: JsonExtractor = (data) => {
+  const items = data.shares as Array<{ id: string; endName: string; sharedWithEmail?: string }> | undefined;
+  return (items ?? []).map((s) => ({
+    id: s.id,
+    name: s.endName,
+    subtitle: s.sharedWithEmail,
+  }));
+};
 
 const sections: SidebarSection[] = [
-  {
-    key: "areas",
-    label: "Areas",
-    tool: "list_areas",
-    parse: parseNameIdLines,
-  },
-  {
-    key: "beliefs",
-    label: "Beliefs",
-    tool: "list_beliefs",
-    parse: parseNameIdLines,
-  },
-  {
-    key: "ends",
-    label: "Ends",
-    tool: "list_ends",
-    parse: parseNameIdLines,
-  },
-  {
-    key: "habits",
-    label: "Habits",
-    tool: "list_habits",
-    parse: parseNameIdLines,
-  },
+  { key: "areas", label: "Areas", tool: "list_areas", extract: extractSimple("areas") },
+  { key: "beliefs", label: "Beliefs", tool: "list_beliefs", extract: extractSimple("beliefs") },
+  { key: "ends", label: "Ends", tool: "list_ends", extract: extractEnds },
+  { key: "habits", label: "Habits", tool: "list_habits", extract: extractSimple("habits") },
   {
     key: "actions",
     label: "Actions",
@@ -107,13 +103,7 @@ const sections: SidebarSection[] = [
       { id: "this_month", name: "This Month" },
     ],
   },
-  {
-    key: "tasks_open",
-    label: "Tasks (Open)",
-    tool: "list_tasks",
-    args: { completed: false },
-    parse: parseNameIdLines,
-  },
+  { key: "tasks_open", label: "Tasks (Open)", tool: "list_tasks", args: { completed: false }, extract: extractTasks },
   {
     key: "tasks_completed",
     label: "Tasks (Completed)",
@@ -133,49 +123,13 @@ const sections: SidebarSection[] = [
       { id: "this_month", name: "This Month" },
     ],
   },
-  {
-    key: "organizations",
-    label: "Organizations",
-    tool: "list_organizations",
-    args: { expand: false },
-    parse: parseNameIdLines,
-  },
-  {
-    key: "teams",
-    label: "Teams",
-    tool: "list_teams",
-    parse: parseNameIdLines,
-  },
-  {
-    key: "people",
-    label: "People",
-    tool: "list_people",
-    parse: parsePeople,
-  },
-  {
-    key: "portfolios",
-    label: "Portfolios",
-    tool: "list_portfolios",
-    parse: parseNameIdLines,
-  },
-  {
-    key: "my_shares",
-    label: "My Shares",
-    tool: "list_my_shares",
-    parse: parseSharedLines,
-  },
-  {
-    key: "shared_ends",
-    label: "Shared Ends",
-    tool: "list_shared_ends",
-    parse: parseSharedLines,
-  },
-  {
-    key: "shared_habits",
-    label: "Shared Habits",
-    tool: "list_shared_habits",
-    parse: parseSharedLines,
-  },
+  { key: "organizations", label: "Organizations", tool: "list_organizations", args: { expand: false }, extract: extractSimple("organizations") },
+  { key: "teams", label: "Teams", tool: "list_teams", extract: extractSimple("teams") },
+  { key: "people", label: "People", tool: "list_people", extract: extractPeople },
+  { key: "portfolios", label: "Portfolios", tool: "list_portfolios", extract: extractSimple("portfolios") },
+  { key: "my_shares", label: "My Shares", tool: "list_my_shares", extract: extractMyShares },
+  { key: "shared_ends", label: "Shared Ends", tool: "list_shared_ends", extract: extractSharedEnds },
+  { key: "shared_habits", label: "Shared Habits", tool: "list_shared_habits", extract: extractSharedHabits },
 ];
 
 export function Sidebar({ onSelectItem, selectedId }: SidebarProps) {
@@ -183,40 +137,18 @@ export function Sidebar({ onSelectItem, selectedId }: SidebarProps) {
   const [data, setData] = useState<Record<string, SidebarItem[]>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
-  const toggleSection = useCallback(
+  const loadSection = useCallback(
     async (section: SidebarSection) => {
-      const isOpen = expanded[section.key];
-      setExpanded((prev) => ({ ...prev, [section.key]: !isOpen }));
-
-      // Load data on first expand
-      if (!isOpen && !data[section.key]) {
-        if (section.staticItems) {
-          setData((prev) => ({ ...prev, [section.key]: section.staticItems! }));
-          return;
-        }
-        setLoading((prev) => ({ ...prev, [section.key]: true }));
-        try {
-          const result = await callTool(section.tool!, section.args ?? {});
-          const items = section.parse!(result.text);
-          setData((prev) => ({ ...prev, [section.key]: items }));
-        } catch {
-          setData((prev) => ({ ...prev, [section.key]: [] }));
-        } finally {
-          setLoading((prev) => ({ ...prev, [section.key]: false }));
-        }
-      }
-    },
-    [expanded, data]
-  );
-
-  const refreshSection = useCallback(
-    async (section: SidebarSection) => {
-      if (!section.tool || !section.parse) return;
+      if (!section.tool || !section.extract) return;
       setLoading((prev) => ({ ...prev, [section.key]: true }));
       try {
-        const result = await callTool(section.tool, section.args ?? {});
-        const items = section.parse(result.text);
-        setData((prev) => ({ ...prev, [section.key]: items }));
+        const { data: json, isError } = await callToolJson(section.tool, section.args ?? {});
+        if (isError) {
+          setData((prev) => ({ ...prev, [section.key]: [] }));
+        } else {
+          const items = section.extract(json as Record<string, unknown>);
+          setData((prev) => ({ ...prev, [section.key]: items }));
+        }
       } catch {
         setData((prev) => ({ ...prev, [section.key]: [] }));
       } finally {
@@ -224,6 +156,22 @@ export function Sidebar({ onSelectItem, selectedId }: SidebarProps) {
       }
     },
     []
+  );
+
+  const toggleSection = useCallback(
+    async (section: SidebarSection) => {
+      const isOpen = expanded[section.key];
+      setExpanded((prev) => ({ ...prev, [section.key]: !isOpen }));
+
+      if (!isOpen && !data[section.key]) {
+        if (section.staticItems) {
+          setData((prev) => ({ ...prev, [section.key]: section.staticItems! }));
+          return;
+        }
+        await loadSection(section);
+      }
+    },
+    [expanded, data, loadSection]
   );
 
   return (
@@ -264,7 +212,7 @@ export function Sidebar({ onSelectItem, selectedId }: SidebarProps) {
                 <span
                   onClick={(e) => {
                     e.stopPropagation();
-                    refreshSection(section);
+                    loadSection(section);
                   }}
                   className="text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
                   title="Refresh"
