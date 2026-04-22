@@ -1630,10 +1630,12 @@ export function registerTools(server: McpServer): void {
         nextDueAt: resolvedNextDueAt,
         notes,
       });
+      const end = task.endId ? await getEndById(task.endId) : undefined;
+      const area = task.areaId ? await getAreaById(task.areaId) : undefined;
       const parts = [
         `Created task: ${task.name} (${task.id})`,
-        `End: ${endId ?? "none"}`,
-        `Area: ${areaId ?? "none"}`,
+        end ? `End: ${end.name} (${end.id})` : "End: none",
+        area ? `Area: ${area.name} (${area.id})` : "Area: none",
         `Due: ${task.dueDate ?? "none"}`,
         `Scheduled: ${task.scheduledDate ?? "none"}`,
         `Estimated: ${task.estimatedDurationMinutes != null ? `${task.estimatedDurationMinutes} min` : "none"}`,
@@ -1804,9 +1806,13 @@ export function registerTools(server: McpServer): void {
       if (!task) {
         return { content: [{ type: "text", text: `Task with ID ${id} not found.` }], isError: true };
       }
+      const end = task.endId ? await getEndById(task.endId) : undefined;
+      const area = task.areaId ? await getAreaById(task.areaId) : undefined;
       const parts = [
         `Updated task: ${task.name} (${id})`,
         task.completedAt ? `Status: completed ${task.completedAt.slice(0, 10)}` : "Status: open",
+        end ? `End: ${end.name} (${end.id})` : "End: none",
+        area ? `Area: ${area.name} (${area.id})` : "Area: none",
         `Due: ${task.dueDate ?? "none"}`,
         `Scheduled: ${task.scheduledDate ?? "none"}`,
         `Estimated: ${task.estimatedDurationMinutes != null ? `${task.estimatedDurationMinutes} min` : "none"}`,
