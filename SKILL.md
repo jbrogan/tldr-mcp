@@ -112,6 +112,14 @@ When advising on what to focus on, surface gaps in this order:
 
 All tool responses include IDs alongside display names for related entities. Use these IDs for follow-up tool calls without intermediate lookups.
 
+## Sharing
+
+Ends can be shared with other users (read-only). Shared ends expose their habits and actions to the shared user.
+
+**When listing habits for an end:** always call both `list_habits` (with `endId`) and `list_shared_habits`, then combine results. Shared habits do not appear in the standard `list_habits` response — they are only returned by `list_shared_habits`.
+
+**When listing actions:** `list_actions` returns only your own actions. Shared actions (from other users on shared ends) are not currently surfaced via a separate tool.
+
 ## Gotchas
 
 - `list_ends_and_habits`: `areaId` and `portfolioId` are mutually exclusive.
