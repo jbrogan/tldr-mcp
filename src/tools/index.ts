@@ -1576,7 +1576,10 @@ export function registerTools(server: McpServer): void {
       const allEnds = await listEnds();
       const taskObjs = await Promise.all(tasks.map(async (t) => {
         const end = t.endId ? allEnds.find((e) => e.id === t.endId) : undefined;
-        const area = t.areaId ? allAreas.find((a) => a.id === t.areaId) : undefined;
+        const area = t.areaId
+          ? allAreas.find((a) => a.id === t.areaId)
+          : end?.areaId ? allAreas.find((a) => a.id === end.areaId) : undefined;
+        const areaSource = t.areaId ? "direct" : area ? "via_end" : null;
         const withPersons = t.withPersonIds?.length
           ? await Promise.all(t.withPersonIds.map(async (pid) => {
               const p = await getPersonById(pid);
@@ -1594,7 +1597,7 @@ export function registerTools(server: McpServer): void {
           name: t.name,
           completedAt: t.completedAt ?? null,
           end: end ? { id: end.id, name: end.name } : null,
-          area: area ? { id: area.id, name: area.name } : null,
+          area: area ? { id: area.id, name: area.name, source: areaSource } : null,
           dueDate: t.dueDate ?? null,
           scheduledDate: t.scheduledDate ?? null,
           estimatedDurationMinutes: t.estimatedDurationMinutes ?? null,
