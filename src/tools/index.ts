@@ -1632,14 +1632,16 @@ export function registerTools(server: McpServer): void {
       });
       const parts = [
         `Created task: ${task.name} (${task.id})`,
-        endId ? `End: ${endId}` : null,
-        areaId ? `Area: ${areaId}` : null,
-        dueDate ? `Due: ${dueDate}` : null,
-        task.recurrence ? `Recurrence: ${task.recurrence}` : null,
-        task.nextDueAt ? `Next due: ${task.nextDueAt}` : null,
-        task.lastCompletedAt ? `Last completed: ${task.lastCompletedAt}` : null,
+        `End: ${endId ?? "none"}`,
+        `Area: ${areaId ?? "none"}`,
+        `Due: ${task.dueDate ?? "none"}`,
+        `Scheduled: ${task.scheduledDate ?? "none"}`,
+        `Estimated: ${task.estimatedDurationMinutes != null ? `${task.estimatedDurationMinutes} min` : "none"}`,
+        `Recurrence: ${task.recurrence ?? "none"}`,
+        `Next due: ${task.nextDueAt ?? "none"}`,
+        `Last completed: ${task.lastCompletedAt ?? "none"}`,
         `Created at: ${task.createdAt}`,
-      ].filter(Boolean);
+      ];
       return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
@@ -1683,12 +1685,12 @@ export function registerTools(server: McpServer): void {
           `  ${t.name} (${t.id}) [${status}]`,
           end ? `end: ${end.name} (${end.id})` : null,
           area ? `area: ${area.name} (${area.id})` : null,
-          t.dueDate ? `due: ${t.dueDate}` : null,
+          `due: ${t.dueDate ?? "—"}`,
+          `scheduled: ${t.scheduledDate ?? "—"}`,
+          `est: ${t.estimatedDurationMinutes != null ? `${t.estimatedDurationMinutes} min` : "—"}`,
           t.recurrence ? `recurrence: ${t.recurrence}` : null,
           t.nextDueAt ? `next due: ${t.nextDueAt.slice(0, 10)}` : null,
           t.lastCompletedAt ? `last completed: ${t.lastCompletedAt.slice(0, 10)}` : null,
-          t.scheduledDate ? `scheduled: ${t.scheduledDate}` : null,
-          t.estimatedDurationMinutes != null ? `est: ${t.estimatedDurationMinutes} min` : null,
           withNames?.length ? `with: ${withNames.join(", ")}` : null,
           forNames?.length ? `for: ${forNames.join(", ")}` : null,
         ].filter(Boolean);
@@ -1730,19 +1732,19 @@ export function registerTools(server: McpServer): void {
       const parts = [
         `${task.name} (${task.id})`,
         task.completedAt ? `  Status: completed ${task.completedAt.slice(0, 10)}` : "  Status: open",
-        end && `  End: ${end.name} (${end.id})`,
-        area && `  Area: ${area.name} (${area.id})`,
-        task.dueDate && `  Due: ${task.dueDate}`,
-        task.recurrence && `  Recurrence: ${task.recurrence}`,
-        task.nextDueAt && `  Next due: ${task.nextDueAt}`,
-        task.lastCompletedAt && `  Last completed: ${task.lastCompletedAt}`,
-        task.scheduledDate && `  Scheduled: ${task.scheduledDate}`,
-        task.estimatedDurationMinutes != null && `  Estimated: ${task.estimatedDurationMinutes} min`,
-        withNames.length > 0 && `  With: ${withNames.join(", ")}`,
-        forNames.length > 0 && `  For: ${forNames.join(", ")}`,
-        task.notes && `  Notes: ${task.notes}`,
+        end ? `  End: ${end.name} (${end.id})` : "  End: none",
+        area ? `  Area: ${area.name} (${area.id})` : "  Area: none",
+        `  Due: ${task.dueDate ?? "none"}`,
+        `  Scheduled: ${task.scheduledDate ?? "none"}`,
+        `  Estimated: ${task.estimatedDurationMinutes != null ? `${task.estimatedDurationMinutes} min` : "none"}`,
+        `  Recurrence: ${task.recurrence ?? "none"}`,
+        `  Next due: ${task.nextDueAt ?? "none"}`,
+        `  Last completed: ${task.lastCompletedAt ?? "none"}`,
+        withNames.length > 0 ? `  With: ${withNames.join(", ")}` : "  With: none",
+        forNames.length > 0 ? `  For: ${forNames.join(", ")}` : "  For: none",
+        `  Notes: ${task.notes ?? "none"}`,
         `  Created: ${task.createdAt}`,
-      ].filter(Boolean);
+      ];
       return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
@@ -1805,10 +1807,13 @@ export function registerTools(server: McpServer): void {
       const parts = [
         `Updated task: ${task.name} (${id})`,
         task.completedAt ? `Status: completed ${task.completedAt.slice(0, 10)}` : "Status: open",
-        task.recurrence ? `Recurrence: ${task.recurrence}` : null,
-        task.nextDueAt ? `Next due: ${task.nextDueAt.slice(0, 10)}` : null,
-        task.lastCompletedAt ? `Last completed: ${task.lastCompletedAt.slice(0, 10)}` : null,
-      ].filter(Boolean);
+        `Due: ${task.dueDate ?? "none"}`,
+        `Scheduled: ${task.scheduledDate ?? "none"}`,
+        `Estimated: ${task.estimatedDurationMinutes != null ? `${task.estimatedDurationMinutes} min` : "none"}`,
+        `Recurrence: ${task.recurrence ?? "none"}`,
+        `Next due: ${task.nextDueAt ?? "none"}`,
+        `Last completed: ${task.lastCompletedAt ?? "none"}`,
+      ];
       return { content: [{ type: "text", text: parts.join("\n") }] };
     }
   );
