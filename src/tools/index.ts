@@ -700,12 +700,13 @@ export function registerTools(server: McpServer): void {
         endType: z.enum(["journey", "destination", "inquiry"]).optional().describe("Type: journey (default) | destination | inquiry"),
         dueDate: z.string().optional().describe("Target date (YYYY-MM-DD). Most relevant for destination/inquiry."),
         thesis: z.string().optional().describe("Inquiry thesis - what is being investigated? (inquiry only)"),
+        purpose: z.string().optional().describe("Why this end exists — keep to a sentence or two"),
         parentEndId: z.string().optional().describe("If provided, link this new end as a supporting end of the given parent. Rolled back if link validation fails."),
         supportRationale: z.string().optional().describe("Rationale for the support link (only used with parentEndId)."),
       },
     },
-    async ({ name, areaId, portfolioId, endType, dueDate, thesis, parentEndId, supportRationale }) => {
-      const end = await createEnd({ name, areaId, portfolioId, endType: endType ?? "journey", dueDate, thesis });
+    async ({ name, areaId, portfolioId, endType, dueDate, thesis, purpose, parentEndId, supportRationale }) => {
+      const end = await createEnd({ name, areaId, portfolioId, endType: endType ?? "journey", dueDate, thesis, purpose });
 
       let linkResult: { parentEndId: string; childEndId: string; rationale: string | null } | null = null;
       let linkError: string | null = null;
@@ -736,6 +737,7 @@ export function registerTools(server: McpServer): void {
           portfolioId: end.portfolioId ?? null,
           dueDate: end.dueDate ?? null,
           thesis: end.thesis ?? null,
+          purpose: end.purpose ?? null,
           createdAt: end.createdAt,
         },
         linked: linkResult,
@@ -809,6 +811,7 @@ export function registerTools(server: McpServer): void {
             endType: e.endType,
             state: e.state,
             dueDate: e.dueDate ?? null,
+            purpose: e.purpose ?? null,
             area: area ? { id: area.id, name: area.name } : null,
             portfolio: portfolio ? { id: portfolio.id, name: portfolio.name } : null,
             habits: habits.map((h) => ({
@@ -935,6 +938,7 @@ export function registerTools(server: McpServer): void {
           dueDate: end.dueDate ?? null,
           thesis: end.thesis ?? null,
           resolutionNotes: end.resolutionNotes ?? null,
+          purpose: end.purpose ?? null,
           createdAt: end.createdAt,
           beliefs: linkedBeliefs.map((b) => ({ id: b.id, name: b.name })),
           habits: myHabitObjs,
@@ -975,9 +979,10 @@ export function registerTools(server: McpServer): void {
         dueDate: z.string().optional().describe("Target date (YYYY-MM-DD)"),
         thesis: z.string().optional().describe("Inquiry thesis (inquiry ends only)"),
         resolutionNotes: z.string().optional().describe("Resolution notes (inquiry ends only, when resolving)"),
+        purpose: z.string().optional().describe("Why this end exists — keep to a sentence or two"),
       },
     },
-    async ({ id, name, areaId, portfolioId, endType, state, dueDate, thesis, resolutionNotes }) => {
+    async ({ id, name, areaId, portfolioId, endType, state, dueDate, thesis, resolutionNotes, purpose }) => {
       const updates: Record<string, unknown> = {};
       if (name != null) updates.name = name;
       if (areaId !== undefined) updates.areaId = areaId;
@@ -987,6 +992,7 @@ export function registerTools(server: McpServer): void {
       if (dueDate !== undefined) updates.dueDate = dueDate;
       if (thesis !== undefined) updates.thesis = thesis;
       if (resolutionNotes !== undefined) updates.resolutionNotes = resolutionNotes;
+      if (purpose !== undefined) updates.purpose = purpose;
       try {
         const end = await updateEnd(id, updates as Parameters<typeof updateEnd>[1]);
         if (!end) {
@@ -1003,6 +1009,7 @@ export function registerTools(server: McpServer): void {
             dueDate: end.dueDate ?? null,
             thesis: end.thesis ?? null,
             resolutionNotes: end.resolutionNotes ?? null,
+            purpose: end.purpose ?? null,
           },
         });
       } catch (error) {

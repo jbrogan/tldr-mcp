@@ -422,6 +422,7 @@ export type EndRow = {
   due_date: string | null;
   thesis: string | null;
   resolution_notes: string | null;
+  purpose: string | null;
   created_at: string;
 };
 
@@ -610,6 +611,7 @@ export type EndInsert = {
   due_date?: string | null;
   thesis?: string | null;
   resolution_notes?: string | null;
+  purpose?: string | null;
   created_at?: string;
 };
 

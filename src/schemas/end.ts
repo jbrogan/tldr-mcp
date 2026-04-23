@@ -61,6 +61,7 @@ export const EndSchema = z.object({
   dueDate: z.string().optional().describe("Target date (YYYY-MM-DD)"),
   thesis: z.string().optional().describe("Inquiry thesis statement"),
   resolutionNotes: z.string().optional().describe("Inquiry resolution notes"),
+  purpose: z.string().optional().describe("Why this end exists — keep to a sentence or two"),
 });
 
 export type End = z.infer<typeof EndSchema>;

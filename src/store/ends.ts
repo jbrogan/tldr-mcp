@@ -50,6 +50,7 @@ async function toEntity(row: DbEnd): Promise<EndEntity> {
     dueDate: row.due_date ?? undefined,
     thesis: row.thesis ?? undefined,
     resolutionNotes: row.resolution_notes ?? undefined,
+    purpose: row.purpose ?? undefined,
     createdAt: formatInstantForUser(row.created_at, tz),
   };
 }
@@ -86,6 +87,7 @@ export async function createEnd(data: End): Promise<EndEntity> {
       state,
       due_date: data.dueDate,
       thesis: data.thesis,
+      purpose: data.purpose,
     })
     .select()
     .single();
@@ -128,7 +130,7 @@ export async function updateEnd(
   updates: Partial<
     Pick<
       EndEntity,
-      "name" | "areaId" | "portfolioId" | "endType" | "state" | "dueDate" | "thesis" | "resolutionNotes"
+      "name" | "areaId" | "portfolioId" | "endType" | "state" | "dueDate" | "thesis" | "resolutionNotes" | "purpose"
     >
   >,
 ): Promise<EndEntity | null> {
@@ -197,6 +199,7 @@ export async function updateEnd(
   if (updates.dueDate !== undefined) updateData.due_date = updates.dueDate;
   if (updates.thesis !== undefined) updateData.thesis = updates.thesis;
   if (updates.resolutionNotes !== undefined) updateData.resolution_notes = updates.resolutionNotes;
+  if (updates.purpose !== undefined) updateData.purpose = updates.purpose;
 
   if (Object.keys(updateData).length === 0) {
     return getEndById(id) as Promise<EndEntity | null>;
@@ -276,6 +279,7 @@ export async function listEnds(options?: {
           due_date,
           thesis,
           resolution_notes,
+          purpose,
           created_at,
           user_id,
           profiles!ends_user_id_fkey (display_name)
