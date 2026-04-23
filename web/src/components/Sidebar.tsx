@@ -80,9 +80,9 @@ const extractSharedHabits: JsonExtractor = (data) => {
 };
 
 const extractMyShares: JsonExtractor = (data) => {
-  const items = data.shares as Array<{ id: string; endName: string; sharedWithEmail?: string }> | undefined;
+  const items = data.shares as Array<{ endId: string; endName: string; sharedWithEmail?: string }> | undefined;
   return (items ?? []).map((s) => ({
-    id: s.id,
+    id: s.endId,
     name: s.endName,
     subtitle: s.sharedWithEmail,
   }));
