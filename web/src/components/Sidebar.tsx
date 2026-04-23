@@ -53,7 +53,7 @@ const extractTasks: JsonExtractor = (data) => {
 };
 
 const extractPeople: JsonExtractor = (data) => {
-  const items = data.persons as Array<{ id: string; firstName: string; lastName?: string; relationshipType?: string }> | undefined;
+  const items = data.people as Array<{ id: string; firstName: string; lastName?: string; relationshipType?: string }> | undefined;
   return (items ?? []).map((p) => ({
     id: p.id,
     name: `${p.firstName}${p.lastName ? ` ${p.lastName}` : ""}`,
