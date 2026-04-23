@@ -186,6 +186,12 @@ export async function linkSupportingEnd(
     return { success: false, error: "child_end_not_found_or_not_owned" };
   }
 
+  // Cycle detection first — more specific error than depth.
+  // Walk upward from P; if C is an ancestor, the insert would create a cycle.
+  if (await isAncestor(childEndId, parentEndId)) {
+    return { success: false, error: "link_would_create_cycle" };
+  }
+
   // Depth validation: walk upward from P to count ancestor depth
   const pHasParent = await hasParents(parentEndId);
   const pHasGrandparent = pHasParent ? await hasGrandparents(parentEndId) : false;
@@ -210,11 +216,6 @@ export async function linkSupportingEnd(
     if (cHasGrandchildren) {
       return { success: false, error: "link_would_exceed_max_depth" };
     }
-  }
-
-  // Cycle detection: walk upward from P, check if C is an ancestor
-  if (await isAncestor(childEndId, parentEndId)) {
-    return { success: false, error: "link_would_create_cycle" };
   }
 
   // Insert the link
