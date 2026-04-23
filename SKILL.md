@@ -119,6 +119,23 @@ All tool responses return structured JSON:
 
 Related entities are included inline with `{id, name}` — use these for follow-up tool calls without intermediate lookups. All fields are present with `null` for unset values (no ambiguity from omission).
 
+## Supporting Ends
+
+Ends can have parent-child relationships via `link_supporting_end`. Max depth: 3 tiers (grandparent → parent → leaf).
+
+- `get_end` returns `supportingEnds` (children) and `supports` (parents) arrays.
+- `list_ends` returns `supportingEndCount` and `supportsCount` per end.
+- `create_end` accepts optional `parentEndId` to create and link in one call.
+- All end type combinations are valid (journey → destination, inquiry → destination, etc.).
+- State does NOT propagate — parent and child states are independent.
+
+| User says... | Tool |
+|---|---|
+| "Break this goal into sub-goals" | `create_end` with `parentEndId` |
+| "Link existing end as supporting" | `link_supporting_end` |
+| "What supports this end?" | `get_end` → `supportingEnds` |
+| "What does this end support?" | `get_end` → `supports` |
+
 ## Sharing
 
 Ends can be shared with other users (read-only). Shared ends expose their habits and actions to the shared user.

@@ -127,6 +127,27 @@ export type Database = {
         Update: Partial<EndShareInsert>;
         Relationships: [];
       };
+      end_supports: {
+        Row: EndSupportRow;
+        Insert: EndSupportInsert;
+        Update: Partial<EndSupportInsert>;
+        Relationships: [
+          {
+            foreignKeyName: "end_supports_parent_end_id_fkey";
+            columns: ["parent_end_id"];
+            isOneToOne: false;
+            referencedRelation: "ends";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "end_supports_child_end_id_fkey";
+            columns: ["child_end_id"];
+            isOneToOne: false;
+            referencedRelation: "ends";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       habits: {
         Row: HabitRow;
         Insert: HabitInsert;
@@ -720,6 +741,22 @@ export type TaskTimePersonInsert = {
   created_at?: string;
 };
 
+export type EndSupportRow = {
+  id: string;
+  parent_end_id: string;
+  child_end_id: string;
+  rationale: string | null;
+  created_at: string;
+};
+
+export type EndSupportInsert = {
+  id?: string;
+  parent_end_id: string;
+  child_end_id: string;
+  rationale?: string | null;
+  created_at?: string;
+};
+
 // ============================================================================
 // Convenience Aliases
 // ============================================================================
@@ -736,6 +773,7 @@ export type BeliefEnd = BeliefEndRow;
 export type Portfolio = PortfolioRow;
 export type End = EndRow;
 export type EndShare = EndShareRow;
+export type EndSupport = EndSupportRow;
 export type Habit = HabitRow;
 export type HabitPerson = HabitPersonRow;
 export type HabitEnd = HabitEndRow;

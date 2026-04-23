@@ -770,7 +770,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Create End",
       description:
-        "Creates an end. Three types: journey (ongoing aspiration, e.g. 'Be a great father'), destination (bounded goal, e.g. 'Launch product'), inquiry (hypothesis, e.g. 'Is this viable?').",
+        "Creates an end. Three types: journey (ongoing aspiration, e.g. 'Be a great father'), destination (bounded goal, e.g. 'Launch product'), inquiry (hypothesis, e.g. 'Is this viable?'). Optionally link as a supporting end of a parent in the same call.",
       inputSchema: {
         name: z.string().min(1).describe("Name of the end"),
         areaId: z.string().optional().describe("Area this end belongs to"),
@@ -778,10 +778,32 @@ export function registerTools(server: McpServer): void {
         endType: z.enum(["journey", "destination", "inquiry"]).optional().describe("Type: journey (default) | destination | inquiry"),
         dueDate: z.string().optional().describe("Target date (YYYY-MM-DD). Most relevant for destination/inquiry."),
         thesis: z.string().optional().describe("Inquiry thesis - what is being investigated? (inquiry only)"),
+        parentEndId: z.string().optional().describe("If provided, link this new end as a supporting end of the given parent. Rolled back if link validation fails."),
+        supportRationale: z.string().optional().describe("Rationale for the support link (only used with parentEndId)."),
       },
     },
-    async ({ name, areaId, portfolioId, endType, dueDate, thesis }) => {
+    async ({ name, areaId, portfolioId, endType, dueDate, thesis, parentEndId, supportRationale }) => {
       const end = await createEnd({ name, areaId, portfolioId, endType: endType ?? "journey", dueDate, thesis });
+
+      let linkResult: { parentEndId: string; childEndId: string; rationale: string | null } | null = null;
+      let linkError: string | null = null;
+
+      if (parentEndId) {
+        const { linkSupportingEnd } = await import("../store/endSupports.js");
+        const result = await linkSupportingEnd({
+          parentEndId,
+          childEndId: end.id,
+          rationale: supportRationale,
+        });
+        if (result.success) {
+          linkResult = { parentEndId, childEndId: end.id, rationale: supportRationale ?? null };
+        } else {
+          // Rollback: delete the created end
+          await deleteEnd(end.id);
+          return errorResponse(`End created but link failed: ${result.error}. Creation rolled back.`);
+        }
+      }
+
       return jsonResponse({
         end: {
           id: end.id,
@@ -794,6 +816,7 @@ export function registerTools(server: McpServer): void {
           thesis: end.thesis ?? null,
           createdAt: end.createdAt,
         },
+        linked: linkResult,
       });
     }
   );
@@ -815,10 +838,13 @@ export function registerTools(server: McpServer): void {
       const ends = await listEnds(hasFilter ? { areaId, portfolioId, endType, state } : undefined);
       const allAreas = await listAreas();
       const allPortfolios = await listPortfolios();
+      const { getSupportCountsBatch } = await import("../store/endSupports.js");
+      const supportCounts = await getSupportCountsBatch(ends.map((e) => e.id));
       return jsonResponse({
         ends: ends.map((e) => {
           const area = e.areaId ? allAreas.find((a) => a.id === e.areaId) : undefined;
           const portfolio = e.portfolioId ? allPortfolios.find((c) => c.id === e.portfolioId) : undefined;
+          const counts = supportCounts.get(e.id) ?? { supportingEndCount: 0, supportsCount: 0 };
           return {
             id: e.id,
             name: e.name,
@@ -827,6 +853,8 @@ export function registerTools(server: McpServer): void {
             dueDate: e.dueDate ?? null,
             area: area ? { id: area.id, name: area.name } : null,
             portfolio: portfolio ? { id: portfolio.id, name: portfolio.name } : null,
+            supportingEndCount: counts.supportingEndCount,
+            supportsCount: counts.supportsCount,
           };
         }),
         count: ends.length,
@@ -954,6 +982,14 @@ export function registerTools(server: McpServer): void {
             ownerDisplayName: isSharedEnd ? (t.ownerDisplayName ?? null) : null,
           })),
           sharing,
+          supportingEnds: await (async () => {
+            const { getChildEnds } = await import("../store/endSupports.js");
+            return getChildEnds(id);
+          })(),
+          supports: await (async () => {
+            const { getParentEnds } = await import("../store/endSupports.js");
+            return getParentEnds(id);
+          })(),
         },
       });
     }
@@ -1027,6 +1063,49 @@ export function registerTools(server: McpServer): void {
         return errorResponse(`End with ID ${id} not found.`);
       }
       return jsonResponse({ deleted: { id: deleted.id, name: deleted.name } });
+    }
+  );
+
+  // ============================================================================
+  // SUPPORTING ENDS TOOLS
+  // ============================================================================
+
+  server.registerTool(
+    "link_supporting_end",
+    {
+      title: "Link Supporting End",
+      description:
+        "Links a child end as supporting a parent end. Max depth: grandparent → parent → leaf (3 tiers). Validates depth, cycles, and ownership.",
+      inputSchema: {
+        parentEndId: z.string().min(1).describe("ID of the higher-level end being supported"),
+        childEndId: z.string().min(1).describe("ID of the supporting end"),
+        rationale: z.string().optional().describe("Why this link exists (e.g. 'spawned from inquiry resolution', 'milestone toward parent')"),
+      },
+    },
+    async ({ parentEndId, childEndId, rationale }) => {
+      const { linkSupportingEnd } = await import("../store/endSupports.js");
+      const result = await linkSupportingEnd({ parentEndId, childEndId, rationale });
+      if (!result.success) {
+        return errorResponse(result.error);
+      }
+      return jsonResponse({ linked: { parentEndId, childEndId, rationale: rationale ?? null } });
+    }
+  );
+
+  server.registerTool(
+    "unlink_supporting_end",
+    {
+      title: "Unlink Supporting End",
+      description: "Removes the support link between a parent and child end.",
+      inputSchema: {
+        parentEndId: z.string().min(1).describe("ID of the parent end"),
+        childEndId: z.string().min(1).describe("ID of the child end"),
+      },
+    },
+    async ({ parentEndId, childEndId }) => {
+      const { unlinkSupportingEnd } = await import("../store/endSupports.js");
+      await unlinkSupportingEnd(parentEndId, childEndId);
+      return jsonResponse({ unlinked: { parentEndId, childEndId } });
     }
   );
 
