@@ -158,7 +158,7 @@ Ends can be shared with other users (read-only). Shared ends expose their habits
 
 ## Gotchas
 
-- `list_ends_and_habits`: `areaId` and `portfolioId` are mutually exclusive.
+- `list_ends` is the single authoritative tool for ends overview — includes habits, supporting ends, and parent ends. No need for a separate habits call.
 - `list_teams`: use `personId` (not `organizationId`) for "what teams is X in?" Use `__self__` for current user.
 - `update_habit`: `endIdToReplace` ignores `endIdToAdd`/`endIdToRemove`. Choose one approach.
 - `update_person`: `teamIds` replaces the entire list; prefer `teamIdsToAdd` for adding.

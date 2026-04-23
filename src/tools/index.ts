@@ -295,83 +295,6 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
-    "list_ends_and_habits",
-    {
-      title: "List Ends and Habits",
-      description:
-        "Lists ends and habits. Filter by areaId OR portfolioId (mutually exclusive). Omit both to show all areas.",
-      inputSchema: {
-        areaId: z.string().optional().describe("Filter to a specific area. Mutually exclusive with portfolioId."),
-        portfolioId: z.string().optional().describe("Filter to a specific portfolio. Mutually exclusive with areaId."),
-      },
-    },
-    async ({ areaId, portfolioId }) => {
-      if (areaId && portfolioId) {
-        return errorResponse("Provide areaId OR portfolioId, not both.");
-      }
-
-      const areas = await listAreas();
-      const allEnds = await listEnds();
-      const allHabits = await listHabits();
-
-      function formatEndObj(e: typeof allEnds[0]) {
-        const habitsForEnd = allHabits.filter((h) => h.endId === e.id);
-        return {
-          id: e.id,
-          name: e.name,
-          endType: e.endType,
-          state: e.state,
-          dueDate: e.dueDate ?? null,
-          habits: habitsForEnd.map((h) => ({ id: h.id, name: h.name })),
-        };
-      }
-
-      if (portfolioId) {
-        const portfolio = await getPortfolioById(portfolioId);
-        if (!portfolio) {
-          return errorResponse(`Portfolio with ID ${portfolioId} not found.`);
-        }
-        const ends = allEnds.filter((e) => e.portfolioId === portfolioId);
-        return jsonResponse({
-          portfolio: { id: portfolio.id, name: portfolio.name },
-          ends: ends.map(formatEndObj),
-          count: ends.length,
-        });
-      }
-
-      const areaIdsToShow = areaId
-        ? (await getAreaById(areaId) ? [areaId] : [])
-        : areas.map((a) => a.id);
-
-      if (areaId && areaIdsToShow.length === 0) {
-        return errorResponse(`Area with ID ${areaId} not found.`);
-      }
-
-      const sections: { area: { id: string; name: string } | null; ends: ReturnType<typeof formatEndObj>[] }[] = [];
-
-      for (const aId of areaIdsToShow) {
-        const area = areas.find((a) => a.id === aId);
-        const ends = allEnds.filter((e) => e.areaId === aId);
-        if (ends.length === 0) continue;
-        sections.push({
-          area: area ? { id: area.id, name: area.name } : { id: aId, name: aId },
-          ends: ends.map(formatEndObj),
-        });
-      }
-
-      const uncategorizedEnds = allEnds.filter((e) => !e.areaId);
-      if (uncategorizedEnds.length > 0) {
-        sections.push({
-          area: null,
-          ends: uncategorizedEnds.map(formatEndObj),
-        });
-      }
-
-      return jsonResponse({ sections, count: sections.reduce((sum, s) => sum + s.ends.length, 0) });
-    }
-  );
-
-  server.registerTool(
     "create_organization",
     {
       title: "Create Organization",
@@ -824,7 +747,7 @@ export function registerTools(server: McpServer): void {
     "list_ends",
     {
       title: "List Ends",
-      description: "Lists ends. Optionally filter by area, portfolio, type, or state.",
+      description: "Lists ends with habits and hierarchy. The single authoritative tool for ends overview — includes habits, supporting ends, and parent ends for each end.",
       inputSchema: {
         areaId: z.string().optional().describe("Filter by area ID"),
         portfolioId: z.string().optional().describe("Filter by portfolio ID"),
@@ -835,15 +758,51 @@ export function registerTools(server: McpServer): void {
     async ({ areaId, portfolioId, endType, state }) => {
       const hasFilter = areaId || portfolioId || endType || state;
       const ends = await listEnds(hasFilter ? { areaId, portfolioId, endType, state } : undefined);
+      const endIds = ends.map((e) => e.id);
+
+      // Bulk preload all related data
       const allAreas = await listAreas();
       const allPortfolios = await listPortfolios();
-      const { getSupportCountsBatch } = await import("../store/endSupports.js");
-      const supportCounts = await getSupportCountsBatch(ends.map((e) => e.id));
+      const allHabits = await listHabits();
+      const allEndsMap = new Map(ends.map((e) => [e.id, e]));
+
+      // Fetch all end_supports rows in bulk (2 queries)
+      const supabase = getSupabase();
+      const [{ data: childRows }, { data: parentRows }] = await Promise.all([
+        supabase
+          .from("end_supports")
+          .select("parent_end_id, child_end_id, rationale, ends!end_supports_child_end_id_fkey (id, name, end_type, state)")
+          .in("parent_end_id", endIds.length > 0 ? endIds : [""]),
+        supabase
+          .from("end_supports")
+          .select("parent_end_id, child_end_id, rationale, ends!end_supports_parent_end_id_fkey (id, name, end_type, state)")
+          .in("child_end_id", endIds.length > 0 ? endIds : [""]),
+      ]);
+
+      // Build maps: endId → children, endId → parents
+      const childrenMap = new Map<string, Array<{ id: string; name: string; endType: string; state: string; rationale: string | null }>>();
+      for (const row of childRows ?? []) {
+        const child = row.ends as unknown as { id: string; name: string; end_type: string; state: string } | null;
+        if (!child) continue;
+        const list = childrenMap.get(row.parent_end_id) ?? [];
+        list.push({ id: child.id, name: child.name, endType: child.end_type, state: child.state, rationale: row.rationale });
+        childrenMap.set(row.parent_end_id, list);
+      }
+
+      const parentsMap = new Map<string, Array<{ id: string; name: string; endType: string; state: string; rationale: string | null }>>();
+      for (const row of parentRows ?? []) {
+        const parent = row.ends as unknown as { id: string; name: string; end_type: string; state: string } | null;
+        if (!parent) continue;
+        const list = parentsMap.get(row.child_end_id) ?? [];
+        list.push({ id: parent.id, name: parent.name, endType: parent.end_type, state: parent.state, rationale: row.rationale });
+        parentsMap.set(row.child_end_id, list);
+      }
+
       return jsonResponse({
         ends: ends.map((e) => {
           const area = e.areaId ? allAreas.find((a) => a.id === e.areaId) : undefined;
           const portfolio = e.portfolioId ? allPortfolios.find((c) => c.id === e.portfolioId) : undefined;
-          const counts = supportCounts.get(e.id) ?? { supportingEndCount: 0, supportsCount: 0 };
+          const habits = allHabits.filter((h) => h.endId === e.id);
           return {
             id: e.id,
             name: e.name,
@@ -852,8 +811,14 @@ export function registerTools(server: McpServer): void {
             dueDate: e.dueDate ?? null,
             area: area ? { id: area.id, name: area.name } : null,
             portfolio: portfolio ? { id: portfolio.id, name: portfolio.name } : null,
-            supportingEndCount: counts.supportingEndCount,
-            supportsCount: counts.supportsCount,
+            habits: habits.map((h) => ({
+              id: h.id,
+              name: h.name,
+              recurrence: h.recurrence ?? null,
+              durationMinutes: h.durationMinutes ?? null,
+            })),
+            supportingEnds: childrenMap.get(e.id) ?? [],
+            supports: parentsMap.get(e.id) ?? [],
           };
         }),
         count: ends.length,
