@@ -183,27 +183,6 @@ export type Database = {
           },
         ];
       };
-      habit_ends: {
-        Row: HabitEndRow;
-        Insert: HabitEndInsert;
-        Update: Partial<HabitEndInsert>;
-        Relationships: [
-          {
-            foreignKeyName: "habit_ends_habit_id_fkey";
-            columns: ["habit_id"];
-            isOneToOne: false;
-            referencedRelation: "habits";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "habit_ends_end_id_fkey";
-            columns: ["end_id"];
-            isOneToOne: false;
-            referencedRelation: "ends";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       actions: {
         Row: ActionRow;
         Insert: ActionInsert;
@@ -458,17 +437,11 @@ export type HabitRow = {
   id: string;
   user_id: string;
   name: string;
+  end_id: string | null;
   area_id: string | null;
   team_id: string | null;
   recurrence: string | null;
   duration_minutes: number | null;
-  created_at: string;
-};
-
-export type HabitEndRow = {
-  id: string;
-  habit_id: string;
-  end_id: string;
   created_at: string;
 };
 
@@ -652,6 +625,7 @@ export type HabitInsert = {
   id?: string;
   user_id: string;
   name: string;
+  end_id?: string | null;
   area_id?: string | null;
   team_id?: string | null;
   recurrence?: string | null;
@@ -673,12 +647,6 @@ export type HabitPersonInsert = {
   created_at?: string;
 };
 
-export type HabitEndInsert = {
-  id?: string;
-  habit_id: string;
-  end_id: string;
-  created_at?: string;
-};
 
 export type ActionInsert = {
   id?: string;
@@ -776,7 +744,6 @@ export type EndShare = EndShareRow;
 export type EndSupport = EndSupportRow;
 export type Habit = HabitRow;
 export type HabitPerson = HabitPersonRow;
-export type HabitEnd = HabitEndRow;
 export type Action = ActionRow;
 export type ActionPerson = ActionPersonRow;
 export type Task = TaskRow;

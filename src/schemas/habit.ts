@@ -1,11 +1,11 @@
 import { z } from "zod";
 
 /**
- * Habit - a recurring behavior that serves ends. Generates actions that can be tracked.
+ * Habit - a recurring behavior that serves an end. Generates actions that can be tracked.
  */
 export const HabitSchema = z.object({
   name: z.string().min(1, "Habit name is required"),
-  endIds: z.array(z.string()).min(1, "At least one end is required"),
+  endId: z.string().describe("End this habit serves"),
   areaId: z.string().optional(),
   teamId: z.string().optional(),
   personIds: z.array(z.string()).optional().describe("People who participate in the habit"),

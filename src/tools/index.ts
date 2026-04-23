@@ -56,7 +56,6 @@ import {
   listHabits,
   listHabitsWithShared,
   updateHabit,
-  updateHabitEnds,
   updateHabitPersons,
   addHabitPersons,
   removeHabitPersons,
@@ -316,7 +315,7 @@ export function registerTools(server: McpServer): void {
       const allHabits = await listHabits();
 
       function formatEndObj(e: typeof allEnds[0]) {
-        const habitsForEnd = allHabits.filter((h) => h.endIds.includes(e.id));
+        const habitsForEnd = allHabits.filter((h) => h.endId === e.id);
         return {
           id: e.id,
           name: e.name,
@@ -1117,7 +1116,7 @@ export function registerTools(server: McpServer): void {
         "Creates a habit - a recurring behavior that serves ends. Generates actions that can be tracked.",
       inputSchema: {
         name: z.string().min(1).describe("Name of the habit"),
-        endIds: z.array(z.string()).min(1).describe("IDs of ends this habit serves"),
+        endId: z.string().min(1).describe("End this habit serves"),
         areaId: z.string().optional(),
         teamId: z.string().optional(),
         personIds: z.array(z.string()).optional().describe("IDs of people who participate in the habit"),
@@ -1125,21 +1124,22 @@ export function registerTools(server: McpServer): void {
         durationMinutes: z.number().int().positive().optional().describe("Estimated time in minutes"),
       },
     },
-    async ({ name, endIds, areaId, teamId, personIds, recurrence, durationMinutes }) => {
+    async ({ name, endId, areaId, teamId, personIds, recurrence, durationMinutes }) => {
       const habit = await createHabit({
         name,
-        endIds,
+        endId,
         areaId,
         teamId,
         personIds,
         recurrence,
         durationMinutes,
       });
+      const end = await getEndById(habit.endId);
       return jsonResponse({
         habit: {
           id: habit.id,
           name: habit.name,
-          endIds: habit.endIds,
+          end: end ? { id: end.id, name: end.name } : { id: habit.endId, name: null },
           areaId: habit.areaId ?? null,
           teamId: habit.teamId ?? null,
           personIds: habit.personIds ?? [],
@@ -1179,7 +1179,7 @@ export function registerTools(server: McpServer): void {
         const allHabits = await listHabits({ personId });
         const habitIds = new Set(habits.map((h) => h.id));
         for (const h of allHabits) {
-          if (!habitIds.has(h.id) && h.endIds.some((eid) => endIdsInArea.has(eid))) {
+          if (!habitIds.has(h.id) && h.endId && endIdsInArea.has(h.endId)) {
             habits.push(h);
             habitIds.add(h.id);
           }
@@ -1189,16 +1189,14 @@ export function registerTools(server: McpServer): void {
       const allEnds = await listEnds({ includeShared: true });
       const allAreas = await listAreas();
       const habitObjs = await Promise.all(habits.map(async (h) => {
-        const ends = h.endIds.map((eid) => {
-          const e = allEnds.find((e) => e.id === eid);
-          return e ? { id: e.id, name: e.name } : { id: eid, name: null };
-        });
+        const e = h.endId ? allEnds.find((e) => e.id === h.endId) : undefined;
+        const end = e ? { id: e.id, name: e.name } : h.endId ? { id: h.endId, name: null } : null;
         const area = h.areaId ? allAreas.find((a) => a.id === h.areaId) : undefined;
         const team = h.teamId ? await getTeamById(h.teamId) : undefined;
         return {
           id: h.id,
           name: h.name,
-          ends,
+          end,
           recurrence: h.recurrence ?? null,
           durationMinutes: h.durationMinutes ?? null,
           area: area ? { id: area.id, name: area.name } : h.areaId ? { id: h.areaId, name: null } : null,
@@ -1224,11 +1222,9 @@ export function registerTools(server: McpServer): void {
       if (!habit) {
         return errorResponse(`Habit with ID ${id} not found.`);
       }
-      const ends = await listEnds({ includeShared: true });
-      const endObjs = habit.endIds.map((eid) => {
-        const e = ends.find((e) => e.id === eid);
-        return e ? { id: e.id, name: e.name } : { id: eid, name: null };
-      });
+      const allEnds = await listEnds({ includeShared: true });
+      const e = habit.endId ? allEnds.find((e) => e.id === habit.endId) : undefined;
+      const end = e ? { id: e.id, name: e.name } : habit.endId ? { id: habit.endId, name: null } : null;
       const participants: { id: string; firstName: string; lastName: string }[] = [];
       for (const pid of habit.personIds ?? []) {
         const person = await getPersonById(pid);
@@ -1244,7 +1240,7 @@ export function registerTools(server: McpServer): void {
         habit: {
           id: habit.id,
           name: habit.name,
-          ends: endObjs,
+          end,
           area: area ? { id: area.id, name: area.name } : null,
           team: team ? { id: team.id, name: team.name } : null,
           participants,
@@ -1268,32 +1264,32 @@ export function registerTools(server: McpServer): void {
     {
       title: "Update Habit",
       description:
-        "Updates a habit's name, recurrence, or duration. Supports adding/removing participants and linking/unlinking/moving ends.",
+        "Updates a habit's name, recurrence, duration, end, or participants.",
       inputSchema: {
         id: z.string().min(1).describe("ID of the habit to update"),
         name: z.string().optional().describe("New name"),
+        endId: z.string().optional().describe("Change the end this habit serves"),
         recurrence: z.string().optional().describe("New recurrence (daily, weekly, monthly, etc.)"),
         durationMinutes: z.number().optional().describe("New expected duration in minutes"),
         personIdsToAdd: z.array(z.string()).optional().describe("Person IDs to add as participants"),
         personIdsToRemove: z.array(z.string()).optional().describe("Person IDs to remove as participants"),
-        endIdToAdd: z.string().optional().describe("End ID to link (additive)"),
-        endIdToRemove: z.string().optional().describe("End ID to unlink"),
-        endIdsToReplace: z.array(z.string()).optional().describe("Replace all end links with this list"),
       },
     },
-    async ({ id, name, recurrence, durationMinutes, personIdsToAdd, personIdsToRemove, endIdToAdd, endIdToRemove, endIdsToReplace }) => {
+    async ({ id, name, endId, recurrence, durationMinutes, personIdsToAdd, personIdsToRemove }) => {
       const existing = await getHabitById(id);
       if (!existing) {
         return errorResponse(`Habit with ID ${id} not found.`);
       }
       const changes: string[] = [];
-      const fieldUpdates: { name?: string; recurrence?: string; durationMinutes?: number } = {};
+      const fieldUpdates: { name?: string; endId?: string; recurrence?: string; durationMinutes?: number } = {};
       if (name != null) fieldUpdates.name = name;
+      if (endId != null) fieldUpdates.endId = endId;
       if (recurrence != null) fieldUpdates.recurrence = recurrence;
       if (durationMinutes != null) fieldUpdates.durationMinutes = durationMinutes;
       if (Object.keys(fieldUpdates).length > 0) {
         await updateHabit(id, fieldUpdates);
         if (name) changes.push(`renamed`);
+        if (endId) changes.push(`changedEnd`);
         if (recurrence) changes.push(`recurrence`);
         if (durationMinutes != null) changes.push(`duration`);
       }
@@ -1305,31 +1301,13 @@ export function registerTools(server: McpServer): void {
         await removeHabitPersons(id, personIdsToRemove);
         changes.push(`removedParticipants`);
       }
-      if (endIdsToReplace) {
-        await updateHabitEnds(id, endIdsToReplace);
-        changes.push(`replacedEnds`);
-      } else {
-        if (endIdToAdd) {
-          const current = await getHabitById(id);
-          const currentIds = current?.endIds ?? [];
-          if (!currentIds.includes(endIdToAdd)) {
-            await updateHabitEnds(id, [...currentIds, endIdToAdd]);
-            changes.push(`linkedEnd`);
-          }
-        }
-        if (endIdToRemove) {
-          const current = await getHabitById(id);
-          const currentIds = current?.endIds ?? [];
-          await updateHabitEnds(id, currentIds.filter((eid) => eid !== endIdToRemove));
-          changes.push(`unlinkedEnd`);
-        }
-      }
       const habit = await getHabitById(id);
+      const end = habit?.endId ? await getEndById(habit.endId) : undefined;
       return jsonResponse({
         habit: {
           id,
           name: habit?.name ?? null,
-          endIds: habit?.endIds ?? [],
+          end: end ? { id: end.id, name: end.name } : habit?.endId ? { id: habit.endId, name: null } : null,
           personIds: habit?.personIds ?? [],
           recurrence: habit?.recurrence ?? null,
           durationMinutes: habit?.durationMinutes ?? null,
@@ -1446,14 +1424,13 @@ export function registerTools(server: McpServer): void {
       return jsonResponse({
         actions: actions.map((a) => {
           const habit = habitsMap.get(a.habitId);
-          const ends = habit?.endIds
-            .map((eid) => { const e = endsMap.get(eid); return e ? { id: e.id, name: e.name } : null; })
-            .filter(Boolean) ?? [];
+          const endEntity = habit?.endId ? endsMap.get(habit.endId) : undefined;
+          const end = endEntity ? { id: endEntity.id, name: endEntity.name } : habit?.endId ? { id: habit.endId, name: null } : null;
           return {
             id: a.id,
             habit: habit ? { id: habit.id, name: habit.name } : { id: a.habitId, name: null },
             completedAt: a.completedAt,
-            ends,
+            end,
             actualDurationMinutes: a.actualDurationMinutes ?? null,
             notes: a.notes ?? null,
             withPersons: a.withPersonIds?.map(formatPerson) ?? [],
@@ -2317,10 +2294,10 @@ export function registerTools(server: McpServer): void {
         sharedHabits: shared.map((h) => ({
           id: h.id,
           name: h.name,
-          ends: h.endIds.map((eid) => {
-            const e = allEnds.find((e) => e.id === eid);
-            return e ? { id: e.id, name: e.name } : { id: eid, name: null };
-          }),
+          end: (() => {
+            const e = h.endId ? allEnds.find((e) => e.id === h.endId) : undefined;
+            return e ? { id: e.id, name: e.name } : h.endId ? { id: h.endId, name: null } : null;
+          })(),
           ownerDisplayName: h.ownerDisplayName ?? null,
         })),
         count: shared.length,

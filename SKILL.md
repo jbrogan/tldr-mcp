@@ -148,7 +148,7 @@ Ends can be shared with other users (read-only). Shared ends expose their habits
 
 - `list_ends_and_habits`: `areaId` and `portfolioId` are mutually exclusive.
 - `list_teams`: use `personId` (not `organizationId`) for "what teams is X in?" Use `__self__` for current user.
-- `update_habit`: `endIdsToReplace` ignores `endIdToAdd`/`endIdToRemove`. Choose one approach.
+- `update_habit`: `endIdToReplace` ignores `endIdToAdd`/`endIdToRemove`. Choose one approach.
 - `update_person`: `teamIds` replaces the entire list; prefer `teamIdsToAdd` for adding.
 - `list_actions`: if `period` is set, `fromDate`/`toDate` are ignored.
 - `delete_habit`: cascades to all actions. Destructive and not recoverable.
