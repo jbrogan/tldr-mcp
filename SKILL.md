@@ -136,7 +136,7 @@ Related entities are included inline with `{id, name}` — use these for follow-
 Ends can have parent-child relationships via `link_supporting_end`. Max depth: 3 tiers (grandparent → parent → leaf).
 
 - `get_end` returns `supportingEnds` (children) and `supports` (parents) arrays.
-- `list_ends` returns `supportingEndCount` and `supportsCount` per end.
+- `list_ends` returns full `supportingEnds` and `supports` arrays per end, plus `habits`.
 - `create_end` accepts optional `parentEndId` to create and link in one call.
 - All end type combinations are valid (journey → destination, inquiry → destination, etc.).
 - State does NOT propagate — parent and child states are independent.
