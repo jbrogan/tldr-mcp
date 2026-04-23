@@ -692,7 +692,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Create End",
       description:
-        "Creates an end. Three types: journey (ongoing aspiration, e.g. 'Be a great father'), destination (bounded goal, e.g. 'Launch product'), inquiry (hypothesis, e.g. 'Is this viable?'). Optionally link as a supporting end of a parent in the same call.",
+        "Creates an end. Three types: journey (ongoing aspiration, e.g. 'Be a great father'), destination (bounded goal, e.g. 'Launch product'), inquiry (hypothesis, e.g. 'Is this viable?'). Use `purpose` to capture why the end exists. Optionally link as a supporting end of a parent in the same call.",
       inputSchema: {
         name: z.string().min(1).describe("Name of the end"),
         areaId: z.string().optional().describe("Area this end belongs to"),
