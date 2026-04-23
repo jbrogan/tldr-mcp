@@ -26,7 +26,8 @@ Portfolios (groupings of ends by owner)
 | destination | active, completed, abandoned | active → completed \| abandoned |
 | inquiry | active, resolved, abandoned | active → resolved \| abandoned |
 
-- `thesis` and `resolutionNotes` are inquiry-only fields.
+- `purpose` — optional on all end types. Captures why the end exists. Distinct from `thesis` (inquiry question), `rationale` (support link context), and `beliefs` (philosophical values). When creating or updating an end, set `purpose` to give the LLM richer context for recommendations and reflection.
+- `thesis` and `resolutionNotes` are inquiry-only fields. For inquiry ends, `purpose` (why it matters) and `thesis` (what's being investigated) coexist.
 - State transitions are server-validated. Invalid transitions return errors.
 - Changing `endType` resets state to `active` if the current state is invalid for the new type.
 
