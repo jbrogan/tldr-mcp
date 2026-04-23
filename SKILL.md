@@ -43,6 +43,16 @@ Portfolios (groupings of ends by owner)
 
 **Rule:** "I went to the gym" → `create_action`. "Check tire pressure" → `update_task` with `completedAt`.
 
+### list_activity vs list_actions vs list_task_time
+
+| | list_activity | list_actions | list_task_time |
+|---|---|---|---|
+| Returns | Both habit actions + task time, merged | Habit actions only | Task time only |
+| Use for | "What did I do today?" | Filter by specific habit | Filter by specific task |
+| Grouping | area, end, portfolio | No | No |
+
+**Rule:** Default to `list_activity` for general "what did I do" queries. Use `list_actions` or `list_task_time` only when filtering by a specific habit or task.
+
 ### create_action vs log_task_time
 
 | | create_action | log_task_time |
@@ -90,7 +100,9 @@ Recompute `nextDueAt` from the new recurrence string and `lastCompletedAt` (or `
 | "I worked on X for 2 hours" | `log_task_time` | taskId, completedAt, actualDurationMinutes |
 | "I finished [task]" | `update_task` | completedAt (recurring: + nextDueAt) |
 | "Create a task to check tire pressure every 6 weeks" | `create_task` | recurrence, nextDueAt |
-| "What did I do this week?" | `list_actions` | period: "this_week" |
+| "What did I do today?" | `list_activity` | period: "today" |
+| "What did I do this week?" | `list_activity` | period: "this_week" |
+| "Break down my week by area" | `list_activity` | period: "this_week", groupBy: "area" |
 | "What's due?" | `list_tasks` | completed: false, dueBy: today's date |
 | "Show all open tasks" | `list_tasks` | completed: false |
 | "What's coming up this month?" | `list_tasks` | dueBy: end-of-month date |

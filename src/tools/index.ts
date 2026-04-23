@@ -1541,6 +1541,197 @@ export function registerTools(server: McpServer): void {
     }
   );
 
+  // ============================================================================
+  // UNIFIED ACTIVITY
+  // ============================================================================
+
+  server.registerTool(
+    "list_activity",
+    {
+      title: "List Activity",
+      description:
+        "Unified activity log — merges habit actions and task time entries, sorted chronologically. Use instead of separate list_actions + list_task_time calls. Supports groupBy for area/end/portfolio breakdowns.",
+      inputSchema: {
+        period: z.enum(["today", "yesterday", "this_week"]).optional().describe("Convenience period. Mutually exclusive with fromDate/toDate."),
+        fromDate: z.string().optional().describe("Start date (YYYY-MM-DD). Ignored if period is set."),
+        toDate: z.string().optional().describe("End date (YYYY-MM-DD). Ignored if period is set."),
+        endId: z.string().optional().describe("Filter by end ID"),
+        areaId: z.string().optional().describe("Filter by area ID"),
+        groupBy: z.enum(["area", "end", "portfolio"]).optional().describe("Group results by area, end, or portfolio"),
+        order: z.enum(["asc", "desc"]).optional().describe("Sort by completedAt: desc (default, newest first) or asc"),
+      },
+    },
+    async ({ period, fromDate, toDate, endId, areaId, groupBy, order }) => {
+      // Resolve date range
+      let resolvedFrom = fromDate;
+      let resolvedTo = toDate;
+      if (period) {
+        const { getUserTimezone, periodToDateRange } = await import("../utils/timezone.js");
+        const tz = await getUserTimezone();
+        const range = periodToDateRange(period, tz);
+        resolvedFrom = range.fromDate;
+        resolvedTo = range.toDate;
+      }
+
+      // Fetch both data sets in parallel
+      const { listTaskTime } = await import("../store/taskTime.js");
+      const [actions, taskTimeEntries] = await Promise.all([
+        listActions({ fromDate: resolvedFrom, toDate: resolvedTo }),
+        listTaskTime({ fromDate: resolvedFrom, toDate: resolvedTo }),
+      ]);
+
+      // Bulk preload all related entities
+      const allHabits = await listHabits();
+      const habitsMap = new Map(allHabits.map((h) => [h.id, h]));
+      const allTasks = await listTasks();
+      const tasksMap = new Map(allTasks.map((t) => [t.id, t]));
+      const allEnds = await listEnds();
+      const endsMap = new Map(allEnds.map((e) => [e.id, e]));
+      const allAreas = await listAreas();
+      const areasMap = new Map(allAreas.map((a) => [a.id, a]));
+      const allPersons = await listPersons();
+      const personsMap = new Map(allPersons.map((p) => [p.id, p]));
+      const allPortfolios = await listPortfolios();
+      const portfoliosMap = new Map(allPortfolios.map((p) => [p.id, p]));
+
+      const formatPerson = (pid: string) => {
+        const p = personsMap.get(pid);
+        return p ? { id: p.id, firstName: p.firstName, lastName: p.lastName ?? "" } : { id: pid, firstName: pid, lastName: "" };
+      };
+
+      const resolveEndAndArea = (endIdVal: string | undefined) => {
+        const end = endIdVal ? endsMap.get(endIdVal) : undefined;
+        const area = end?.areaId ? areasMap.get(end.areaId) : undefined;
+        return {
+          end: end ? { id: end.id, name: end.name } : null,
+          area: area ? { id: area.id, name: area.name } : null,
+          portfolioId: end?.portfolioId ?? null,
+        };
+      };
+
+      // Build unified activity list
+      type Activity = {
+        id: string;
+        type: "action" | "task_time";
+        name: string;
+        completedAt: string;
+        actualDurationMinutes: number | null;
+        notes: string | null;
+        end: { id: string; name: string } | null;
+        area: { id: string; name: string } | null;
+        portfolioId: string | null;
+        withPersons: { id: string; firstName: string; lastName: string }[];
+        forPersons: { id: string; firstName: string; lastName: string }[];
+      };
+
+      const activities: Activity[] = [];
+
+      for (const a of actions) {
+        const habit = habitsMap.get(a.habitId);
+        const resolved = resolveEndAndArea(habit?.endId);
+
+        // Apply filters
+        if (endId && resolved.end?.id !== endId) continue;
+        if (areaId && resolved.area?.id !== areaId) continue;
+
+        activities.push({
+          id: a.id,
+          type: "action",
+          name: habit?.name ?? a.habitId,
+          completedAt: a.completedAt,
+          actualDurationMinutes: a.actualDurationMinutes ?? null,
+          notes: a.notes ?? null,
+          end: resolved.end,
+          area: resolved.area,
+          portfolioId: resolved.portfolioId,
+          withPersons: (a.withPersonIds ?? []).map(formatPerson),
+          forPersons: (a.forPersonIds ?? []).map(formatPerson),
+        });
+      }
+
+      for (const tt of taskTimeEntries) {
+        const task = tasksMap.get(tt.taskId);
+        const resolved = resolveEndAndArea(task?.endId);
+
+        // Apply filters
+        if (endId && resolved.end?.id !== endId) continue;
+        if (areaId && resolved.area?.id !== areaId) continue;
+
+        activities.push({
+          id: tt.id,
+          type: "task_time",
+          name: task?.name ?? tt.taskId,
+          completedAt: tt.completedAt,
+          actualDurationMinutes: tt.actualDurationMinutes ?? null,
+          notes: tt.notes ?? null,
+          end: resolved.end,
+          area: resolved.area,
+          portfolioId: resolved.portfolioId,
+          withPersons: (tt.withPersonIds ?? []).map(formatPerson),
+          forPersons: (tt.forPersonIds ?? []).map(formatPerson),
+        });
+      }
+
+      // Sort
+      const sortDir = order === "asc" ? 1 : -1;
+      activities.sort((a, b) => sortDir * (new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime()));
+
+      const totalDuration = activities.reduce((sum, a) => sum + (a.actualDurationMinutes ?? 0), 0);
+
+      // Grouped response
+      if (groupBy) {
+        const groupMap = new Map<string, { group: { id: string; name: string } | null; items: Activity[] }>();
+
+        for (const a of activities) {
+          let groupKey: string;
+          let groupObj: { id: string; name: string } | null;
+
+          if (groupBy === "area") {
+            groupKey = a.area?.id ?? "__null__";
+            groupObj = a.area;
+          } else if (groupBy === "end") {
+            groupKey = a.end?.id ?? "__null__";
+            groupObj = a.end;
+          } else {
+            // portfolio
+            const portfolio = a.portfolioId ? portfoliosMap.get(a.portfolioId) : undefined;
+            groupKey = portfolio?.id ?? "__null__";
+            groupObj = portfolio ? { id: portfolio.id, name: portfolio.name } : null;
+          }
+
+          if (!groupMap.has(groupKey)) {
+            groupMap.set(groupKey, { group: groupObj, items: [] });
+          }
+          groupMap.get(groupKey)!.items.push(a);
+        }
+
+        const groups = Array.from(groupMap.values()).map((g) => ({
+          group: g.group,
+          activities: g.items,
+          count: g.items.length,
+          totalDurationMinutes: g.items.reduce((sum, a) => sum + (a.actualDurationMinutes ?? 0), 0),
+        }));
+
+        return jsonResponse({
+          groupBy,
+          groups,
+          count: activities.length,
+          totalDurationMinutes: totalDuration,
+        });
+      }
+
+      return jsonResponse({
+        activities,
+        count: activities.length,
+        totalDurationMinutes: totalDuration,
+      });
+    }
+  );
+
+  // ============================================================================
+  // TASK TOOLS
+  // ============================================================================
+
   server.registerTool(
     "create_task",
     {
