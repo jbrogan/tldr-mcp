@@ -88,9 +88,15 @@ export async function ask(userMessage: string): Promise<string> {
         effort: "medium",
       },
     })) {
-      console.error(`[ask] message: type=${message.type} subtype=${"subtype" in message ? message.subtype : "n/a"}`);
+      const subtype = "subtype" in message ? message.subtype : "n/a";
+      console.error(`[ask] message: type=${message.type} subtype=${subtype}`);
       if (message.type === "result" && message.subtype === "success") {
+        console.error(`[ask] result text: ${message.result.slice(0, 200)}`);
         responseParts.push(message.result);
+      }
+      if (message.type === "user") {
+        const content = "content" in message ? JSON.stringify(message.content).slice(0, 300) : "n/a";
+        console.error(`[ask] user message (tool result): ${content}`);
       }
     }
   } catch (error) {
