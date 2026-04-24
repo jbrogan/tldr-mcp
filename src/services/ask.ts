@@ -78,9 +78,13 @@ export async function ask(userMessage: string): Promise<string> {
       options: {
         mcpServers: { tldr: toolsServer },
         systemPrompt: systemPromptWithDate,
-        canUseTool: async (toolName) => {
+        canUseTool: async (toolName, input, options) => {
           console.error(`[ask] canUseTool called for: ${toolName}`);
-          return { behavior: "allow" as const };
+          return {
+            behavior: "allow" as const,
+            updatedInput: input,
+            toolUseID: options.toolUseID,
+          };
         },
         persistSession: false,
         model: "claude-sonnet-4-6",
