@@ -94,9 +94,9 @@ export async function ask(userMessage: string): Promise<string> {
         console.error(`[ask] result text: ${message.result.slice(0, 200)}`);
         responseParts.push(message.result);
       }
-      if (message.type === "user") {
-        const content = "content" in message ? JSON.stringify(message.content).slice(0, 300) : "n/a";
-        console.error(`[ask] user message (tool result): ${content}`);
+      if (message.type === "user" || message.type === "assistant") {
+        console.error(`[ask] ${message.type} keys: ${Object.keys(message).join(", ")}`);
+        console.error(`[ask] ${message.type} full: ${JSON.stringify(message).slice(0, 500)}`);
       }
     }
   } catch (error) {
