@@ -61,55 +61,33 @@ function buildToolsServer() {
  * Run the agent on a user message and return the final response text.
  */
 export async function ask(userMessage: string): Promise<string> {
-  console.error(`[ask] starting: "${userMessage.slice(0, 80)}"`);
-
   const toolsServer = buildToolsServer();
-  console.error(`[ask] tools server built: type=${toolsServer.type} name=${toolsServer.name}`);
-
   const tz = await getUserTimezone();
   const today = todayInTz(tz);
   const systemPromptWithDate = `${SYSTEM_PROMPT}\n\nToday's date: ${today} (user timezone: ${tz})`;
 
   const responseParts: string[] = [];
 
-  try {
-    for await (const message of query({
-      prompt: userMessage,
-      options: {
-        mcpServers: { tldr: toolsServer },
-        systemPrompt: systemPromptWithDate,
-        canUseTool: async (toolName, input, options) => {
-          console.error(`[ask] canUseTool called for: ${toolName}`);
-          return {
-            behavior: "allow" as const,
-            updatedInput: input,
-            toolUseID: options.toolUseID,
-          };
-        },
-        persistSession: false,
-        model: "claude-sonnet-4-6",
-        maxTurns: 10,
-        effort: "medium",
-      },
-    })) {
-      const subtype = "subtype" in message ? message.subtype : "n/a";
-      console.error(`[ask] message: type=${message.type} subtype=${subtype}`);
-      if (message.type === "result" && message.subtype === "success") {
-        console.error(`[ask] result text: ${message.result.slice(0, 200)}`);
-        responseParts.push(message.result);
-      }
-      if (message.type === "user" || message.type === "assistant") {
-        console.error(`[ask] ${message.type} keys: ${Object.keys(message).join(", ")}`);
-        console.error(`[ask] ${message.type} full: ${JSON.stringify(message).slice(0, 500)}`);
-      }
+  for await (const message of query({
+    prompt: userMessage,
+    options: {
+      mcpServers: { tldr: toolsServer },
+      systemPrompt: systemPromptWithDate,
+      canUseTool: async (_toolName, input, options) => ({
+        behavior: "allow" as const,
+        updatedInput: input,
+        toolUseID: options.toolUseID,
+      }),
+      persistSession: false,
+      model: "claude-sonnet-4-6",
+      maxTurns: 10,
+      effort: "medium",
+    },
+  })) {
+    if (message.type === "result" && message.subtype === "success") {
+      responseParts.push(message.result);
     }
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error(`[ask] error: ${msg}`);
-    throw error;
   }
 
-  const result = responseParts.join("\n") || "I couldn't process your question.";
-  console.error(`[ask] done: ${result.slice(0, 100)}...`);
-  return result;
+  return responseParts.join("\n") || "I couldn't process your question.";
 }
