@@ -16,7 +16,7 @@ import { registerTools } from "./tools/index.js";
 import { registerResources } from "./resources/index.js";
 import { registerPrompts } from "./prompts/index.js";
 import { authMiddleware } from "./middleware/auth.js";
-import { runWithContextAsync, type StoreContext } from "./store/base.js";
+import { runWithContextAsync, setStoreContext, clearStoreContext, type StoreContext } from "./store/base.js";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",") ?? ["http://localhost:5173"];
@@ -258,8 +258,16 @@ app.post("/api/chat", authMiddleware, async (req, res) => {
       return;
     }
     const { ask } = await import("./services/ask.js");
-    const response = await runWithContextAsync(req.storeContext!, () => ask(text));
-    res.json({ response });
+    // Set global context as fallback — the Agent SDK's tool execution may
+    // break the AsyncLocalStorage chain, so tools need the global fallback
+    // to find the store context.
+    setStoreContext(req.storeContext!);
+    try {
+      const response = await runWithContextAsync(req.storeContext!, () => ask(text));
+      res.json({ response });
+    } finally {
+      clearStoreContext();
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Chat failed";
     console.error(`[chat] error: ${message}`);
