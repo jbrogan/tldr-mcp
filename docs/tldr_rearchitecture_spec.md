@@ -286,11 +286,120 @@ Decommission Railway server once all traffic has migrated. MCP server remains on
 
 ---
 
-## Next Steps — Phase 1
+## Phase 1 — Web App Migration (SHIPPED 2026-04-25)
 
-Phase 1 is greenlit. Scope:
+Deployed at `https://app.gridworx.co`. Vercel fully superseded.
 
-1. **OAuth token handoff** — SPA performs OAuth consent, passes tokens to DO via WebSocket `init`, DO stores in SQLite and uses for MCP calls
-2. **React SPA on Cloudflare Pages** — streaming chat with proper token rendering, session history display
-3. **AI Gateway** — wire Anthropic calls through Cloudflare AI Gateway for per-user cost tracking
-4. **Deploy and cut over** — new chat endpoint replaces Railway `/api/chat`; MCP server stays on Railway unchanged
+**What shipped:**
+- React SPA on Cloudflare (Vite + Cloudflare plugin + Tailwind)
+- AIChatAgent Durable Object per user with conversation persistence
+- Streaming chat via `useAgentChat` hook
+- Supabase auth (email/password + Google OAuth)
+- Pure JWT auth to MCP server (no API tokens needed for the web app)
+- OAuth consent page at `/oauth/consent` (forced re-auth, identity verification)
+- Settings modal (timezone auto-detect, API token management)
+- Data explorer sidebar + detail panel (MCP client in browser, bypasses agent)
+- Error handling for API failures
+- Custom domain with TLS, workers.dev URL disabled
+
+**What was simplified vs. spec:**
+- OAuth token handoff: used direct Supabase JWT instead of separate MCP OAuth flow. The DO sends the user's JWT in MCP calls — simpler, one login, no consent screen for first-party app.
+- AI Gateway: deferred to Phase 2. Direct Anthropic calls for now.
+
+---
+
+## Phase 2 — MCP Server Migration to Durable Objects (NEXT)
+
+### Motivation
+
+The Railway MCP server is the last single-process, single-region bottleneck. It holds in-memory sessions in a `Map<string, Session>` with no horizontal scaling path — adding replicas would require externalizing session state to Redis, adding a load balancer, and managing sticky sessions.
+
+Moving the MCP server to Cloudflare Durable Objects eliminates this:
+- Each user's MCP sessions live in their own DO — naturally isolated, globally distributed
+- Zero idle cost — DOs hibernate when inactive, wake on request
+- No session affinity, no load balancer, no shared state
+- The Cloudflare Agents SDK has built-in MCP server support
+- Service Bindings enable zero-hop communication between the chat DO and the MCP DO
+
+### What moves
+
+| Component | From (Railway) | To (Cloudflare DO) |
+|---|---|---|
+| MCP session management | In-memory `sessions` Map | One DO per user (implicit) |
+| Tool handlers (61 tools) | `src/tools/index.ts` | Same code, new transport |
+| Store layer (Supabase queries) | `src/store/*.ts` | Same code, runs in DO |
+| Auth middleware | Express middleware | Worker-level JWT validation |
+| OAuth discovery | `/.well-known/*` routes | Worker routes (unchanged) |
+| Consent proxy | `/oauth/consent/:id` | Worker routes (unchanged) |
+| SKILL.md / instructions | Loaded at startup | Loaded per DO on init |
+| CORS | Express cors middleware | Not needed for DO-to-DO; Worker handles for external clients |
+
+### What stays
+
+- **Supabase** — database and auth, no change
+- **Tool handler logic** — the 61 tool implementations port unchanged
+- **Store functions** — Supabase queries, timezone utils, recurrence computation all port
+- **External client protocol** — Claude Desktop/Code/Web still connect via HTTP + OAuth
+- **SKILL.md** — still served as MCP server instructions
+
+### Architecture
+
+```
+External MCP clients (Claude Desktop/Code/Web)
+  → HTTP → Cloudflare Worker (auth, routing)
+     → MCP DO per user (tool execution, Supabase queries)
+
+Web app chat DO (app.gridworx.co)
+  → Service Binding (zero network hop)
+     → MCP DO per user (same tools, no HTTP overhead)
+```
+
+### Performance optimizations enabled by DOs
+
+**In-memory caching per user:**
+- Areas, ends, habits, persons, portfolios — change infrequently, queried on nearly every tool call
+- Cache in DO class properties (lost on hibernation, repopulated on first call)
+- Write operations invalidate relevant cache entries
+- Estimated 60-70% reduction in Supabase round-trips for multi-query sessions
+
+**Service Bindings (chat DO → MCP DO):**
+- The web app's chat agent currently calls MCP over HTTP (Cloudflare → Railway → Supabase)
+- With both on Cloudflare, the chat DO calls the MCP DO via Service Binding — zero network hop
+- Eliminates JWT exchange, CORS, HTTP overhead for the web app path
+- External clients still use HTTP (unchanged)
+
+### Scaling characteristics
+
+| Dimension | Railway (current) | Cloudflare DOs (target) |
+|---|---|---|
+| Users per instance | All (shared process) | 1 (isolated DO) |
+| Horizontal scaling | Manual (Redis, LB, replicas) | Automatic (DO per user) |
+| Idle cost | Container always running | Zero (hibernation) |
+| Session state | In-memory Map (lost on restart) | DO SQLite (persistent) |
+| Geographic distribution | Single region | Global (nearest colo) |
+| Cold start | None (always running) | 10-50ms (imperceptible) |
+
+### Migration approach
+
+1. **Port tool handlers** — move `src/tools/index.ts` handlers into a new MCP server DO class using the Agents SDK's MCP server support
+2. **Port store layer** — `src/store/*.ts` and `src/utils/*.ts` move as-is
+3. **Worker routing** — new Worker routes MCP HTTP requests to per-user DOs, serves OAuth discovery endpoints
+4. **Wire Service Binding** — chat DO calls MCP DO directly instead of HTTP
+5. **Add caching** — in-memory cache in MCP DO for enrichment data
+6. **Test with external clients** — verify Claude Desktop/Code/Web still connect via OAuth
+7. **Cut over** — update DNS, decommission Railway
+
+### Scaling priority
+
+**Migrate MCP to DOs before marketing aggressively.** The scaling order if things go viral:
+1. Cloudflare DOs — scale automatically, no action needed
+2. Anthropic API — rate limits are the first real bottleneck; AI Gateway + rate limit increase
+3. Supabase — switch to pooled connections, upgrade plan; DO caching reduces load
+4. MCP server on Railway — the actual architectural bottleneck; this migration eliminates it
+
+### Open questions
+
+1. **Supabase connection pooling** — each active DO holds a Supabase client. At hundreds of concurrent users, connection limits matter. Use Supavisor pooled connection string.
+2. **MCP DO identity** — one DO per user (matching chat DO) or one DO per MCP session? Per-user is simpler and enables caching; per-session is more isolated but loses cache on disconnect.
+3. **Service Binding auth** — when the chat DO calls the MCP DO, does it pass the JWT or is the identity implicit from the DO name? Service Bindings are same-account, so trust is inherent.
+4. **SKILL.md loading** — fetch from the MCP DO's own tool list, or load from a static asset? Loading from tools is self-describing; static asset is faster on cold start.
