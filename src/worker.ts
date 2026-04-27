@@ -12,7 +12,8 @@
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerTools } from "./tools/index.js";
-import { setStoreContext, clearStoreContext } from "./store/base.js";
+import { setStoreContext } from "./store/base.js";
+import { setConfig } from "./config.js";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -23,6 +24,7 @@ interface Env {
   SUPABASE_ANON_KEY: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   SUPABASE_SIGNING_KEY_JWK: string;
+  ANTHROPIC_API_KEY: string;
 }
 
 type Props = {
@@ -53,6 +55,15 @@ export class TldrMcpAgent extends McpAgent<Env, unknown, Props> {
   );
 
   async init() {
+    // Initialize app config from Worker env bindings
+    setConfig({
+      supabaseUrl: this.env.SUPABASE_URL,
+      supabaseAnonKey: this.env.SUPABASE_ANON_KEY,
+      supabaseServiceRoleKey: this.env.SUPABASE_SERVICE_ROLE_KEY,
+      supabaseSigningKeyJwk: this.env.SUPABASE_SIGNING_KEY_JWK,
+      anthropicApiKey: this.env.ANTHROPIC_API_KEY,
+    });
+
     // Set up the store context so tool handlers can access Supabase
     // with the authenticated user's RLS scope.
     const userId = this.props?.userId;

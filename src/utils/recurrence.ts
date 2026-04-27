@@ -74,7 +74,7 @@ async function computeNextDueAtWithLLM(
   recurrence: string,
   fromDate: string,
 ): Promise<string | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const { anthropicApiKey: apiKey } = await import("../config.js").then(m => m.getConfig());
   if (!apiKey) {
     console.error("[recurrence] ANTHROPIC_API_KEY not set, cannot compute nextDueAt via LLM");
     return null;
