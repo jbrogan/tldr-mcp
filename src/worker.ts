@@ -216,13 +216,19 @@ export default {
         return unauthorizedResponse(url.origin);
       }
       const token = bearer.slice(7);
-      // Clone request before auth validation — validateToken may consume resources,
-      // and the MCP handler needs the original request body intact.
+      // Clone request before auth validation — the MCP handler needs the body intact.
       const mcpRequest = request.clone();
       const auth = await validateToken(token, env);
       if (!auth) {
         return unauthorizedResponse(url.origin);
       }
+
+      // Pass auth context as props — McpAgent.serve() reads ctx.props
+      // and passes them to the DO on creation.
+      (ctx as any).props = {
+        userId: auth.userId,
+        accessToken: auth.accessToken,
+      };
 
       // McpAgent.serve() handles DO creation, session management, and transport
       return mcpHandler.fetch(mcpRequest, env, ctx);
