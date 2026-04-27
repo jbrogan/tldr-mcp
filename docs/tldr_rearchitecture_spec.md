@@ -288,7 +288,7 @@ Decommission Railway server once all traffic has migrated. MCP server remains on
 
 ## Phase 1 — Web App Migration (SHIPPED 2026-04-25)
 
-Deployed at `https://app.gridworx.co`. Vercel fully superseded.
+Deployed at `https://app.tldr4.ai`. Vercel fully superseded.
 
 **What shipped:**
 - React SPA on Cloudflare (Vite + Cloudflare plugin + Tailwind)
@@ -346,13 +346,20 @@ Moving the MCP server to Cloudflare Durable Objects eliminates this:
 
 ```
 External MCP clients (Claude Desktop/Code/Web)
-  → HTTP → Cloudflare Worker (auth, routing)
+  → HTTP → mcp.tldr4.ai (Cloudflare Worker: auth, routing)
      → MCP DO per user (tool execution, Supabase queries)
 
-Web app chat DO (app.gridworx.co)
+Web app chat DO (app.tldr4.ai)
   → Service Binding (zero network hop)
-     → MCP DO per user (same tools, no HTTP overhead)
+     → MCP Worker → MCP DO per user (same tools, no HTTP overhead)
 ```
+
+### Project structure
+
+- `tldr-mcp` repo → MCP Worker + MCP DO, deployed at `mcp.tldr4.ai`
+- `tldr-web` repo → Web app + Chat DO, deployed at `app.tldr4.ai`
+- Service Binding in `tldr-web` connects to `tldr-mcp` Worker
+- Independent deploy cycles — tools update without web app redeploy
 
 ### Performance optimizations enabled by DOs
 
@@ -387,7 +394,7 @@ Web app chat DO (app.gridworx.co)
 4. **Wire Service Binding** — chat DO calls MCP DO directly instead of HTTP
 5. **Add caching** — in-memory cache in MCP DO for enrichment data
 6. **Test with external clients** — verify Claude Desktop/Code/Web still connect via OAuth
-7. **Cut over** — update DNS, decommission Railway
+7. **Cut over** — deploy to `mcp.tldr4.ai`, update Supabase OAuth config, update `tldr-web` Service Binding + MCP URL, test external clients, decommission Railway
 
 ### Scaling priority
 
@@ -397,9 +404,9 @@ Web app chat DO (app.gridworx.co)
 3. Supabase — switch to pooled connections, upgrade plan; DO caching reduces load
 4. MCP server on Railway — the actual architectural bottleneck; this migration eliminates it
 
-### Open questions
+### Resolved design decisions
 
-1. **Supabase connection pooling** — each active DO holds a Supabase client. At hundreds of concurrent users, connection limits matter. Use Supavisor pooled connection string.
-2. **MCP DO identity** — one DO per user (matching chat DO) or one DO per MCP session? Per-user is simpler and enables caching; per-session is more isolated but loses cache on disconnect.
-3. **Service Binding auth** — when the chat DO calls the MCP DO, does it pass the JWT or is the identity implicit from the DO name? Service Bindings are same-account, so trust is inherent.
-4. **SKILL.md loading** — fetch from the MCP DO's own tool list, or load from a static asset? Loading from tools is self-describing; static asset is faster on cold start.
+1. **Supabase connection pooling** — use pooled connection string from the start.
+2. **MCP DO identity** — one DO per user. Enables caching, matches chat DO pattern. Multiple clients (Claude Desktop + Code) from the same user share one DO — correct behavior.
+3. **Service Binding auth** — identity implicit from DO name (= user ID). Worker validates JWT for external clients and routes by user ID. No JWT needed for DO-to-DO via Service Binding.
+4. **SKILL.md loading** — static asset in the Worker, served as MCP instructions on session init.
