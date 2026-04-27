@@ -1,15 +1,15 @@
 /**
- * tldr MCP Server — Cloudflare Worker + Durable Object
+ * tldr MCP Server — Stateless Cloudflare Worker
  *
- * Each user gets their own MCP agent DO, keyed by Supabase user ID.
- * The Worker handles auth (JWT validation), OAuth discovery, and
- * routes MCP requests to the per-user DO.
+ * Each request creates a fresh McpServer, registers tools, and handles the
+ * MCP JSON-RPC message. No Durable Objects, no session state — every tool
+ * call is self-contained (auth + Supabase query + response).
  *
- * The DO extends McpAgent, registering all 61 tools via the same
- * registerTools() function used by the Railway Express server.
+ * The Worker handles auth (JWT / API token validation), OAuth discovery,
+ * and delegates MCP requests to createMcpHandler from the Agents SDK.
  */
 
-import { McpAgent } from "agents/mcp";
+import { createMcpHandler } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerTools } from "./tools/index.js";
 import { setStoreContext } from "./store/base.js";
@@ -18,7 +18,6 @@ import { createClient } from "@supabase/supabase-js";
 import skillContent from "../SKILL.md";
 
 interface Env {
-  McpAgent: DurableObjectNamespace;
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
@@ -26,65 +25,8 @@ interface Env {
   ANTHROPIC_API_KEY: string;
 }
 
-type Props = {
-  userId: string;
-  accessToken: string;
-  [key: string]: unknown;
-};
-
 // SKILL.md imported as a string at build time by wrangler's bundler
 const skillInstructions: string | undefined = skillContent;
-
-/**
- * Per-user MCP Agent Durable Object.
- * Extends McpAgent — handles MCP protocol, tool discovery, and sessions.
- */
-export class TldrMcpAgent extends McpAgent<Env, unknown, Props> {
-  server = new McpServer(
-    { name: "tldr-mcp", version: "1.0.0" },
-    {
-      capabilities: { tools: {}, resources: {}, prompts: {} },
-      instructions: skillInstructions,
-    },
-  );
-
-  async init() {
-    // Initialize app config from Worker env bindings
-    setConfig({
-      supabaseUrl: this.env.SUPABASE_URL,
-      supabaseAnonKey: this.env.SUPABASE_ANON_KEY,
-      supabaseServiceRoleKey: this.env.SUPABASE_SERVICE_ROLE_KEY,
-      supabaseSigningKeyJwk: this.env.SUPABASE_SIGNING_KEY_JWK,
-      anthropicApiKey: this.env.ANTHROPIC_API_KEY,
-    });
-
-    // Set up the store context so tool handlers can access Supabase
-    // with the authenticated user's RLS scope.
-    // Props may come from McpAgent props or URL params set by the Worker.
-    const userId = this.props?.userId;
-    const accessToken = this.props?.accessToken;
-
-    if (userId && accessToken) {
-      let supabase;
-      if (accessToken.startsWith("tldr_live_")) {
-        // API token — use service role client (RLS bypassed, filtered by userId in queries)
-        supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_SERVICE_ROLE_KEY, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-      } else {
-        // Supabase JWT — user-scoped client with RLS
-        supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_ANON_KEY, {
-          auth: { persistSession: false, autoRefreshToken: false },
-          global: { headers: { Authorization: `Bearer ${accessToken}` } },
-        });
-      }
-      setStoreContext({ supabase, userId });
-    }
-
-    // Register all tools — same function as the Railway server
-    registerTools(this.server);
-  }
-}
 
 /**
  * Validate a Bearer token — either a Supabase JWT or a tldr API token.
@@ -109,9 +51,6 @@ async function validateToken(
       const { findUserIdByToken } = await import("./store/apiTokens.js");
       const userId = await findUserIdByToken(token);
       if (!userId) return null;
-      // For API tokens, we use the service role client — the token itself
-      // doesn't carry a JWT, so we pass it through as the accessToken
-      // and the DO will create a service-role Supabase client.
       return { userId, accessToken: token };
     } catch {
       return null;
@@ -132,16 +71,26 @@ async function validateToken(
   }
 }
 
-// Use McpAgent.serve() for MCP protocol routing — handles session
-// management, transport negotiation, and DO lifecycle automatically.
-const mcpHandler = TldrMcpAgent.serve("/mcp", {
-  binding: "McpAgent",
-  corsOptions: {
-    origin: "*",
-    methods: "GET, POST, DELETE, OPTIONS",
-    headers: "*",
-  },
-});
+/**
+ * Set up store context for an authenticated user so tool handlers
+ * can access Supabase with the correct RLS scope.
+ */
+function setupStoreContext(auth: { userId: string; accessToken: string }, env: Env): void {
+  let supabase;
+  if (auth.accessToken.startsWith("tldr_live_")) {
+    // API token — use service role client (RLS bypassed, filtered by userId in queries)
+    supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  } else {
+    // Supabase JWT — user-scoped client with RLS
+    supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${auth.accessToken}` } },
+    });
+  }
+  setStoreContext({ supabase, userId: auth.userId });
+}
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -208,30 +157,33 @@ export default {
       }
     }
 
-    // --- MCP endpoint — delegate to McpAgent.serve() handler ---
+    // --- MCP endpoint — stateless handler, fresh server per request ---
     if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
-      // Validate auth before passing to the MCP handler
       const bearer = request.headers.get("Authorization");
       if (!bearer?.startsWith("Bearer ")) {
         return unauthorizedResponse(url.origin);
       }
       const token = bearer.slice(7);
-      // Clone request before auth validation — the MCP handler needs the body intact.
-      const mcpRequest = request.clone();
       const auth = await validateToken(token, env);
       if (!auth) {
         return unauthorizedResponse(url.origin);
       }
 
-      // Pass auth context as props — McpAgent.serve() reads ctx.props
-      // and passes them to the DO on creation.
-      (ctx as any).props = {
-        userId: auth.userId,
-        accessToken: auth.accessToken,
-      };
+      // Set up store context for this request
+      setupStoreContext(auth, env);
 
-      // McpAgent.serve() handles DO creation, session management, and transport
-      return mcpHandler.fetch(mcpRequest, env, ctx);
+      // Fresh McpServer per request — stateless, no session tracking
+      const server = new McpServer(
+        { name: "tldr-mcp", version: "1.0.0" },
+        {
+          capabilities: { tools: {}, resources: {}, prompts: {} },
+          instructions: skillInstructions,
+        },
+      );
+      registerTools(server);
+
+      const handler = createMcpHandler(server, { route: "/mcp" });
+      return handler(request, env, ctx);
     }
 
     // --- API token management ---

@@ -4,26 +4,6 @@
 	"main": "src/worker.ts",
 	"compatibility_date": "2026-04-27",
 	"compatibility_flags": ["nodejs_compat"],
-	"workers_dev": false,
-	"routes": [
-		{ "pattern": "mcp.tldr4.ai", "custom_domain": true }
-	],
-
-	"durable_objects": {
-		"bindings": [
-			{
-				"name": "McpAgent",
-				"class_name": "TldrMcpAgent"
-			}
-		]
-	},
-
-	"migrations": [
-		{
-			"tag": "v1",
-			"new_sqlite_classes": ["TldrMcpAgent"]
-		}
-	],
 
 	"rules": [
 		{ "type": "Text", "globs": ["**/*.md"], "fallthrough": true }
@@ -32,5 +12,16 @@
 	"vars": {
 		"SUPABASE_URL": "https://pibazihemywzjcwjwicm.supabase.co",
 		"SUPABASE_ANON_KEY": "sb_publishable_oOGYwGUBZYdzSh5MNJQgrQ_NksybKUL"
+	},
+
+	"env": {
+		"production": {
+			"workers_dev": false,
+			"routes": [{ "pattern": "mcp.tldr4.ai", "custom_domain": true }],
+			"vars": {
+				"SUPABASE_URL": "https://pibazihemywzjcwjwicm.supabase.co",
+				"SUPABASE_ANON_KEY": "sb_publishable_oOGYwGUBZYdzSh5MNJQgrQ_NksybKUL"
+			}
+		}
 	}
 }
