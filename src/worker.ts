@@ -15,8 +15,7 @@ import { registerTools } from "./tools/index.js";
 import { setStoreContext } from "./store/base.js";
 import { setConfig } from "./config.js";
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import skillContent from "../SKILL.md";
 
 interface Env {
   McpAgent: DurableObjectNamespace;
@@ -33,13 +32,8 @@ type Props = {
   [key: string]: unknown;
 };
 
-// Load SKILL.md as MCP instructions
-let skillInstructions: string | undefined;
-try {
-  skillInstructions = readFileSync(resolve(import.meta.dirname ?? ".", "../SKILL.md"), "utf8");
-} catch {
-  console.error("Warning: SKILL.md not found");
-}
+// SKILL.md imported as a string at build time by wrangler's bundler
+const skillInstructions: string | undefined = skillContent;
 
 /**
  * Per-user MCP Agent Durable Object.
@@ -66,14 +60,24 @@ export class TldrMcpAgent extends McpAgent<Env, unknown, Props> {
 
     // Set up the store context so tool handlers can access Supabase
     // with the authenticated user's RLS scope.
+    // Props may come from McpAgent props or URL params set by the Worker.
     const userId = this.props?.userId;
     const accessToken = this.props?.accessToken;
 
     if (userId && accessToken) {
-      const supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_ANON_KEY, {
-        auth: { persistSession: false, autoRefreshToken: false },
-        global: { headers: { Authorization: `Bearer ${accessToken}` } },
-      });
+      let supabase;
+      if (accessToken.startsWith("tldr_live_")) {
+        // API token — use service role client (RLS bypassed, filtered by userId in queries)
+        supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_SERVICE_ROLE_KEY, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+      } else {
+        // Supabase JWT — user-scoped client with RLS
+        supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_ANON_KEY, {
+          auth: { persistSession: false, autoRefreshToken: false },
+          global: { headers: { Authorization: `Bearer ${accessToken}` } },
+        });
+      }
       setStoreContext({ supabase, userId });
     }
 
@@ -83,13 +87,38 @@ export class TldrMcpAgent extends McpAgent<Env, unknown, Props> {
 }
 
 /**
- * Validate a Supabase JWT and extract the user ID.
+ * Validate a Bearer token — either a Supabase JWT or a tldr API token.
  * Returns null if invalid.
  */
-async function validateJwt(
+async function validateToken(
   token: string,
   env: Env,
-): Promise<{ userId: string } | null> {
+): Promise<{ userId: string; accessToken: string } | null> {
+  // Initialize config for store functions
+  setConfig({
+    supabaseUrl: env.SUPABASE_URL,
+    supabaseAnonKey: env.SUPABASE_ANON_KEY,
+    supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+    supabaseSigningKeyJwk: env.SUPABASE_SIGNING_KEY_JWK,
+    anthropicApiKey: env.ANTHROPIC_API_KEY,
+  });
+
+  // API token path (tldr_live_*)
+  if (token.startsWith("tldr_live_")) {
+    try {
+      const { findUserIdByToken } = await import("./store/apiTokens.js");
+      const userId = await findUserIdByToken(token);
+      if (!userId) return null;
+      // For API tokens, we use the service role client — the token itself
+      // doesn't carry a JWT, so we pass it through as the accessToken
+      // and the DO will create a service-role Supabase client.
+      return { userId, accessToken: token };
+    } catch {
+      return null;
+    }
+  }
+
+  // Supabase JWT path
   try {
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -97,21 +126,31 @@ async function validateJwt(
     });
     const { data: { user }, error } = await supabase.auth.getUser();
     if (error || !user) return null;
-    return { userId: user.id };
+    return { userId: user.id, accessToken: token };
   } catch {
     return null;
   }
 }
 
+// Use McpAgent.serve() for MCP protocol routing — handles session
+// management, transport negotiation, and DO lifecycle automatically.
+const mcpHandler = TldrMcpAgent.serve("/mcp", {
+  binding: "McpAgent",
+  corsOptions: {
+    origin: "*",
+    methods: "GET, POST, DELETE, OPTIONS",
+    headers: "*",
+  },
+});
+
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     // --- OAuth discovery endpoints (no auth) ---
     if (url.pathname === "/.well-known/oauth-protected-resource") {
-      const publicUrl = url.origin;
       return Response.json({
-        resource: publicUrl,
+        resource: url.origin,
         authorization_servers: [`${env.SUPABASE_URL}/auth/v1`],
         bearer_methods_supported: ["header"],
       });
@@ -125,11 +164,8 @@ export default {
         if (!upstream.ok) throw new Error(`${upstream.status}`);
         const metadata = await upstream.json();
         return Response.json(metadata);
-      } catch (error) {
-        return Response.json(
-          { error: "Failed to fetch auth server metadata" },
-          { status: 502 },
-        );
+      } catch {
+        return Response.json({ error: "Failed to fetch auth server metadata" }, { status: 502 });
       }
     }
 
@@ -143,13 +179,7 @@ export default {
       const authorizationId = url.pathname.split("/").pop();
       const bearer = request.headers.get("Authorization");
       if (!bearer?.startsWith("Bearer ")) {
-        return new Response(JSON.stringify({ error: "Missing Authorization" }), {
-          status: 401,
-          headers: {
-            "Content-Type": "application/json",
-            "WWW-Authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource"`,
-          },
-        });
+        return unauthorizedResponse(url.origin);
       }
 
       const isPost = request.method === "POST";
@@ -162,14 +192,12 @@ export default {
       };
       if (isPost) headers["Content-Type"] = "application/json";
 
-      const init: RequestInit = {
-        method: request.method,
-        headers,
-        ...(isPost ? { body: await request.text() } : {}),
-      };
-
       try {
-        const upstream = await fetch(supabaseUrl, init);
+        const upstream = await fetch(supabaseUrl, {
+          method: request.method,
+          headers,
+          ...(isPost ? { body: await request.text() } : {}),
+        });
         const body = await upstream.text();
         return new Response(body, {
           status: upstream.status,
@@ -180,41 +208,39 @@ export default {
       }
     }
 
-    // --- API token management (requires auth) ---
-    // TODO: Port /api/tokens endpoints
-
-    // --- MCP endpoint (requires auth) ---
+    // --- MCP endpoint — delegate to McpAgent.serve() handler ---
     if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
+      // Validate auth before passing to the MCP handler
       const bearer = request.headers.get("Authorization");
       if (!bearer?.startsWith("Bearer ")) {
-        return new Response(JSON.stringify({ error: "Missing Authorization" }), {
-          status: 401,
-          headers: {
-            "Content-Type": "application/json",
-            "WWW-Authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource"`,
-          },
-        });
+        return unauthorizedResponse(url.origin);
       }
-
       const token = bearer.slice(7);
-      const auth = await validateJwt(token, env);
+      // Clone request before auth validation — validateToken may consume resources,
+      // and the MCP handler needs the original request body intact.
+      const mcpRequest = request.clone();
+      const auth = await validateToken(token, env);
       if (!auth) {
-        return new Response(JSON.stringify({ error: "Invalid token" }), {
-          status: 401,
-          headers: {
-            "Content-Type": "application/json",
-            "WWW-Authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource"`,
-          },
-        });
+        return unauthorizedResponse(url.origin);
       }
 
-      // Route to per-user MCP DO with user context as props
-      const id = env.McpAgent.idFromName(auth.userId);
-      const agent = env.McpAgent.get(id);
-      // TODO: Pass props (userId, accessToken) to the DO
-      return agent.fetch(request);
+      // McpAgent.serve() handles DO creation, session management, and transport
+      return mcpHandler.fetch(mcpRequest, env, ctx);
     }
+
+    // --- API token management ---
+    // TODO: Port /api/tokens endpoints
 
     return new Response("Not found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
+
+function unauthorizedResponse(origin: string): Response {
+  return new Response(JSON.stringify({ error: "Missing or invalid Authorization" }), {
+    status: 401,
+    headers: {
+      "Content-Type": "application/json",
+      "WWW-Authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource"`,
+    },
+  });
+}

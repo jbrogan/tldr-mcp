@@ -21,6 +21,10 @@
 		}
 	],
 
+	"rules": [
+		{ "type": "Text", "globs": ["**/*.md"], "fallthrough": true }
+	],
+
 	"vars": {
 		"SUPABASE_URL": "https://pibazihemywzjcwjwicm.supabase.co",
 		"SUPABASE_ANON_KEY": "sb_publishable_oOGYwGUBZYdzSh5MNJQgrQ_NksybKUL"
