@@ -4,6 +4,10 @@
 	"main": "src/worker.ts",
 	"compatibility_date": "2026-04-27",
 	"compatibility_flags": ["nodejs_compat"],
+	"workers_dev": false,
+	"routes": [
+		{ "pattern": "mcp.tldr4.ai", "custom_domain": true }
+	],
 
 	"durable_objects": {
 		"bindings": [
