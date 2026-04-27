@@ -11,8 +11,8 @@
 
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerTools } from "../src/tools/index.js";
-import { setStoreContext, clearStoreContext } from "../src/store/base.js";
+import { registerTools } from "./tools/index.js";
+import { setStoreContext, clearStoreContext } from "./store/base.js";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
