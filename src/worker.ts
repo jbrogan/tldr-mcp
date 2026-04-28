@@ -221,6 +221,11 @@ export default {
 
     // --- MCP endpoint — delegate to McpAgent.serve() (per-session DOs) ---
     if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
+      // Block GET SSE stream — prevents idle-timeout issues on internal DO-to-DO
+      // connections. Tool responses flow through POST SSE streams instead.
+      if (request.method === "GET") {
+        return new Response(null, { status: 405, headers: CORS_HEADERS });
+      }
       const bearer = request.headers.get("Authorization");
       if (!bearer?.startsWith("Bearer ")) {
         return unauthorizedResponse(url.origin);
