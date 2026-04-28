@@ -92,9 +92,20 @@ function setupStoreContext(auth: { userId: string; accessToken: string }, env: E
   setStoreContext({ supabase, userId: auth.userId });
 }
 
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+};
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    // --- CORS preflight ---
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
 
     // --- OAuth discovery endpoints (no auth) ---
     if (url.pathname === "/.well-known/oauth-protected-resource") {
@@ -150,10 +161,16 @@ export default {
         const body = await upstream.text();
         return new Response(body, {
           status: upstream.status,
-          headers: { "Content-Type": upstream.headers.get("content-type") ?? "application/json" },
+          headers: {
+            "Content-Type": upstream.headers.get("content-type") ?? "application/json",
+            ...CORS_HEADERS,
+          },
         });
       } catch {
-        return Response.json({ error: "Upstream fetch failed" }, { status: 502 });
+        return new Response(JSON.stringify({ error: "Upstream fetch failed" }), {
+          status: 502,
+          headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+        });
       }
     }
 
