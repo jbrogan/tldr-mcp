@@ -5,6 +5,19 @@
 	"compatibility_date": "2026-04-27",
 	"compatibility_flags": ["nodejs_compat"],
 
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "McpAgent",
+				"class_name": "TldrMcpAgent"
+			}
+		]
+	},
+
+	"migrations": [
+		{ "tag": "v1", "new_sqlite_classes": ["TldrMcpAgent"] }
+	],
+
 	"rules": [
 		{ "type": "Text", "globs": ["**/*.md"], "fallthrough": true }
 	],
@@ -18,6 +31,14 @@
 		"production": {
 			"workers_dev": false,
 			"routes": [{ "pattern": "mcp.tldr4.ai", "custom_domain": true }],
+			"durable_objects": {
+				"bindings": [
+					{
+						"name": "McpAgent",
+						"class_name": "TldrMcpAgent"
+					}
+				]
+			},
 			"vars": {
 				"SUPABASE_URL": "https://pibazihemywzjcwjwicm.supabase.co",
 				"SUPABASE_ANON_KEY": "sb_publishable_oOGYwGUBZYdzSh5MNJQgrQ_NksybKUL"
