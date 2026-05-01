@@ -349,9 +349,7 @@ export async function listTasks(options?: {
     query = query.eq("end_id", options.endId);
   }
 
-  if (options?.areaId) {
-    query = query.eq("area_id", options.areaId);
-  }
+  // areaId filter is applied after fetch — see below
 
   if (options?.completed !== undefined) {
     if (options.completed) {
@@ -367,7 +365,21 @@ export async function listTasks(options?: {
     throw new Error(`Failed to list tasks: ${error.message}`);
   }
 
-  const results = await Promise.all((data ?? []).map((row) => toEntity(row as TaskWithPersons)));
+  let results = await Promise.all((data ?? []).map((row) => toEntity(row as TaskWithPersons)));
+
+  // areaId filter: match tasks with direct area_id OR tasks whose end belongs to the area
+  if (options?.areaId) {
+    // Find end IDs that belong to this area
+    const { data: areaEnds } = await supabase
+      .from("ends")
+      .select("id")
+      .eq("area_id", options.areaId);
+    const areaEndIds = new Set((areaEnds ?? []).map((e) => e.id));
+
+    results = results.filter((t) =>
+      t.areaId === options.areaId || (t.endId && areaEndIds.has(t.endId))
+    );
+  }
 
   // Optional dueBy filter: when specified, include only tasks where
   // due_date or next_due_at falls within the window.

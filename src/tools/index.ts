@@ -1781,7 +1781,7 @@ export function registerTools(server: McpServer): void {
     "list_tasks",
     {
       title: "List Tasks",
-      description: "Lists tasks. Filter by end, area, or completion status. Use dueBy to narrow to tasks due by a specific date (checks both due_date and next_due_at for recurring tasks).",
+      description: "Lists tasks. Filter by end, area, or completion status. areaId matches tasks with a direct area OR tasks linked to an end in that area. Use dueBy to narrow to tasks due by a specific date (checks both due_date and next_due_at for recurring tasks).",
       inputSchema: {
         endId: z.string().optional().describe("Filter by end ID"),
         areaId: z.string().optional().describe("Filter by area ID"),
