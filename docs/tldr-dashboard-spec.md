@@ -32,11 +32,13 @@ The dashboard does not replicate LLM capabilities. It does not create, edit, or 
 
 ## 3. Navigation Structure
 
-The dashboard is organized into five primary views, accessible via top-level navigation:
+The dashboard is organized into seven primary views, accessible via top-level navigation:
 
 ```
-Home  |  Life Areas  |  Ends  |  Activity  |  Upcoming
+Home  |  Upcoming  |  Activity  |  Ends  |  Portfolios  |  Beliefs  |  People
 ```
+
+Navigation order groups action-oriented views first (Home, Upcoming, Activity) followed by structural views that mirror the data model hierarchy (Ends → Portfolios → Beliefs → People).
 
 ---
 
@@ -134,7 +136,36 @@ Health indicators (on track / habit gap / overdue) are deferred to Phase 2. Phas
 
 ---
 
-### 4.4 Activity — The Log
+### 4.4 Portfolios — Collection View
+
+**Purpose:** Analyze goals through the portfolio lens — how are collections of ends performing? Portfolios complement the area view: areas answer "how is this domain of my life?" while portfolios answer "how is this collection of goals performing?"
+
+**Layout:** List of portfolios on the left; selected portfolio detail on the right.
+
+**Portfolio List:**
+Each portfolio card shows:
+- Portfolio name
+- Owner name and portfolio type badge
+- Active / total end count
+- Habit count across all ends in the portfolio
+- Activity count and total time invested (last 30 days)
+
+Sorted by most time invested.
+
+**Portfolio Detail Panel (on click):**
+- Portfolio name, owner, type
+- Summary stats: total time, total activities
+- List of all ends in the portfolio, each showing:
+  - End name with type badge (journey/destination/inquiry)
+  - State badge
+  - Area
+  - Per-end activity count and time invested
+
+**Data Sources:** list_portfolios, list_ends (cross-referenced via portfolio field), list_activity (for time stats)
+
+---
+
+### 4.5 Activity — The Log
 
 **Purpose:** Review what has been done, across any time period and any filter combination.
 
@@ -164,7 +195,7 @@ Health indicators (on track / habit gap / overdue) are deferred to Phase 2. Phas
 
 ---
 
-### 4.5 Upcoming — Forward View
+### 4.6 Upcoming — Forward View
 
 **Purpose:** See what's coming — tasks, habit cadence expectations, and projected time load for the next period.
 
@@ -226,12 +257,15 @@ All dashboard data is read from the tldr MCP server via the same tool layer used
 
 | Dashboard Section | Primary Tools |
 |---|---|
-| Home health strip | list_areas, list_ends, list_tasks, list_activity |
-| Life area detail | list_ends, list_habits, list_tasks, list_activity |
-| End hierarchy | list_ends (with beliefs, supporting ends, habits) |
-| Activity log | list_activity |
-| Upcoming | list_tasks (due date filtering), list_habits |
-| Valuation signals | get_end_valuation, list_valuation_flags |
+| Home | list_areas, list_ends, list_tasks, list_activity |
+| Upcoming | list_tasks (due date filtering) |
+| Activity | list_activity (with period and groupBy) |
+| Ends hierarchy | list_ends, list_beliefs |
+| Portfolios | list_portfolios, list_ends, list_activity |
+| Beliefs alignment | list_beliefs, list_ends, list_activity |
+| People | list_people, list_activity |
+| Life area detail (Phase 2) | list_ends, list_habits, list_tasks, list_activity |
+| Valuation signals (Phase 3) | get_end_valuation, list_valuation_flags |
 
 ---
 
@@ -301,13 +335,14 @@ This is the one intentional exception to the "read-only dashboard" principle. Th
 
 ## 8. Phasing
 
-**Phase 1 — Core Orientation**
-- Home (Life at a Glance)
-- Upcoming (task and overdue view)
-- Activity (timeline and summary)
-- Ends hierarchy browser with end detail panel
-- People view (time invested per person, with/for breakdown)
+**Phase 1 — Core Orientation (shipped)**
+- Home (Life at a Glance) — area grid, today's focus, weekly summary with area-colored bars
+- Upcoming (task and overdue view) — filterable by area, end, and due window
+- Activity (timeline) — groupable by day, area, or end; period selector
+- Ends hierarchy browser with end detail panel — hierarchy and list views, state filter
+- Portfolios — collection view with per-end activity breakdown
 - Belief alignment view (beliefs → ends → recent activity, gap highlighting)
+- People view (time invested per person, with/for breakdown)
 
 **Phase 2 — Depth and Interaction**
 - Life Areas deep dive
