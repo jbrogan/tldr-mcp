@@ -89,6 +89,7 @@ Recompute `nextDueAt` from the new recurrence string and `lastCompletedAt` (or `
 ## Date and Timezone Rules
 
 - `completedAt` fields accept: `"today"` | `"yesterday"` | `"tomorrow"` | `YYYY-MM-DD` | full ISO timestamp. The server resolves relative terms and bare dates in the user's timezone.
+- **Default completedAt is "today".** When logging an action or task time entry and the user does not explicitly specify a date, always use `"today"` — never infer a date from conversational context. Only use a specific `YYYY-MM-DD` when the user explicitly states a past date (e.g., "log this for yesterday", "I did this on Tuesday"). Long conversations may span multiple dates — the date being discussed is not necessarily the date the activity occurred.
 - `dueDate`, `scheduledDate` are bare `YYYY-MM-DD` — user-local dates, no time component.
 - All timestamps in responses include the user's timezone offset (e.g. `2026-04-21T14:00:00-04:00`). `.slice(0, 10)` yields the user-local date.
 - Default query ranges: last 30 days for actions/task time; last 7 days for weekly reflection. Only widen when the user explicitly asks.
