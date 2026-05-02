@@ -8,7 +8,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RelationshipType } from "../schemas/person.js";
-import { getSupabase } from "../store/base.js";
+import { getSupabase, getUserId } from "../store/base.js";
 import {
   createPerson,
   deletePerson,
