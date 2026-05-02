@@ -763,14 +763,28 @@ export function registerTools(server: McpServer): void {
       const endIds = ends.map((e) => e.id);
 
       // Bulk preload all related data
-      const allAreas = await listAreas();
-      const allPortfolios = await listPortfolios();
-      const allHabits = await listHabits();
-      const openTasks = await listTasks({ completed: false });
+      const supabase = getSupabase();
+      const userId = getUserId();
+      const [allAreas, allPortfolios, allHabits, { data: openTaskRows }] = await Promise.all([
+        listAreas(),
+        listPortfolios(),
+        listHabits(),
+        supabase
+          .from("tasks")
+          .select("id, name, end_id, due_date, scheduled_date, estimated_duration_minutes, recurrence")
+          .eq("user_id", userId)
+          .is("completed_at", null)
+          .not("end_id", "is", null),
+      ]);
+      const openTasks = (openTaskRows ?? []).map((t: any) => ({
+        id: t.id, name: t.name, endId: t.end_id,
+        dueDate: t.due_date, scheduledDate: t.scheduled_date,
+        estimatedDurationMinutes: t.estimated_duration_minutes,
+        recurrence: t.recurrence,
+      }));
       const allEndsMap = new Map(ends.map((e) => [e.id, e]));
 
       // Fetch all end_supports rows in bulk (2 queries)
-      const supabase = getSupabase();
       const [{ data: childRows }, { data: parentRows }] = await Promise.all([
         supabase
           .from("end_supports")
@@ -806,7 +820,7 @@ export function registerTools(server: McpServer): void {
           const area = e.areaId ? allAreas.find((a) => a.id === e.areaId) : undefined;
           const portfolio = e.portfolioId ? allPortfolios.find((c) => c.id === e.portfolioId) : undefined;
           const habits = allHabits.filter((h) => h.endId === e.id);
-          const tasks = openTasks.filter((t) => t.endId === e.id);
+          const tasks = openTasks.filter((t: any) => t.endId === e.id);
           return {
             id: e.id,
             name: e.name,
