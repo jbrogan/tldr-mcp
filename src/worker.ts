@@ -24,7 +24,7 @@ interface Env {
 }
 
 type Props = {
-  userId: string;
+  userId?: string;
   accessToken: string;
   [key: string]: unknown;
 };
@@ -54,22 +54,39 @@ export class TldrMcpAgent extends McpAgent<Env, unknown, Props> {
       anthropicApiKey: this.env.ANTHROPIC_API_KEY,
     });
 
-    const userId = this.props?.userId;
     const accessToken = this.props?.accessToken;
+    let userId = this.props?.userId;
 
-    if (userId && accessToken) {
-      let supabase;
-      if (accessToken.startsWith("tldr_live_")) {
-        supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_SERVICE_ROLE_KEY, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-      } else {
-        supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_ANON_KEY, {
-          auth: { persistSession: false, autoRefreshToken: false },
-          global: { headers: { Authorization: `Bearer ${accessToken}` } },
-        });
+    if (accessToken) {
+      // Validate token and resolve userId inside the DO (avoids Worker subrequest)
+      if (!userId) {
+        if (accessToken.startsWith("tldr_live_")) {
+          const { findUserIdByToken } = await import("./store/apiTokens.js");
+          userId = await findUserIdByToken(accessToken) ?? undefined;
+        } else {
+          const supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_ANON_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false },
+            global: { headers: { Authorization: `Bearer ${accessToken}` } },
+          });
+          const { data: { user } } = await supabase.auth.getUser();
+          userId = user?.id;
+        }
       }
-      setStoreContext({ supabase, userId });
+
+      if (userId) {
+        let supabase;
+        if (accessToken.startsWith("tldr_live_")) {
+          supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_SERVICE_ROLE_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+        } else {
+          supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_ANON_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false },
+            global: { headers: { Authorization: `Bearer ${accessToken}` } },
+          });
+        }
+        setStoreContext({ supabase, userId });
+      }
     }
 
     registerTools(this.server);
@@ -231,14 +248,10 @@ export default {
         return unauthorizedResponse(url.origin);
       }
       const token = bearer.slice(7);
-      const auth = await validateToken(token, env);
-      if (!auth) {
-        return unauthorizedResponse(url.origin);
-      }
 
-      // Pass user credentials via ctx.props — McpAgent.serve() forwards
-      // these to the DO, where TldrMcpAgent.init() reads them.
-      (ctx as any).props = { userId: auth.userId, accessToken: auth.accessToken };
+      // Pass raw token to DO — auth validation happens in DO.init()
+      // to avoid Supabase subrequest in the Worker.
+      (ctx as any).props = { accessToken: token };
       return mcpHandler.fetch(request, env, ctx);
     }
 
