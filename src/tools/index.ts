@@ -749,7 +749,7 @@ export function registerTools(server: McpServer): void {
     "list_ends",
     {
       title: "List Ends",
-      description: "Lists ends with habits and hierarchy. The single authoritative tool for ends overview — includes habits, supporting ends, and parent ends for each end.",
+      description: "Lists ends with habits, open tasks, and hierarchy. The single authoritative tool for ends overview — includes habits, open tasks, supporting ends, and parent ends for each end.",
       inputSchema: {
         areaId: z.string().optional().describe("Filter by area ID"),
         portfolioId: z.string().optional().describe("Filter by portfolio ID"),
@@ -766,6 +766,7 @@ export function registerTools(server: McpServer): void {
       const allAreas = await listAreas();
       const allPortfolios = await listPortfolios();
       const allHabits = await listHabits();
+      const openTasks = await listTasks({ completed: false });
       const allEndsMap = new Map(ends.map((e) => [e.id, e]));
 
       // Fetch all end_supports rows in bulk (2 queries)
@@ -805,6 +806,7 @@ export function registerTools(server: McpServer): void {
           const area = e.areaId ? allAreas.find((a) => a.id === e.areaId) : undefined;
           const portfolio = e.portfolioId ? allPortfolios.find((c) => c.id === e.portfolioId) : undefined;
           const habits = allHabits.filter((h) => h.endId === e.id);
+          const tasks = openTasks.filter((t) => t.endId === e.id);
           return {
             id: e.id,
             name: e.name,
@@ -819,6 +821,14 @@ export function registerTools(server: McpServer): void {
               name: h.name,
               recurrence: h.recurrence ?? null,
               durationMinutes: h.durationMinutes ?? null,
+            })),
+            openTasks: tasks.map((t) => ({
+              id: t.id,
+              name: t.name,
+              dueDate: t.dueDate ?? null,
+              scheduledDate: t.scheduledDate ?? null,
+              estimatedDurationMinutes: t.estimatedDurationMinutes ?? null,
+              recurrence: t.recurrence ?? null,
             })),
             supportingEnds: childrenMap.get(e.id) ?? [],
             supports: parentsMap.get(e.id) ?? [],

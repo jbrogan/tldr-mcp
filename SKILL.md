@@ -138,7 +138,7 @@ Related entities are included inline with `{id, name}` — use these for follow-
 Ends can have parent-child relationships via `link_supporting_end`. Max depth: 3 tiers (grandparent → parent → leaf).
 
 - `get_end` returns `supportingEnds` (children) and `supports` (parents) arrays.
-- `list_ends` returns full `supportingEnds` and `supports` arrays per end, plus `habits`.
+- `list_ends` returns full `supportingEnds` and `supports` arrays per end, plus `habits` and `openTasks`.
 - `create_end` accepts optional `parentEndId` to create and link in one call.
 - All end type combinations are valid (journey → destination, inquiry → destination, etc.).
 - State does NOT propagate — parent and child states are independent.
@@ -160,7 +160,7 @@ Ends can be shared with other users (read-only). Shared ends expose their habits
 
 ## Gotchas
 
-- `list_ends` is the single authoritative tool for ends overview — includes habits, supporting ends, and parent ends. No need for a separate habits call.
+- `list_ends` is the single authoritative tool for ends overview — includes habits, open tasks, supporting ends, and parent ends. No need for separate habits or tasks calls when viewing ends.
 - `list_teams`: use `personId` (not `organizationId`) for "what teams is X in?" Use `__self__` for current user.
 - `update_habit`: `endIdToReplace` ignores `endIdToAdd`/`endIdToRemove`. Choose one approach.
 - `update_person`: `teamIds` replaces the entire list; prefer `teamIdsToAdd` for adding.
