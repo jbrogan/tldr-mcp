@@ -44,6 +44,16 @@ Portfolios (groupings of ends by owner)
 
 **Rule:** "I went to the gym" → `create_action`. "Check tire pressure" → `update_task` with `completedAt`.
 
+### Preferred Days
+
+Both habits and recurring tasks support an optional `preferredDays` field — a natural language expression of which days the user prefers to perform the behavior (e.g., "M,W,F", "weekdays", "Thursday", "1st of the month").
+
+**When to set:** When a user describes when they do a habit or recurring task (e.g., "I go to the gym on Tuesdays and Thursdays", "I do badge fabrication on Monday and Thursday"), extract and set `preferredDays` alongside the creation or update. Don't wait for the user to explicitly say "set preferred days."
+
+**Relationship to recurrence:** `recurrence` defines *how often* (e.g., "3x week"). `preferredDays` defines *which days* (e.g., "M,W,F"). When `preferredDays` specifies more candidate days than `recurrence` allows, treat `preferredDays` as a candidate pool and `recurrence` as the frequency constraint.
+
+**Recurring task nextDueAt:** When computing `nextDueAt` for a recurring task with `preferredDays`, the recurrence defines the cycle boundary and `preferredDays` determines placement within the next cycle. Example: "weekly" + "Thursday" completed on Tuesday → next Thursday of next week.
+
 ### list_activity vs list_actions vs list_task_time
 
 | | list_activity | list_actions | list_task_time |
@@ -93,6 +103,15 @@ Recompute `nextDueAt` from the new recurrence string and `lastCompletedAt` (or `
 - `dueDate`, `scheduledDate` are bare `YYYY-MM-DD` — user-local dates, no time component.
 - All timestamps in responses include the user's timezone offset (e.g. `2026-04-21T14:00:00-04:00`). `.slice(0, 10)` yields the user-local date.
 - Default query ranges: last 30 days for actions/task time; last 7 days for weekly reflection. Only widen when the user explicitly asks.
+
+### Temporal Metadata
+
+Activity records from `list_activity` include server-computed temporal fields: `dayOfWeek` (e.g., "Monday"), `dayOfMonth` (e.g., 24), and `weekOfMonth` (e.g., "last"). These are computed in the user's timezone and are authoritative — **use these fields instead of computing day-of-week or week-of-month from timestamps yourself.** This avoids off-by-one errors and timezone edge cases.
+
+Use temporal metadata for:
+- Inferring `preferredDays` from activity patterns ("4 of your last 8 gym sessions were on Fridays")
+- Day-of-week analysis in reflections ("your most active days were Monday and Thursday")
+- Monthly pattern detection ("you consistently reconcile on the last Friday of the month")
 
 ## Tool Selection Quick Reference
 

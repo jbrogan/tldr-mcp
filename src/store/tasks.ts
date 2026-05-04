@@ -45,6 +45,7 @@ async function toEntity(row: TaskWithPersons): Promise<TaskEntity> {
     estimatedDurationMinutes: row.estimated_duration_minutes ?? undefined,
     completedAt: row.completed_at ? formatInstantForUser(row.completed_at, tz) : undefined,
     recurrence: row.recurrence ?? undefined,
+    preferredDays: row.preferred_days ?? undefined,
     lastCompletedAt: row.last_completed_at ? formatInstantForUser(row.last_completed_at, tz) : undefined,
     nextDueAt: row.next_due_at ? formatInstantForUser(row.next_due_at, tz) : undefined,
     notes: row.notes ?? undefined,
@@ -85,6 +86,7 @@ export async function createTask(data: Task): Promise<TaskEntity> {
       estimated_duration_minutes: data.estimatedDurationMinutes,
       completed_at: data.recurrence ? null : data.completedAt, // recurring tasks stay open
       recurrence: data.recurrence ?? null,
+      preferred_days: data.recurrence ? (data.preferredDays ?? null) : null,
       last_completed_at: lastCompletedAt,
       next_due_at: nextDueAt,
       notes: data.notes,
@@ -183,6 +185,7 @@ export async function updateTask(
       | "estimatedDurationMinutes"
       | "completedAt"
       | "recurrence"
+      | "preferredDays"
       | "nextDueAt"
       | "notes"
     >
@@ -218,6 +221,7 @@ export async function updateTask(
   if (updates.dueDate !== undefined) updateData.due_date = updates.dueDate;
   if (updates.scheduledDate !== undefined) updateData.scheduled_date = updates.scheduledDate;
   if (updates.estimatedDurationMinutes !== undefined) updateData.estimated_duration_minutes = updates.estimatedDurationMinutes;
+  if (updates.preferredDays !== undefined) updateData.preferred_days = updates.preferredDays;
   if (updates.notes !== undefined) updateData.notes = updates.notes;
   if (updates.recurrence !== undefined) updateData.recurrence = updates.recurrence;
 

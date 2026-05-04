@@ -771,7 +771,7 @@ export function registerTools(server: McpServer): void {
         listHabits(),
         supabase
           .from("tasks")
-          .select("id, name, end_id, due_date, scheduled_date, estimated_duration_minutes, recurrence")
+          .select("id, name, end_id, due_date, scheduled_date, estimated_duration_minutes, recurrence, preferred_days")
           .eq("user_id", userId)
           .is("completed_at", null)
           .not("end_id", "is", null),
@@ -780,7 +780,7 @@ export function registerTools(server: McpServer): void {
         id: t.id, name: t.name, endId: t.end_id,
         dueDate: t.due_date, scheduledDate: t.scheduled_date,
         estimatedDurationMinutes: t.estimated_duration_minutes,
-        recurrence: t.recurrence,
+        recurrence: t.recurrence, preferredDays: t.preferred_days,
       }));
       const allEndsMap = new Map(ends.map((e) => [e.id, e]));
 
@@ -834,15 +834,17 @@ export function registerTools(server: McpServer): void {
               id: h.id,
               name: h.name,
               recurrence: h.recurrence ?? null,
+              preferredDays: h.preferredDays ?? null,
               durationMinutes: h.durationMinutes ?? null,
             })),
-            openTasks: tasks.map((t) => ({
+            openTasks: tasks.map((t: any) => ({
               id: t.id,
               name: t.name,
               dueDate: t.dueDate ?? null,
               scheduledDate: t.scheduledDate ?? null,
               estimatedDurationMinutes: t.estimatedDurationMinutes ?? null,
               recurrence: t.recurrence ?? null,
+              preferredDays: t.preferredDays ?? null,
             })),
             supportingEnds: childrenMap.get(e.id) ?? [],
             supports: parentsMap.get(e.id) ?? [],
@@ -905,6 +907,7 @@ export function registerTools(server: McpServer): void {
           id: h.id,
           name: h.name,
           recurrence: h.recurrence ?? null,
+          preferredDays: h.preferredDays ?? null,
           participants,
           isShared: h.isShared ?? false,
           sharedBy,
@@ -1117,10 +1120,11 @@ export function registerTools(server: McpServer): void {
         teamId: z.string().optional(),
         personIds: z.array(z.string()).optional().describe("IDs of people who participate in the habit"),
         recurrence: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
+        preferredDays: z.string().optional().describe("Preferred days within recurrence cycle, e.g. 'M,W,F', 'weekdays', 'Thursday'"),
         durationMinutes: z.number().int().positive().optional().describe("Estimated time in minutes"),
       },
     },
-    async ({ name, endId, areaId, teamId, personIds, recurrence, durationMinutes }) => {
+    async ({ name, endId, areaId, teamId, personIds, recurrence, preferredDays, durationMinutes }) => {
       const habit = await createHabit({
         name,
         endId,
@@ -1128,6 +1132,7 @@ export function registerTools(server: McpServer): void {
         teamId,
         personIds,
         recurrence,
+        preferredDays,
         durationMinutes,
       });
       const end = await getEndById(habit.endId);
@@ -1140,6 +1145,7 @@ export function registerTools(server: McpServer): void {
           teamId: habit.teamId ?? null,
           personIds: habit.personIds ?? [],
           recurrence: habit.recurrence ?? null,
+          preferredDays: habit.preferredDays ?? null,
           durationMinutes: habit.durationMinutes ?? null,
           createdAt: habit.createdAt,
         },
@@ -1194,6 +1200,7 @@ export function registerTools(server: McpServer): void {
           name: h.name,
           end,
           recurrence: h.recurrence ?? null,
+          preferredDays: h.preferredDays ?? null,
           durationMinutes: h.durationMinutes ?? null,
           area: area ? { id: area.id, name: area.name } : h.areaId ? { id: h.areaId, name: null } : null,
           team: team ? { id: team.id, name: team.name } : h.teamId ? { id: h.teamId, name: null } : null,
@@ -1241,6 +1248,7 @@ export function registerTools(server: McpServer): void {
           team: team ? { id: team.id, name: team.name } : null,
           participants,
           recurrence: habit.recurrence ?? null,
+          preferredDays: habit.preferredDays ?? null,
           durationMinutes: habit.durationMinutes ?? null,
           createdAt: habit.createdAt,
           recentActions: recentActions.map((a) => ({
@@ -1266,27 +1274,30 @@ export function registerTools(server: McpServer): void {
         name: z.string().optional().describe("New name"),
         endId: z.string().optional().describe("Change the end this habit serves"),
         recurrence: z.string().optional().describe("New recurrence (daily, weekly, monthly, etc.)"),
+        preferredDays: z.string().optional().describe("Preferred days within recurrence cycle, e.g. 'M,W,F', 'weekdays', 'Thursday'"),
         durationMinutes: z.number().optional().describe("New expected duration in minutes"),
         personIdsToAdd: z.array(z.string()).optional().describe("Person IDs to add as participants"),
         personIdsToRemove: z.array(z.string()).optional().describe("Person IDs to remove as participants"),
       },
     },
-    async ({ id, name, endId, recurrence, durationMinutes, personIdsToAdd, personIdsToRemove }) => {
+    async ({ id, name, endId, recurrence, preferredDays, durationMinutes, personIdsToAdd, personIdsToRemove }) => {
       const existing = await getHabitById(id);
       if (!existing) {
         return errorResponse(`Habit with ID ${id} not found.`);
       }
       const changes: string[] = [];
-      const fieldUpdates: { name?: string; endId?: string; recurrence?: string; durationMinutes?: number } = {};
+      const fieldUpdates: { name?: string; endId?: string; recurrence?: string; preferredDays?: string; durationMinutes?: number } = {};
       if (name != null) fieldUpdates.name = name;
       if (endId != null) fieldUpdates.endId = endId;
       if (recurrence != null) fieldUpdates.recurrence = recurrence;
+      if (preferredDays != null) fieldUpdates.preferredDays = preferredDays;
       if (durationMinutes != null) fieldUpdates.durationMinutes = durationMinutes;
       if (Object.keys(fieldUpdates).length > 0) {
         await updateHabit(id, fieldUpdates);
         if (name) changes.push(`renamed`);
         if (endId) changes.push(`changedEnd`);
         if (recurrence) changes.push(`recurrence`);
+        if (preferredDays != null) changes.push(`preferredDays`);
         if (durationMinutes != null) changes.push(`duration`);
       }
       if (personIdsToAdd?.length) {
@@ -1306,6 +1317,7 @@ export function registerTools(server: McpServer): void {
           end: end ? { id: end.id, name: end.name } : habit?.endId ? { id: habit.endId, name: null } : null,
           personIds: habit?.personIds ?? [],
           recurrence: habit?.recurrence ?? null,
+          preferredDays: habit?.preferredDays ?? null,
           durationMinutes: habit?.durationMinutes ?? null,
           changes,
         },
@@ -1546,7 +1558,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "List Activity",
       description:
-        "Unified activity log — merges habit actions and task time entries, sorted chronologically. Use instead of separate list_actions + list_task_time calls. Supports groupBy for area/end/portfolio breakdowns.",
+        "Unified activity log — merges habit actions and task time entries, sorted chronologically. Each record includes temporal metadata (dayOfWeek, dayOfMonth, weekOfMonth) computed in the user's timezone for reliable pattern inference. Use instead of separate list_actions + list_task_time calls. Supports groupBy for area/end/portfolio breakdowns.",
       inputSchema: {
         period: z.enum(["today", "yesterday", "this_week"]).optional().describe("Convenience period. Mutually exclusive with fromDate/toDate."),
         fromDate: z.string().optional().describe("Start date (YYYY-MM-DD). Ignored if period is set."),
@@ -1605,12 +1617,19 @@ export function registerTools(server: McpServer): void {
         };
       };
 
+      // Get timezone for temporal metadata
+      const { getUserTimezone: getActivityTz, computeTemporalMeta } = await import("../utils/timezone.js");
+      const activityTz = await getActivityTz();
+
       // Build unified activity list
       type Activity = {
         id: string;
         type: "action" | "task_time";
         name: string;
         completedAt: string;
+        dayOfWeek: string;
+        dayOfMonth: number;
+        weekOfMonth: string;
         actualDurationMinutes: number | null;
         notes: string | null;
         end: { id: string; name: string } | null;
@@ -1630,11 +1649,15 @@ export function registerTools(server: McpServer): void {
         if (endId && resolved.end?.id !== endId) continue;
         if (areaId && resolved.area?.id !== areaId) continue;
 
+        const temporal = computeTemporalMeta(a.completedAt, activityTz);
         activities.push({
           id: a.id,
           type: "action",
           name: habit?.name ?? a.habitId,
           completedAt: a.completedAt,
+          dayOfWeek: temporal.dayOfWeek,
+          dayOfMonth: temporal.dayOfMonth,
+          weekOfMonth: temporal.weekOfMonth,
           actualDurationMinutes: a.actualDurationMinutes ?? null,
           notes: a.notes ?? null,
           end: resolved.end,
@@ -1653,11 +1676,15 @@ export function registerTools(server: McpServer): void {
         if (endId && resolved.end?.id !== endId) continue;
         if (areaId && resolved.area?.id !== areaId) continue;
 
+        const ttTemporal = computeTemporalMeta(tt.completedAt, activityTz);
         activities.push({
           id: tt.id,
           type: "task_time",
           name: task?.name ?? tt.taskId,
           completedAt: tt.completedAt,
+          dayOfWeek: ttTemporal.dayOfWeek,
+          dayOfMonth: ttTemporal.dayOfMonth,
+          weekOfMonth: ttTemporal.weekOfMonth,
           actualDurationMinutes: tt.actualDurationMinutes ?? null,
           notes: tt.notes ?? null,
           end: resolved.end,
@@ -1744,12 +1771,13 @@ export function registerTools(server: McpServer): void {
         scheduledDate: z.string().optional().describe("Scheduled work date (YYYY-MM-DD)"),
         estimatedDurationMinutes: z.number().optional().describe("Estimated time to complete (minutes)"),
         recurrence: z.string().optional().describe("Natural language recurrence (e.g. 'weekly', 'monthly', 'every 6 weeks'). Makes this a recurring task."),
+        preferredDays: z.string().optional().describe("Preferred days for recurring tasks (e.g. 'M,W,F', 'Thursday'). Ignored for one-off tasks."),
         completedAt: z.string().optional().describe("For recurring tasks created retroactively: the last completion date. Sets last_completed_at and computes next_due_at from it."),
         nextDueAt: z.string().optional().describe("Override computed next due date (ISO). Recurrence logic resumes on next completion."),
         notes: z.string().optional(),
       },
     },
-    async ({ name, endId, areaId, withPersonIds, forPersonIds, dueDate, scheduledDate, estimatedDurationMinutes, recurrence, completedAt, nextDueAt, notes }) => {
+    async ({ name, endId, areaId, withPersonIds, forPersonIds, dueDate, scheduledDate, estimatedDurationMinutes, recurrence, preferredDays, completedAt, nextDueAt, notes }) => {
       let resolvedCompletedAt = completedAt;
       let resolvedNextDueAt = nextDueAt;
       if (completedAt) {
@@ -1772,6 +1800,7 @@ export function registerTools(server: McpServer): void {
         scheduledDate,
         estimatedDurationMinutes,
         recurrence,
+        preferredDays,
         completedAt: resolvedCompletedAt,
         nextDueAt: resolvedNextDueAt,
         notes,
@@ -1792,6 +1821,7 @@ export function registerTools(server: McpServer): void {
           scheduledDate: task.scheduledDate ?? null,
           estimatedDurationMinutes: task.estimatedDurationMinutes ?? null,
           recurrence: task.recurrence ?? null,
+          preferredDays: task.preferredDays ?? null,
           nextDueAt: task.nextDueAt ?? null,
           lastCompletedAt: task.lastCompletedAt ?? null,
           completedAt: task.completedAt ?? null,
@@ -1845,6 +1875,7 @@ export function registerTools(server: McpServer): void {
           scheduledDate: t.scheduledDate ?? null,
           estimatedDurationMinutes: t.estimatedDurationMinutes ?? null,
           recurrence: t.recurrence ?? null,
+          preferredDays: t.preferredDays ?? null,
           nextDueAt: t.nextDueAt ?? null,
           lastCompletedAt: t.lastCompletedAt ?? null,
           withPersons,
@@ -1892,6 +1923,7 @@ export function registerTools(server: McpServer): void {
           scheduledDate: task.scheduledDate ?? null,
           estimatedDurationMinutes: task.estimatedDurationMinutes ?? null,
           recurrence: task.recurrence ?? null,
+          preferredDays: task.preferredDays ?? null,
           nextDueAt: task.nextDueAt ?? null,
           lastCompletedAt: task.lastCompletedAt ?? null,
           withPersons,
@@ -1921,11 +1953,12 @@ export function registerTools(server: McpServer): void {
         estimatedDurationMinutes: z.number().optional().describe("Estimated time to complete (minutes)"),
         completedAt: z.string().nullable().optional().describe("When completed: 'today' | 'yesterday' | YYYY-MM-DD | ISO. Set to mark complete, null to reopen. Recurring tasks auto-reopen."),
         recurrence: z.string().optional().describe("Natural language recurrence (e.g. 'weekly', 'every 6 weeks'). Set to make/change recurrence, empty string to remove."),
+        preferredDays: z.string().optional().describe("Preferred days for recurring tasks (e.g. 'M,W,F', 'Thursday'). Ignored for one-off tasks."),
         nextDueAt: z.string().optional().describe("Override next due date (ISO or YYYY-MM-DD). One-cycle override; recurrence logic resumes on next completion."),
         notes: z.string().optional(),
       },
     },
-    async ({ id, name, endId, areaId, withPersonIds, forPersonIds, dueDate, scheduledDate, estimatedDurationMinutes, completedAt, recurrence, nextDueAt, notes }) => {
+    async ({ id, name, endId, areaId, withPersonIds, forPersonIds, dueDate, scheduledDate, estimatedDurationMinutes, completedAt, recurrence, preferredDays, nextDueAt, notes }) => {
       const updates: Record<string, unknown> = {};
       if (name != null) updates.name = name;
       if (endId !== undefined) updates.endId = endId;
@@ -1937,6 +1970,7 @@ export function registerTools(server: McpServer): void {
       if (estimatedDurationMinutes !== undefined) updates.estimatedDurationMinutes = estimatedDurationMinutes;
       if (notes !== undefined) updates.notes = notes;
       if (recurrence !== undefined) updates.recurrence = recurrence || null;
+      if (preferredDays !== undefined) updates.preferredDays = preferredDays;
 
       // Resolve completedAt and nextDueAt through timezone helpers
       if (completedAt !== undefined) {

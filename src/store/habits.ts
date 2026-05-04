@@ -42,6 +42,7 @@ async function toEntity(row: HabitWithJoins): Promise<HabitEntity> {
     teamId: row.team_id ?? undefined,
     personIds: row.habit_persons?.map((hp) => hp.person_id) ?? [],
     recurrence: row.recurrence ?? undefined,
+    preferredDays: row.preferred_days ?? undefined,
     durationMinutes: row.duration_minutes ?? undefined,
     createdAt: formatInstantForUser(row.created_at, tz),
   };
@@ -69,6 +70,7 @@ export async function createHabit(data: Habit): Promise<HabitEntity> {
       area_id: data.areaId,
       team_id: data.teamId,
       recurrence: data.recurrence,
+      preferred_days: data.preferredDays,
       duration_minutes: data.durationMinutes,
     })
     .select()
@@ -259,7 +261,7 @@ export async function deleteHabit(id: string): Promise<HabitEntity | null> {
  */
 export async function updateHabit(
   id: string,
-  updates: { name?: string; endId?: string; recurrence?: string; durationMinutes?: number }
+  updates: { name?: string; endId?: string; recurrence?: string; preferredDays?: string; durationMinutes?: number }
 ): Promise<HabitEntity | null> {
   const supabase = getSupabase();
   const userId = getUserId();
@@ -271,6 +273,7 @@ export async function updateHabit(
   if (updates.name !== undefined) updateData.name = updates.name;
   if (updates.endId !== undefined) updateData.end_id = updates.endId;
   if (updates.recurrence !== undefined) updateData.recurrence = updates.recurrence;
+  if (updates.preferredDays !== undefined) updateData.preferred_days = updates.preferredDays;
   if (updates.durationMinutes !== undefined) updateData.duration_minutes = updates.durationMinutes;
 
   if (Object.keys(updateData).length > 0) {

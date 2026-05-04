@@ -10,6 +10,7 @@ export const HabitSchema = z.object({
   teamId: z.string().optional(),
   personIds: z.array(z.string()).optional().describe("People who participate in the habit"),
   recurrence: z.string().optional().describe("e.g. daily, weekly, 3x/week"),
+  preferredDays: z.string().optional().describe("Natural language preferred days within recurrence cycle, e.g. 'M,W,F', 'weekdays', 'last Friday of the month'"),
   durationMinutes: z.number().int().positive().optional().describe("Estimated time in minutes to perform the habit"),
 });
 

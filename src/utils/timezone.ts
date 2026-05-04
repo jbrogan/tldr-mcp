@@ -218,3 +218,46 @@ export function periodToDateRange(
   const sunday = offsetDayInTz(monday, 6, tz);
   return { fromDate: monday, toDate: sunday };
 }
+
+// ── Temporal metadata ───────────────────────────────────────────────
+
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
+export type DayOfWeek = (typeof DAY_NAMES)[number];
+
+export interface TemporalMeta {
+  dayOfWeek: DayOfWeek;
+  dayOfMonth: number;
+  weekOfMonth: "1st" | "2nd" | "3rd" | "4th" | "last";
+}
+
+/**
+ * Compute temporal metadata for a timestamp in the user's timezone.
+ * Returns dayOfWeek, dayOfMonth, and weekOfMonth for LLM consumption.
+ */
+export function computeTemporalMeta(utcIso: string, tz: string): TemporalMeta {
+  const instant = new Date(utcIso);
+  const offsetMin = tzOffsetMinutes(instant.getTime(), tz);
+  const localMs = instant.getTime() + offsetMin * 60_000;
+  const local = new Date(localMs);
+
+  const jsDay = local.getUTCDay(); // 0=Sun..6=Sat (using UTC methods on shifted date)
+  const dayOfWeek = DAY_NAMES[jsDay];
+  const dayOfMonth = local.getUTCDate();
+  const month = local.getUTCMonth();
+  const year = local.getUTCFullYear();
+
+  // Count how many times this day-of-week has occurred up to this date
+  let count = 0;
+  for (let d = 1; d <= dayOfMonth; d++) {
+    if (new Date(Date.UTC(year, month, d)).getUTCDay() === jsDay) count++;
+  }
+
+  // Check if there's another occurrence of this day-of-week later in the month
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const isLast = dayOfMonth + 7 > daysInMonth;
+
+  const ordinals = ["1st", "2nd", "3rd", "4th"] as const;
+  const weekOfMonth = isLast ? ("last" as const) : ordinals[count - 1];
+
+  return { dayOfWeek, dayOfMonth, weekOfMonth };
+}
