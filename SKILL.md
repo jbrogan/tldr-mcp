@@ -115,6 +115,10 @@ Use temporal metadata for:
 
 ## Tool Selection Quick Reference
 
+### Resolving what to log
+
+When a user asks to log an activity and you're unsure whether it's a habit or task, search both before logging. Call `list_habits` and `list_tasks` (or use `list_ends` which includes both inline) to find a match by name. Don't guess — a wrong match means logging against the wrong entity.
+
 | User says... | Tool | Key params |
 |---|---|---|
 | "I went to the gym" | `create_action` | habitId, completedAt: "today" |
