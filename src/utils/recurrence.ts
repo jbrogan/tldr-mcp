@@ -214,19 +214,21 @@ async function getExpectedIntervalDaysWithLLM(
     const client = new Anthropic({ apiKey });
     const response = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 10,
+      max_tokens: 50,
       messages: [
         {
           role: "user",
-          content: `Given the recurrence "${recurrence}", what is the typical interval in days between occurrences? Use these stable thresholds: monthly=30, quarterly=90, yearly=365. Examples: "twice a month" -> 15, "every other tuesday" -> 14, "second friday of the month" -> 30. Return ONLY a positive integer, or "null" if it cannot be determined.`,
+          content: `Given the recurrence "${recurrence}", what is the typical interval in days between occurrences? Use these stable thresholds: monthly=30, quarterly=90, yearly=365. Examples: "twice a month" -> 15, "every other tuesday" -> 14, "second friday of the month" -> 30, "1st and 3rd Thursday" -> 15. Return ONLY a positive integer, or "null" if it cannot be determined.`,
         },
       ],
     });
 
     const text =
       response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
-    if (text === "null") return null;
-    const n = parseInt(text, 10);
+    if (/\bnull\b/i.test(text)) return null;
+    // Tolerate leading prose — extract the first positive integer in the response.
+    const match = text.match(/\b(\d+)\b/);
+    const n = match ? parseInt(match[1], 10) : NaN;
     if (isNaN(n) || n <= 0) {
       console.error(`[recurrence] LLM returned unparseable interval: "${text}"`);
       return null;
