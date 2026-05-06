@@ -121,6 +121,16 @@ export function localDateToUtcAnchor(date: string, tz: string): string {
 }
 
 /**
+ * Calendar days between two YYYY-MM-DD strings (assumed to be in the same timezone).
+ * Positive when `to` is later than `from`.
+ */
+export function daysBetween(fromDate: string, toDate: string): number {
+  const from = new Date(`${fromDate}T00:00:00Z`).getTime();
+  const to = new Date(`${toDate}T00:00:00Z`).getTime();
+  return Math.round((to - from) / 86_400_000);
+}
+
+/**
  * Offset a user-local YYYY-MM-DD by N days, staying in that timezone's calendar.
  */
 export function offsetDayInTz(date: string, days: number, tz: string): string {

@@ -32,4 +32,5 @@ export interface TaskEntity extends Task {
   id: string;
   lastCompletedAt?: string;
   createdAt: string;
+  daysOverdue?: number | null;
 }

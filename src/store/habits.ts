@@ -8,7 +8,8 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
-import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
+import { getUserTimezone, formatInstantForUser, todayInTz, daysBetween } from "../utils/timezone.js";
+import { getExpectedIntervalDays } from "../utils/recurrence.js";
 import type { Habit } from "../schemas/habit.js";
 import type { HabitEntity } from "../schemas/habit.js";
 import type { Habit as DbHabit } from "../supabase/types.js";
@@ -34,6 +35,12 @@ export interface HabitWithOwner extends HabitEntity {
  */
 async function toEntity(row: HabitWithJoins): Promise<HabitEntity> {
   const tz = await getUserTimezone();
+  const lastActionAt = row.last_action_at
+    ? formatInstantForUser(row.last_action_at, tz)
+    : null;
+  const daysSinceLastAction = lastActionAt
+    ? daysBetween(lastActionAt.slice(0, 10), todayInTz(tz))
+    : null;
   return {
     id: row.id,
     name: row.name,
@@ -45,6 +52,9 @@ async function toEntity(row: HabitWithJoins): Promise<HabitEntity> {
     preferredDays: row.preferred_days ?? undefined,
     durationMinutes: row.duration_minutes ?? undefined,
     createdAt: formatInstantForUser(row.created_at, tz),
+    lastActionAt,
+    daysSinceLastAction,
+    expectedIntervalDays: row.expected_interval_days ?? null,
   };
 }
 
@@ -54,11 +64,39 @@ const HABIT_SELECT = `
 `;
 
 /**
+ * Fetch action counts in the last 30 days, grouped by habit_id.
+ * Returns a map of habit_id -> count for the given habits.
+ */
+async function fetchActionCountsLast30Days(
+  habitIds: string[],
+): Promise<Record<string, number>> {
+  if (habitIds.length === 0) return {};
+  const supabase = getSupabase();
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const { data, error } = await supabase
+    .from("actions")
+    .select("habit_id")
+    .in("habit_id", habitIds)
+    .gte("completed_at", since);
+  if (error) {
+    console.error(`[habits] Failed to fetch 30-day action counts: ${error.message}`);
+    return {};
+  }
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    counts[row.habit_id] = (counts[row.habit_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
  * Create a new habit.
  */
 export async function createHabit(data: Habit): Promise<HabitEntity> {
   const supabase = getSupabase();
   const userId = getUserId();
+
+  const expectedIntervalDays = await getExpectedIntervalDays(data.recurrence);
 
   // Insert habit with end_id directly
   const { data: created, error } = await supabase
@@ -72,6 +110,7 @@ export async function createHabit(data: Habit): Promise<HabitEntity> {
       recurrence: data.recurrence,
       preferred_days: data.preferredDays,
       duration_minutes: data.durationMinutes,
+      expected_interval_days: expectedIntervalDays,
     })
     .select()
     .single();
@@ -122,7 +161,11 @@ export async function getHabitById(id: string): Promise<HabitEntity | undefined>
     throw new Error(`Failed to get habit: ${error.message}`);
   }
 
-  return data ? await toEntity(data as HabitWithJoins) : undefined;
+  if (!data) return undefined;
+  const habit = await toEntity(data as HabitWithJoins);
+  const counts = await fetchActionCountsLast30Days([habit.id]);
+  habit.actionCountLast30Days = counts[habit.id] ?? 0;
+  return habit;
 }
 
 /**
@@ -167,6 +210,11 @@ export async function listHabits(options?: {
     habits = habits.filter((h) => h.personIds?.includes(options.personId!));
   }
 
+  const counts = await fetchActionCountsLast30Days(habits.map((h) => h.id));
+  for (const h of habits) {
+    h.actionCountLast30Days = counts[h.id] ?? 0;
+  }
+
   return habits;
 }
 
@@ -205,7 +253,7 @@ export async function listHabitsWithShared(options?: {
     throw new Error(`Failed to list habits: ${error.message}`);
   }
 
-  return Promise.all((data ?? []).map(async (row) => {
+  const habits = await Promise.all((data ?? []).map(async (row) => {
     const habit = row as HabitWithJoins & { profiles?: { display_name: string } };
     const isOwned = habit.user_id === userId;
 
@@ -216,6 +264,13 @@ export async function listHabitsWithShared(options?: {
       ownerDisplayName: isOwned ? undefined : habit.profiles?.display_name,
     };
   }));
+
+  const counts = await fetchActionCountsLast30Days(habits.map((h) => h.id));
+  for (const h of habits) {
+    h.actionCountLast30Days = counts[h.id] ?? 0;
+  }
+
+  return habits;
 }
 
 /**
@@ -272,7 +327,10 @@ export async function updateHabit(
   const updateData: Record<string, unknown> = {};
   if (updates.name !== undefined) updateData.name = updates.name;
   if (updates.endId !== undefined) updateData.end_id = updates.endId;
-  if (updates.recurrence !== undefined) updateData.recurrence = updates.recurrence;
+  if (updates.recurrence !== undefined) {
+    updateData.recurrence = updates.recurrence;
+    updateData.expected_interval_days = await getExpectedIntervalDays(updates.recurrence);
+  }
   if (updates.preferredDays !== undefined) updateData.preferred_days = updates.preferredDays;
   if (updates.durationMinutes !== undefined) updateData.duration_minutes = updates.durationMinutes;
 

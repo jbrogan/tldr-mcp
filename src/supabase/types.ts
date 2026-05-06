@@ -442,7 +442,10 @@ export type HabitRow = {
   area_id: string | null;
   team_id: string | null;
   recurrence: string | null;
+  preferred_days: string | null;
   duration_minutes: number | null;
+  last_action_at: string | null;
+  expected_interval_days: number | null;
   created_at: string;
 };
 
@@ -475,6 +478,7 @@ export type TaskRow = {
   estimated_duration_minutes: number | null;
   completed_at: string | null;
   recurrence: string | null;
+  preferred_days: string | null;
   last_completed_at: string | null;
   next_due_at: string | null;
   notes: string | null;
@@ -631,7 +635,10 @@ export type HabitInsert = {
   area_id?: string | null;
   team_id?: string | null;
   recurrence?: string | null;
+  preferred_days?: string | null;
   duration_minutes?: number | null;
+  last_action_at?: string | null;
+  expected_interval_days?: number | null;
   created_at?: string;
 };
 
@@ -679,6 +686,7 @@ export type TaskInsert = {
   estimated_duration_minutes?: number | null;
   completed_at?: string | null;
   recurrence?: string | null;
+  preferred_days?: string | null;
   last_completed_at?: string | null;
   next_due_at?: string | null;
   notes?: string | null;

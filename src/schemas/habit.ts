@@ -19,4 +19,8 @@ export type Habit = z.infer<typeof HabitSchema>;
 export interface HabitEntity extends Habit {
   id: string;
   createdAt: string;
+  lastActionAt?: string | null;
+  daysSinceLastAction?: number | null;
+  expectedIntervalDays?: number | null;
+  actionCountLast30Days?: number;
 }

@@ -74,6 +74,7 @@ import {
   updateTask,
 } from "../store/tasks.js";
 import { listUsers } from "../store/users.js";
+import { getUserTimezone, todayInTz, daysBetween, formatInstantForUser } from "../utils/timezone.js";
 
 /**
  * Wrap a data object as an MCP JSON tool response.
@@ -771,17 +772,29 @@ export function registerTools(server: McpServer): void {
         listHabits(),
         supabase
           .from("tasks")
-          .select("id, name, end_id, due_date, scheduled_date, estimated_duration_minutes, recurrence, preferred_days")
+          .select("id, name, end_id, due_date, scheduled_date, estimated_duration_minutes, recurrence, preferred_days, next_due_at")
           .eq("user_id", userId)
           .is("completed_at", null)
           .not("end_id", "is", null),
       ]);
-      const openTasks = (openTaskRows ?? []).map((t: any) => ({
-        id: t.id, name: t.name, endId: t.end_id,
-        dueDate: t.due_date, scheduledDate: t.scheduled_date,
-        estimatedDurationMinutes: t.estimated_duration_minutes,
-        recurrence: t.recurrence, preferredDays: t.preferred_days,
-      }));
+      const tz = await getUserTimezone();
+      const today = todayInTz(tz);
+      const openTasks = (openTaskRows ?? []).map((t: any) => {
+        let daysOverdue: number | null = null;
+        if (t.next_due_at) {
+          daysOverdue = daysBetween(formatInstantForUser(t.next_due_at, tz).slice(0, 10), today);
+        } else if (t.due_date) {
+          daysOverdue = daysBetween(t.due_date, today);
+        }
+        return {
+          id: t.id, name: t.name, endId: t.end_id,
+          dueDate: t.due_date, scheduledDate: t.scheduled_date,
+          estimatedDurationMinutes: t.estimated_duration_minutes,
+          recurrence: t.recurrence, preferredDays: t.preferred_days,
+          nextDueAt: t.next_due_at ? formatInstantForUser(t.next_due_at, tz) : null,
+          daysOverdue,
+        };
+      });
       const allEndsMap = new Map(ends.map((e) => [e.id, e]));
 
       // Fetch all end_supports rows in bulk (2 queries)
@@ -836,6 +849,10 @@ export function registerTools(server: McpServer): void {
               recurrence: h.recurrence ?? null,
               preferredDays: h.preferredDays ?? null,
               durationMinutes: h.durationMinutes ?? null,
+              lastActionAt: h.lastActionAt ?? null,
+              daysSinceLastAction: h.daysSinceLastAction ?? null,
+              expectedIntervalDays: h.expectedIntervalDays ?? null,
+              actionCountLast30Days: h.actionCountLast30Days ?? 0,
             })),
             openTasks: tasks.map((t: any) => ({
               id: t.id,
@@ -845,6 +862,8 @@ export function registerTools(server: McpServer): void {
               estimatedDurationMinutes: t.estimatedDurationMinutes ?? null,
               recurrence: t.recurrence ?? null,
               preferredDays: t.preferredDays ?? null,
+              nextDueAt: t.nextDueAt ?? null,
+              daysOverdue: t.daysOverdue ?? null,
             })),
             supportingEnds: childrenMap.get(e.id) ?? [],
             supports: parentsMap.get(e.id) ?? [],
@@ -911,6 +930,10 @@ export function registerTools(server: McpServer): void {
           participants,
           isShared: h.isShared ?? false,
           sharedBy,
+          lastActionAt: h.lastActionAt ?? null,
+          daysSinceLastAction: h.daysSinceLastAction ?? null,
+          expectedIntervalDays: h.expectedIntervalDays ?? null,
+          actionCountLast30Days: h.actionCountLast30Days ?? 0,
         };
       }
 
@@ -974,6 +997,8 @@ export function registerTools(server: McpServer): void {
             id: t.id,
             name: t.name,
             dueDate: t.dueDate ?? null,
+            nextDueAt: t.nextDueAt ?? null,
+            daysOverdue: t.daysOverdue ?? null,
             ownerDisplayName: isSharedEnd ? (t.ownerDisplayName ?? null) : null,
           })),
           sharing,
@@ -1204,6 +1229,10 @@ export function registerTools(server: McpServer): void {
           durationMinutes: h.durationMinutes ?? null,
           area: area ? { id: area.id, name: area.name } : h.areaId ? { id: h.areaId, name: null } : null,
           team: team ? { id: team.id, name: team.name } : h.teamId ? { id: h.teamId, name: null } : null,
+          lastActionAt: h.lastActionAt ?? null,
+          daysSinceLastAction: h.daysSinceLastAction ?? null,
+          expectedIntervalDays: h.expectedIntervalDays ?? null,
+          actionCountLast30Days: h.actionCountLast30Days ?? 0,
         };
       }));
       return jsonResponse({ habits: habitObjs, count: habits.length });
@@ -1251,6 +1280,10 @@ export function registerTools(server: McpServer): void {
           preferredDays: habit.preferredDays ?? null,
           durationMinutes: habit.durationMinutes ?? null,
           createdAt: habit.createdAt,
+          lastActionAt: habit.lastActionAt ?? null,
+          daysSinceLastAction: habit.daysSinceLastAction ?? null,
+          expectedIntervalDays: habit.expectedIntervalDays ?? null,
+          actionCountLast30Days: habit.actionCountLast30Days ?? 0,
           recentActions: recentActions.map((a) => ({
             id: a.id,
             completedAt: a.completedAt,
@@ -1878,6 +1911,7 @@ export function registerTools(server: McpServer): void {
           preferredDays: t.preferredDays ?? null,
           nextDueAt: t.nextDueAt ?? null,
           lastCompletedAt: t.lastCompletedAt ?? null,
+          daysOverdue: t.daysOverdue ?? null,
           withPersons,
           forPersons,
         };
@@ -1926,6 +1960,7 @@ export function registerTools(server: McpServer): void {
           preferredDays: task.preferredDays ?? null,
           nextDueAt: task.nextDueAt ?? null,
           lastCompletedAt: task.lastCompletedAt ?? null,
+          daysOverdue: task.daysOverdue ?? null,
           withPersons,
           forPersons,
           notes: task.notes ?? null,

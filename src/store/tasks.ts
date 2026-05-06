@@ -6,7 +6,7 @@
  */
 
 import { getSupabase, getUserId } from "./base.js";
-import { getUserTimezone, formatInstantForUser } from "../utils/timezone.js";
+import { getUserTimezone, formatInstantForUser, todayInTz, daysBetween } from "../utils/timezone.js";
 import { computeNextDueAt } from "../utils/recurrence.js";
 import type { Task } from "../schemas/task.js";
 import type { TaskEntity } from "../schemas/task.js";
@@ -35,6 +35,20 @@ async function toEntity(row: TaskWithPersons): Promise<TaskEntity> {
     }
   }
 
+  // daysOverdue: positive = overdue, negative = days until due, null = no due date or completed.
+  // For recurring tasks: based on next_due_at (completed_at is null when reopened).
+  // For one-off tasks: based on due_date when not completed.
+  let daysOverdue: number | null = null;
+  if (!row.completed_at) {
+    const today = todayInTz(tz);
+    if (row.next_due_at) {
+      const dueLocal = formatInstantForUser(row.next_due_at, tz).slice(0, 10);
+      daysOverdue = daysBetween(dueLocal, today);
+    } else if (row.due_date) {
+      daysOverdue = daysBetween(row.due_date, today);
+    }
+  }
+
   return {
     id: row.id,
     name: row.name,
@@ -52,6 +66,7 @@ async function toEntity(row: TaskWithPersons): Promise<TaskEntity> {
     withPersonIds: withPersonIds.length > 0 ? withPersonIds : undefined,
     forPersonIds: forPersonIds.length > 0 ? forPersonIds : undefined,
     createdAt: formatInstantForUser(row.created_at, tz),
+    daysOverdue,
   };
 }
 
