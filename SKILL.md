@@ -64,6 +64,12 @@ Both habits and recurring tasks support an optional `preferredDays` field — a 
 
 **Rule:** Default to `list_activity` for general "what did I do" queries. Use `list_actions` or `list_task_time` only when filtering by a specific habit or task.
 
+### Summarizing list_activity results
+
+When presenting `list_activity` results, **include every item returned**. Don't omit items based on perceived significance, duration, type (action vs. task_time), or category — the user already chose the period and grouping when they asked. Filtering at the presentation layer hides data and erodes trust in the totals.
+
+The only acceptable reason to drop an item is if the user explicitly asks for it ("just gym actions", "skip anything under 15 minutes"). Same rule applies to `list_actions`, `list_task_time`, and `list_tasks` summaries.
+
 ### create_action vs log_task_time
 
 | | create_action | log_task_time |
