@@ -104,6 +104,7 @@ Recompute `nextDueAt` from the new recurrence string and `lastCompletedAt` (or `
 
 ## Date and Timezone Rules
 
+- **Always call `get_current_date` before scheduling, day-of-week, or relative-date reasoning.** The session-injected date may be stale in long sessions, and computing dates from training data is unreliable. The tool returns today, yesterday, tomorrow, day-of-week, week-of-month, and current time — all in the user's timezone. Use these directly; don't recompute.
 - `completedAt` fields accept: `"today"` | `"yesterday"` | `"tomorrow"` | `YYYY-MM-DD` | full ISO timestamp. The server resolves relative terms and bare dates in the user's timezone.
 - **Default completedAt is "today".** When logging an action or task time entry and the user does not explicitly specify a date, always use `"today"` — never infer a date from conversational context. Only use a specific `YYYY-MM-DD` when the user explicitly states a past date (e.g., "log this for yesterday", "I did this on Tuesday"). Long conversations may span multiple dates — the date being discussed is not necessarily the date the activity occurred.
 - `dueDate`, `scheduledDate` are bare `YYYY-MM-DD` — user-local dates, no time component.

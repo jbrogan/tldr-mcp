@@ -74,7 +74,7 @@ import {
   updateTask,
 } from "../store/tasks.js";
 import { listUsers } from "../store/users.js";
-import { getUserTimezone, todayInTz, daysBetween, formatInstantForUser } from "../utils/timezone.js";
+import { getUserTimezone, todayInTz, daysBetween, formatInstantForUser, computeTemporalMeta, offsetDayInTz } from "../utils/timezone.js";
 
 /**
  * Wrap a data object as an MCP JSON tool response.
@@ -2323,6 +2323,32 @@ export function registerTools(server: McpServer): void {
       const { updateUserTimezone } = await import("../store/users.js");
       await updateUserTimezone(timezone);
       return jsonResponse({ timezone });
+    }
+  );
+
+  server.registerTool(
+    "get_current_date",
+    {
+      title: "Get Current Date",
+      description:
+        "Returns today's date in the user's timezone, plus day-of-week, week-of-month, and the adjacent dates (yesterday, tomorrow). Call this whenever you need to reason about scheduling, day-of-week, or relative dates — never compute today's date from training data or session-injected timestamps, which may be stale in long sessions.",
+      inputSchema: {},
+    },
+    async () => {
+      const tz = await getUserTimezone();
+      const nowUtc = new Date().toISOString();
+      const today = todayInTz(tz);
+      const meta = computeTemporalMeta(nowUtc, tz);
+      return jsonResponse({
+        today,
+        yesterday: offsetDayInTz(today, -1, tz),
+        tomorrow: offsetDayInTz(today, 1, tz),
+        dayOfWeek: meta.dayOfWeek,
+        dayOfMonth: meta.dayOfMonth,
+        weekOfMonth: meta.weekOfMonth,
+        currentTime: formatInstantForUser(nowUtc, tz),
+        timezone: tz,
+      });
     }
   );
 
