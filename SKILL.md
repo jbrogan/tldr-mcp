@@ -113,6 +113,37 @@ Use temporal metadata for:
 - Day-of-week analysis in reflections ("your most active days were Monday and Thursday")
 - Monthly pattern detection ("you consistently reconcile on the last Friday of the month")
 
+## Cadence Signals
+
+Habits and tasks include server-computed signals for cadence-gap reasoning. **Use these fields directly — don't compute days-since or interval from raw timestamps.**
+
+### Habit fields (from `list_habits`, `get_habit`, and inline in `list_ends` / `get_end`)
+
+- `lastActionAt` — ISO timestamp of the most recent action, or `null` if never logged.
+- `daysSinceLastAction` — calendar days since `lastActionAt` in the user's timezone. `null` if never logged.
+- `expectedIntervalDays` — typical interval implied by `recurrence` (e.g., `daily` → 1, `weekly` → 7, `3x week` → 2, `monthly` → 30). `null` for habits with no recurrence or with an unparseable one.
+- `actionCountLast30Days` — number of actions logged in the last 30 days.
+
+### Task fields (from `list_tasks`, `get_task`, and inline in `list_ends` / `get_end`)
+
+- `daysOverdue` — positive when past due, negative when not yet due, `null` when completed or no due date. Based on `nextDueAt` for recurring, `dueDate` for one-off.
+
+### Interpretation
+
+A habit is **behind** when `daysSinceLastAction > expectedIntervalDays × 1.5`. Adjust based on context — a daily streak habit (meditation) is more sensitive to gaps than a forgiving one (weekly reflection).
+
+For weekly reflection, sort habits by the largest `daysSinceLastAction / expectedIntervalDays` ratio first. `actionCountLast30Days` is a frequency view robust to single missed weeks — use it to distinguish "off the wagon" from "had one busy week."
+
+For tasks, `daysOverdue > 0` is overdue and the magnitude tells you how late. Negative values are upcoming and useful for "what's coming up this week."
+
+### Reflection principles
+
+- Lead with what's true, not what's nice. Don't bury a 3-week gap under encouragement.
+- Surface few things, well. Three or four concrete observations beat fifteen shallow ones.
+- Frame gaps in terms of the user's stated commitment when possible — "you said this matters" lands harder than "you missed your gym sessions."
+- Wins matter. Cadence signals make it easy to over-index on what's broken — surface streaks alongside gaps.
+- Don't moralize. Surface the data; the user decides.
+
 ## ID Resolution — Never Guess
 
 **Always look up IDs before creating or updating records.** Never fabricate or guess a UUID. A foreign key constraint error means an ID was wrong — never retry with another guess; always look up the correct ID first.
@@ -160,9 +191,9 @@ When a user asks to log an activity and you're unsure whether it's a habit or ta
 
 When advising on what to focus on, surface gaps in this order:
 
-1. **Habits** — identity-level. "You haven't logged a gym workout in 5 days."
-2. **Recurring tasks** — practical. "Tire pressure was last checked 7 weeks ago."
-3. **One-time tasks** — by due date. "Photos and listing is due tomorrow."
+1. **Habits behind** — identity-level. Filter where `daysSinceLastAction > expectedIntervalDays × 1.5`. "You haven't logged a gym workout in 12 days; expected interval is 2-3."
+2. **Tasks overdue** — practical. Filter where `daysOverdue > 0`, sort descending. "Tire pressure check was due 7 days ago."
+3. **Upcoming tasks** — by `daysOverdue` ascending (negative values = days until due). "Photos and listing is due tomorrow."
 
 ## Tool Response Format
 
