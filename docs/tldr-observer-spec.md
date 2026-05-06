@@ -57,6 +57,29 @@ end_observers:
 
 Option A is simpler and avoids a new table. Option B is cleaner if observer behavior diverges significantly from sharing. **Recommendation: start with Option A.**
 
+### 3.3 Person ↔ User identity
+
+The motivating example — "I add my son as observer" — surfaces a distinction the existing schema already handles:
+
+- `persons.user_id` is the *owner* of the person record (the address-book holder). NOT NULL.
+- `persons.linked_user_id` is the *tldr account this person represents*, if any. NULLABLE.
+
+`end_shares.shared_with_user_id` requires a `profiles.id` (NOT NULL). To create an observer share for "my son," the son must have a tldr account *and* his profile id must match `persons.linked_user_id` on the owner's person record.
+
+**V1 API shape:** `share_end` should accept `personId` (not `sharedWithUserId`) and resolve to `persons.linked_user_id` server-side. If the person is not linked, the call fails with a clear error ("This person doesn't have a tldr account yet — invite them first"). This:
+
+- Matches the user's mental model ("I'm sharing with my son," not "I'm sharing with user UUID")
+- Keeps storage on `end_shares` (no new table) for V1
+- Leaves a clean upgrade path for non-user observers in Phase 2 (see §5.2)
+
+**Phase 2 fork:** When non-user observers are needed, two paths:
+- **A1.** Add nullable `shared_with_user_id` + `person_id` columns to `end_shares`. Mixed semantics, but no migration of existing rows.
+- **B.** Migrate observer relationships to a new `end_observers (end_id, person_id, user_id NULLABLE)` table. Cleaner long-term, more invasive.
+
+Decide at Phase 2 time, not now.
+
+**Implementation guardrail:** Wrap observer-relationship reads in one abstraction (e.g., `getObservedEndsForUser`, `getObserversOfEnd`) instead of scattering `end_shares.role = 'observer'` queries through the reflection engine. Whichever Phase 2 path is chosen, only that abstraction has to change.
+
 ---
 
 ## 4. Reflection Integration
@@ -75,7 +98,7 @@ The primary value of the observer role is enabling accountability-aware reflecti
 
 ### 5.1 Minimum Viable Observer Experience
 
-The observer must be a tldr user (has an account). They see observed ends in their dashboard/LLM interface:
+The observer must be a tldr user (has an account) *and* be linked from the owner's `persons` record via `linked_user_id` (see §3.3). They see observed ends in their dashboard/LLM interface:
 
 - A "Shared with me" or "Observing" section showing ends where they are an observer
 - For each observed end: name, type, state, recent activity, habit cadence status
@@ -109,9 +132,10 @@ Notification preferences should be configurable:
 
 Minimal additions:
 
-- **share_end** — add optional `role` parameter (default: 'collaborator'). Value 'observer' creates an observer relationship.
+- **share_end** — add optional `role` parameter (default: 'collaborator'). Value 'observer' creates an observer relationship. Prefer accepting `personId` (resolved server-side via `persons.linked_user_id`) over a raw `sharedWithUserId` — see §3.3.
 - **list_shared_ends** — include role in response so the LLM can distinguish observers from collaborators
 - **list_my_shares** — include role so the owner sees who is observing vs. collaborating
+- **list_ends / get_end** — include `role` on each entry in the inline `shares` array. Reflection logic that walks the owner's ends needs to know which are observed without a second lookup; without this the role data lives only in `list_my_shares` and accountability framing requires an extra round trip per end.
 
 No new tools required if using Option A (role on end_shares).
 
@@ -134,7 +158,7 @@ The observer role is most valuable when the dashboard exists:
 - **Bidirectional accountability:** Can two users observe each other's ends? (e.g., training partners). Likely yes — each creates an observer share on their own end pointing to the other user.
 - **Observer limits:** Is there a max number of observers per end? Probably not needed initially.
 - **Privacy:** Should the owner be able to hide specific actions/notes from observers while keeping the activity visible? (e.g., show "logged a run" but not the notes). Worth considering but not for V1.
-- **Non-user observers:** Should the system support observers who don't have tldr accounts? The email digest approach (Section 5.2) handles this without requiring accounts, but it's a Phase 2+ concern.
+- **Non-user observers:** V1 requires the observer to be a linked tldr user (see §3.3). Phase 2 introduces non-user observers via the email digest path (§5.2); the storage decision (extend `end_shares` vs. new `end_observers` table) is deferred to that point.
 - **Patent implications:** The observer role as an accountability mechanism integrated with AI-mediated reflection (the system escalates reflection urgency based on observer relationships) may be a novel dependent claim.
 
 ---
