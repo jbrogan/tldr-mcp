@@ -1173,6 +1173,10 @@ export function registerTools(server: McpServer): void {
           preferredDays: habit.preferredDays ?? null,
           durationMinutes: habit.durationMinutes ?? null,
           createdAt: habit.createdAt,
+          lastActionAt: habit.lastActionAt ?? null,
+          daysSinceLastAction: habit.daysSinceLastAction ?? null,
+          expectedIntervalDays: habit.expectedIntervalDays ?? null,
+          actionCountLast30Days: habit.actionCountLast30Days ?? 0,
         },
       });
     }
@@ -1352,6 +1356,10 @@ export function registerTools(server: McpServer): void {
           recurrence: habit?.recurrence ?? null,
           preferredDays: habit?.preferredDays ?? null,
           durationMinutes: habit?.durationMinutes ?? null,
+          lastActionAt: habit?.lastActionAt ?? null,
+          daysSinceLastAction: habit?.daysSinceLastAction ?? null,
+          expectedIntervalDays: habit?.expectedIntervalDays ?? null,
+          actionCountLast30Days: habit?.actionCountLast30Days ?? 0,
           changes,
         },
       });
@@ -1859,6 +1867,7 @@ export function registerTools(server: McpServer): void {
           lastCompletedAt: task.lastCompletedAt ?? null,
           completedAt: task.completedAt ?? null,
           createdAt: task.createdAt,
+          daysOverdue: task.daysOverdue ?? null,
         },
       });
     }
@@ -2046,6 +2055,7 @@ export function registerTools(server: McpServer): void {
           recurrence: task.recurrence ?? null,
           nextDueAt: task.nextDueAt ?? null,
           lastCompletedAt: task.lastCompletedAt ?? null,
+          daysOverdue: task.daysOverdue ?? null,
         },
       });
     }
