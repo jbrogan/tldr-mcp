@@ -113,6 +113,24 @@ Use temporal metadata for:
 - Day-of-week analysis in reflections ("your most active days were Monday and Thursday")
 - Monthly pattern detection ("you consistently reconcile on the last Friday of the month")
 
+## ID Resolution — Never Guess
+
+**Always look up IDs before creating or updating records.** Never fabricate or guess a UUID. A foreign key constraint error means an ID was wrong — never retry with another guess; always look up the correct ID first.
+
+### Lookup strategy by record type
+
+- **End ID** — use `list_ends` (filter by `areaId` or `portfolioId` when possible) before `create_task`, `create_habit`, or `update_habit`
+- **Habit ID** — use `list_habits` (filter by `endId`) before `create_action` or `update_habit`
+- **Person ID** — use `list_people`
+- **Area ID** — use `list_areas`
+- **Portfolio ID** — use `list_portfolios`
+- **Team / Organization ID** — use `list_teams` / `list_organizations`
+
+### When IDs are already known
+
+- IDs surfaced earlier in the same conversation (e.g., a habit returned by `list_habits` a few turns ago) can be reused without re-listing.
+- IDs stored in client-side memory (e.g., key people pinned by the calling client) can be used directly. If a call fails with a foreign key error, treat the cached ID as stale and re-list before retrying.
+
 ## Tool Selection Quick Reference
 
 ### Resolving what to log
