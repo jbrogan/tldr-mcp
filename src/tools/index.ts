@@ -2151,6 +2151,51 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "update_task_time",
+    {
+      title: "Update Task Time",
+      description: "Updates an existing task time entry — adjust the date, duration, notes, or with/for persons without delete + recreate. Person lists are replace-all when provided.",
+      inputSchema: {
+        id: z.string().min(1).describe("ID of the task time entry"),
+        completedAt: z.string().optional().describe("When the work happened: 'today' | 'yesterday' | YYYY-MM-DD | full ISO timestamp"),
+        actualDurationMinutes: z.number().nullable().optional().describe("Duration in minutes; null clears it"),
+        notes: z.string().nullable().optional().describe("Notes; null clears them"),
+        withPersonIds: z.array(z.string()).optional().describe("Replaces the full with-persons list"),
+        forPersonIds: z.array(z.string()).optional().describe("Replaces the full for-persons list"),
+      },
+    },
+    async ({ id, completedAt, actualDurationMinutes, notes, withPersonIds, forPersonIds }) => {
+      const { updateTaskTime } = await import("../store/taskTime.js");
+      const updates: Parameters<typeof updateTaskTime>[1] = {};
+      if (completedAt !== undefined) {
+        const { getUserTimezone, resolveCompletedAt } = await import("../utils/timezone.js");
+        const tz = await getUserTimezone();
+        updates.completedAt = resolveCompletedAt(completedAt, tz);
+      }
+      if (actualDurationMinutes !== undefined) updates.actualDurationMinutes = actualDurationMinutes;
+      if (notes !== undefined) updates.notes = notes;
+      if (withPersonIds !== undefined) updates.withPersonIds = withPersonIds;
+      if (forPersonIds !== undefined) updates.forPersonIds = forPersonIds;
+
+      const entry = await updateTaskTime(id, updates);
+      if (!entry) {
+        return errorResponse(`Task time entry ${id} not found.`);
+      }
+      return jsonResponse({
+        taskTime: {
+          id: entry.id,
+          taskId: entry.taskId,
+          completedAt: entry.completedAt,
+          actualDurationMinutes: entry.actualDurationMinutes ?? null,
+          notes: entry.notes ?? null,
+          withPersonIds: entry.withPersonIds ?? [],
+          forPersonIds: entry.forPersonIds ?? [],
+        },
+      });
+    }
+  );
+
+  server.registerTool(
     "delete_task_time",
     {
       title: "Delete Task Time",

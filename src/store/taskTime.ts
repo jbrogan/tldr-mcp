@@ -150,6 +150,98 @@ export async function listTaskTime(options?: {
 }
 
 /**
+ * Update a task time record. Partial updates of scalar fields; replace-all
+ * for withPersonIds / forPersonIds (matches update_task's pattern).
+ */
+export async function updateTaskTime(
+  id: string,
+  updates: {
+    completedAt?: string;
+    actualDurationMinutes?: number | null;
+    notes?: string | null;
+    withPersonIds?: string[];
+    forPersonIds?: string[];
+  },
+): Promise<TaskTimeEntity | null> {
+  const supabase = getSupabase();
+  const userId = getUserId();
+
+  const { data: existing, error: getError } = await supabase
+    .from("task_time")
+    .select("id")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .single();
+
+  if (getError) {
+    if (getError.code === "PGRST116") return null;
+    throw new Error(`Failed to get task time: ${getError.message}`);
+  }
+  if (!existing) return null;
+
+  const updateData: Record<string, unknown> = {};
+  if (updates.completedAt !== undefined) updateData.completed_at = updates.completedAt;
+  if (updates.actualDurationMinutes !== undefined) updateData.actual_duration_minutes = updates.actualDurationMinutes;
+  if (updates.notes !== undefined) updateData.notes = updates.notes;
+
+  if (Object.keys(updateData).length > 0) {
+    const { error } = await supabase
+      .from("task_time")
+      .update(updateData)
+      .eq("id", id)
+      .eq("user_id", userId);
+    if (error) {
+      throw new Error(`Failed to update task time: ${error.message}`);
+    }
+  }
+
+  // Replace person relationships if either list is provided.
+  if (updates.withPersonIds !== undefined || updates.forPersonIds !== undefined) {
+    const types: Array<"with" | "for"> = [];
+    if (updates.withPersonIds !== undefined) types.push("with");
+    if (updates.forPersonIds !== undefined) types.push("for");
+
+    const { error: deleteError } = await supabase
+      .from("task_time_persons")
+      .delete()
+      .eq("task_time_id", id)
+      .in("relation_type", types);
+    if (deleteError) {
+      throw new Error(`Failed to clear task time persons: ${deleteError.message}`);
+    }
+
+    const personRelations: Array<{
+      task_time_id: string;
+      person_id: string;
+      relation_type: "with" | "for";
+    }> = [];
+    for (const personId of updates.withPersonIds ?? []) {
+      personRelations.push({ task_time_id: id, person_id: personId, relation_type: "with" });
+    }
+    for (const personId of updates.forPersonIds ?? []) {
+      personRelations.push({ task_time_id: id, person_id: personId, relation_type: "for" });
+    }
+    if (personRelations.length > 0) {
+      const { error: insertError } = await supabase
+        .from("task_time_persons")
+        .insert(personRelations);
+      if (insertError) {
+        throw new Error(`Failed to update task time persons: ${insertError.message}`);
+      }
+    }
+  }
+
+  const { data: refreshed } = await supabase
+    .from("task_time")
+    .select(`*, task_time_persons (*)`)
+    .eq("id", id)
+    .eq("user_id", userId)
+    .single();
+
+  return refreshed ? await toEntity(refreshed as TaskTimeWithPersons) : null;
+}
+
+/**
  * Delete a task time record.
  */
 export async function deleteTaskTime(id: string): Promise<TaskTimeEntity | null> {
