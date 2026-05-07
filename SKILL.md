@@ -153,7 +153,9 @@ For tasks, `daysOverdue > 0` is overdue and the magnitude tells you how late. Ne
 
 ## ID Resolution — Never Guess
 
-**Always look up IDs before creating or updating records.** Never fabricate or guess a UUID. A foreign key constraint error means an ID was wrong — never retry with another guess; always look up the correct ID first.
+**Always look up IDs before creating or updating records.** Never fabricate, construct, or guess a UUID — including when you "remember" what one looks like. Before any `create_*`, `update_*`, `create_action`, or `log_task_time` call, verify the foreign-key ID was returned by a tool call earlier in this conversation. If it wasn't, call the appropriate list tool first.
+
+A foreign key constraint error means the ID was wrong — never retry with another guess; always look up the correct ID first. One extra `list_*` call costs less than an FK error, and far less than an action silently logged against the wrong habit.
 
 ### Lookup strategy by record type
 
