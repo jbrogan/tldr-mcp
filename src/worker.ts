@@ -193,6 +193,11 @@ export default {
       }
     }
 
+    // --- Root: redirect humans to the web app ---
+    if (url.pathname === "/") {
+      return Response.redirect("https://app.tldr4.ai/", 302);
+    }
+
     // --- Health check ---
     if (url.pathname === "/health") {
       return Response.json({ status: "ok" });
