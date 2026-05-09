@@ -13,6 +13,8 @@ import { setStoreContext } from "./store/base.js";
 import { setConfig } from "./config.js";
 import { createClient } from "@supabase/supabase-js";
 import skillContent from "../SKILL.md";
+import faviconIco from "../public/favicon.ico";
+import faviconSvg from "../public/favicon.svg";
 
 interface Env {
   McpAgent: DurableObjectNamespace;
@@ -194,6 +196,24 @@ export default {
     // --- Health check ---
     if (url.pathname === "/health") {
       return Response.json({ status: "ok" });
+    }
+
+    // --- Favicon ---
+    if (url.pathname === "/favicon.ico") {
+      return new Response(faviconIco as ArrayBuffer, {
+        headers: {
+          "Content-Type": "image/x-icon",
+          "Cache-Control": "public, max-age=86400",
+        },
+      });
+    }
+    if (url.pathname === "/favicon.svg") {
+      return new Response(faviconSvg as string, {
+        headers: {
+          "Content-Type": "image/svg+xml",
+          "Cache-Control": "public, max-age=86400",
+        },
+      });
     }
 
     // --- OAuth consent proxy (requires auth) ---
