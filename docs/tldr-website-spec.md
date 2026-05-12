@@ -1,6 +1,6 @@
 # tldr — Product Website Spec
 **Think. Learn. Do. Reflect.**
-*Version 1.2 | May 2026*
+*Version 1.3 | May 2026*
 
 ---
 
@@ -220,6 +220,33 @@ Claude reads your actual goals and habits. The answers mean something.
 
 ---
 
+#### Section 4.5 — Your life is more than your tasks
+
+**Goal:** Surface tldr's relational layer — persons, with/for semantics, sharing — without naming it as a feature category. Speak in action, not abstraction. The pillar architecture (Think. Learn. Do. Reflect.) is the brand commitment; relationships are a property the system has, not a fifth pillar.
+
+```
+Your life is more than your tasks.
+
+tldr knows the people who matter — your family, your team,
+the friends you're trying to see more of. Log what you did
+with your daughter, for your spouse, with your mentor.
+Share an end with someone you trust so you're working toward
+it together.
+
+Relationships aren't a soft skill. They're a category of life —
+and tldr treats them that way.
+```
+
+**Design notes:**
+- Light section, no inversion — warm paper background
+- Serif at moderate size; the prose carries it
+- No supporting visual — the concrete examples ("with your daughter, for your spouse") do the work
+- Slots between Product Preview (Section 4) and Human Development Angle (Section 5)
+
+**Voice guardrail:** never describe this as "Relationship Tracking" or any tracking-flavored phrase. The verbs are *log*, *share*, *see together* — not *track*. And don't introduce a named feature category for it; the capability lives in the prose.
+
+---
+
 #### Section 5 — Human Development Angle
 
 **Goal:** Differentiate tldr at a deeper level. The "why this is different" moment.
@@ -417,7 +444,10 @@ This is the system. Ready to run it?
 **Step 5 — Capture the tasks**
 > Tasks are bounded work: specific deliverables, milestones, things with edges. They connect to ends just like habits do, so completed work isn't floating — it's meaningful.
 
-**Step 6 — Log, view, reflect**
+**Step 6 — Note the people**
+> Every habit and task can be tagged with who you did it with — or who it was for. Share specific ends with people you trust so you're working toward them together. The same action means something different when you're with your daughter than when you're solo, and tldr captures that.
+
+**Step 7 — Log, view, reflect**
 > Every completion gets logged. The dashboard shows your patterns visually. Claude helps you interpret them, plan ahead, and close the loop through conversation.
 
 **Design notes:**
@@ -523,7 +553,7 @@ Two cards, side-by-side on desktop, stacked on mobile.
 >
 > — One user
 > — All features: beliefs, ends, habits, tasks, reflection, projection
-> — Share ends with others; observe others' ends
+> — Share ends with people you trust — a spouse, coach, or friend — so they can see your progress
 > — Unlimited data
 > — 30-day free trial
 >
@@ -659,9 +689,10 @@ No spam. No pressure. Just tldr.
 
 ## 7. Changelog
 
+- **v1.3 (2026-05-12):** Relational layer (persons, with/for, sharing) woven into the marketing pages without being named as a feature category. New homepage Section 4.5 ("Your life is more than your tasks"). How It Works gains Step 6 ("Note the people"), pushing Log/view/reflect to Step 7. Pricing Individual tier expands the share-ends line. Voice guardrail added: never describe this as "Relationship Tracking" or any tracking-flavored phrase — the verbs are *log*, *share*, *see together*, not *track*. Org structure (organizations, portfolios beyond the personal case) remains docs-only.
 - **v1.2 (2026-05-12):** Pricing kept in scope as a paid product. New `/pricing` page added (§4.6); §2 architecture and navigation updated; clarifying note on "early access" framing (positioning, not waitlist mechanism — visitors enter the 30-day free trial immediately). SEO row added. Open Item #7 added for billing platform decision.
 - **v1.1 (May 2026):** Initial detailed copywriting + design brief. Editorial/typographic visual identity. Six pages: Home, Philosophy, How It Works, Dashboard, Connect, Early Access.
 
 ---
 
-*End of spec — v1.2*
+*End of spec — v1.3*
